@@ -1,0 +1,43 @@
+{
+  "name": "steward",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @steward/web test:e2e",
+    "db:generate": "pnpm --filter @steward/db generate",
+    "db:migrate": "pnpm --filter @steward/db migrate",
+    "db:seed": "pnpm --filter @steward/db seed",
+    "verify:boot": "bash scripts/verify-boot.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "eslint": "^9.39.0",
+    "@eslint/js": "^9.39.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "turbo": "^2.5.8",
+    "vitest": "^3.2.4",
+    "tsx": "^4.20.6"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "esbuild",
+      "protobufjs",
+      "@temporalio/core-bridge",
+      "sharp",
+      "cpu-features",
+      "ssh2"
+    ]
+  }
+}

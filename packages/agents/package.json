@@ -1,0 +1,40 @@
+{
+  "name": "@steward/agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@steward/ai": "workspace:*",
+    "@steward/core": "workspace:*",
+    "@steward/crypto": "workspace:*",
+    "@steward/db": "workspace:*",
+    "@steward/integrations": "workspace:*",
+    "@steward/memory": "workspace:*",
+    "@steward/policy": "workspace:*",
+    "@steward/sandbox": "workspace:*",
+    "@steward/schema": "workspace:*",
+    "@steward/tools": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

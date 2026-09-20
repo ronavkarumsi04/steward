@@ -1,0 +1,39 @@
+{
+  "name": "@steward/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/migrate.ts",
+    "seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@steward/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0",
+    "argon2": "^0.45.1",
+    "pgvector": "^0.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "eslint": "^9.39.0",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.20.6"
+  }
+}

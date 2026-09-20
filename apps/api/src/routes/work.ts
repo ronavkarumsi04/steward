@@ -1,0 +1,243 @@
+import type { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { z } from "zod";
+import type { AgentServiceFactory } from "@steward/agents";
+import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
+import type { WorkflowClient } from "@steward/workflows";
+import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
+import { defineRoute, type RouteRegistry } from "../route.js";
+import type { EventBus } from "@steward/core";
+
+const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
+const limit = z.coerce.number().int().min(1).max(200).optional();
+
+/** Creates a run row, binds it to its Temporal workflow id, and starts the workflow. Exposed for chat + task routes. */
+export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" }) {
+  if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
+  const company = await services.companies.get(scope);
+  if (!company || company.status !== "active") throw new HttpError(409, "company_inactive", "Company is paused or archived");
+  const agent = await services.agents.get(scope, input.agentId);
+  if (!agent || !agent.enabled) throw new HttpError(404, "not_found", "Agent not found or disabled");
+  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined } });
+  const wf = await workflows.startRun({ runId: run.id, scope: { organizationId: scope.organizationId, companyId: scope.companyId! } });
+  await services.runs.attachWorkflow(scope, run.id, wf.workflowId, wf.workflowRunId);
+  return { ...run, workflowId: wf.workflowId, workflowRunId: wf.workflowRunId };
+}
+
+export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: EventBus | null) {
+  // ---- tasks ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks", tag: "tasks", summary: "List tasks", query: z.object({ status: csv(TaskStatus), agentId: z.string().optional(), goalId: z.string().optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const s = c.get("deps").services;
+    return c.json({ tasks: await s.tasks.list(scope, { status: query.status, assigneeAgentId: query.agentId, goalId: query.goalId, limit: query.limit }), counts: await s.tasks.counts(scope) });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/tasks", tag: "tasks", summary: "Create a task (optionally start a run for it immediately)", body: z.object({ title: z.string().min(1).max(300), description: z.string().max(20000).optional(), priority: TaskPriority.optional(), assigneeAgentId: ID.nullable().optional(), goalId: ID.nullable().optional(), parentTaskId: ID.nullable().optional(), dueAt: z.iso.datetime().optional(), start: z.boolean().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    const { start, dueAt, ...rest } = body;
+    const task = await deps.services.tasks.create(scope, { ...rest, dueAt: dueAt ? new Date(dueAt) : undefined });
+    let run = null;
+    if (start && task.assigneeAgentId) run = await launchRun(deps.services, deps.workflows, scope, { agentId: task.assigneeAgentId, taskId: task.id, instruction: `${task.title}\n\n${task.description}`, kind: "task" });
+    return c.json({ task, run }, 201);
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks/:id", tag: "tasks", summary: "Task detail with runs and artifacts" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const s = c.get("deps").services;
+    const task = await s.tasks.get(scope, param(c, "id"));
+    if (!task) throw new HttpError(404, "not_found");
+    return c.json({ task, runs: await s.runs.list(scope, { taskId: task.id, limit: 20 }), artifacts: await s.runs.listArtifacts(scope, { taskId: task.id }) });
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/tasks/:id", tag: "tasks", summary: "Update a task", body: z.object({ title: z.string().min(1).max(300).optional(), description: z.string().max(20000).optional(), status: TaskStatus.optional(), priority: TaskPriority.optional(), assigneeAgentId: ID.nullable().optional(), goalId: ID.nullable().optional(), dueAt: z.iso.datetime().nullable().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const { dueAt, ...rest } = body;
+    const task = await c.get("deps").services.tasks.update(scope, param(c, "id"), { ...rest, dueAt: dueAt === undefined ? undefined : dueAt ? new Date(dueAt) : null });
+    if (!task) throw new HttpError(404, "not_found");
+    return c.json({ task });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/tasks/:id/run", tag: "tasks", summary: "Start an agent run for a task", body: z.object({ agentId: ID.optional(), instruction: z.string().max(8000).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    const task = await deps.services.tasks.get(scope, param(c, "id"));
+    if (!task) throw new HttpError(404, "not_found");
+    const agentId = body.agentId ?? task.assigneeAgentId;
+    if (!agentId) throw new HttpError(422, "no_agent", "Task has no assignee; pass agentId");
+    const run = await launchRun(deps.services, deps.workflows, scope, { agentId, taskId: task.id, instruction: body.instruction ?? `${task.title}\n\n${task.description}`, kind: "task" });
+    return c.json({ run }, 201);
+  });
+
+  // ---- runs ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ runs: await c.get("deps").services.runs.list(scope, query) });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs", tag: "runs", summary: "Start an ad-hoc run with an instruction", body: z.object({ agentId: ID, instruction: z.string().min(1).max(8000) }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { ...body, kind: "user" }) }, 201);
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const deps = c.get("deps");
+    const run = await deps.services.runs.get(scope, param(c, "id"));
+    if (!run) throw new HttpError(404, "not_found");
+    const [steps, toolCalls, artifacts, approvals, workflow] = await Promise.all([
+      deps.services.runs.steps(scope, run.id),
+      deps.services.runs.toolCallsFor(scope, run.id),
+      deps.services.runs.listArtifacts(scope, { runId: run.id }),
+      deps.services.approvals.list(scope).then((a) => a.filter((x) => x.runId === run.id)),
+      deps.workflows ? deps.workflows.runStatus(run.id).catch(() => null) : Promise.resolve(null),
+    ]);
+    return c.json({ run, steps, toolCalls, artifacts, approvals, workflow });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs/:id/cancel", tag: "runs", summary: "Request cancellation of a run", body: z.object({ reason: z.string().max(500).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    const run = await deps.services.runs.get(scope, param(c, "id"));
+    if (!run) throw new HttpError(404, "not_found");
+    const signalled = deps.workflows ? await deps.workflows.cancelRun(run.id, body.reason) : false;
+    if (!signalled && !["succeeded", "failed", "cancelled", "needs_review"].includes(run.status)) await deps.services.runs.setStatus(scope, run.id, "cancelled", { error: body.reason ?? "cancelled by user" });
+    return c.json({ ok: true, signalled });
+  });
+
+  // ---- chat ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/conversations", tag: "chat", summary: "List conversations" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ conversations: await c.get("deps").services.conversations.list(scope) });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/conversations", tag: "chat", summary: "Create a conversation", body: z.object({ title: z.string().max(200).optional(), agentId: ID.nullable().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ conversation: await c.get("deps").services.conversations.create(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/conversations/:id", tag: "chat", summary: "Conversation with messages" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const s = c.get("deps").services;
+    const conversation = await s.conversations.get(scope, param(c, "id"));
+    if (!conversation) throw new HttpError(404, "not_found");
+    return c.json({ conversation, messages: await s.conversations.messages(scope, conversation.id) });
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/conversations/:id", tag: "chat", summary: "Delete a conversation" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ ok: await c.get("deps").services.conversations.delete(scope, param(c, "id")) });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/conversations/:id/messages", tag: "chat", summary: "Send a message; persists it and starts a durable agent run that replies", body: z.object({ content: z.string().min(1).max(20000), agentId: ID.optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    const s = deps.services;
+    const conversation = await s.conversations.get(scope, param(c, "id"));
+    if (!conversation) throw new HttpError(404, "not_found");
+    const agentId = body.agentId ?? conversation.agentId ?? (await s.agents.byKind(scope, "orchestrator"))?.id;
+    if (!agentId) throw new HttpError(422, "no_agent", "No orchestrator agent available");
+    const message = await s.conversations.addMessage(scope, { conversationId: conversation.id, role: "user", content: body.content });
+    const run = await launchRun(s, deps.workflows, scope, { agentId, conversationId: conversation.id, instruction: body.content, kind: "chat" });
+    if (!conversation.title) await s.conversations.setTitle(scope, conversation.id, body.content.slice(0, 80));
+    return c.json({ message, run }, 201);
+  });
+
+  // ---- approvals ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals", tag: "approvals", summary: "List approvals", query: z.object({ status: ApprovalStatus.optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ approvals: await c.get("deps").services.approvals.list(scope, query.status, query.limit) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals/:id", tag: "approvals", summary: "Approval detail" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const a = await c.get("deps").services.approvals.get(scope, param(c, "id"));
+    if (!a) throw new HttpError(404, "not_found");
+    return c.json({ approval: a });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/approvals/:id/decide", tag: "approvals", summary: "Approve or deny; resumes the paused workflow", body: z.object({ status: z.enum(["approved", "denied"]), note: z.string().max(2000).optional(), editedPayload: z.record(z.string(), z.unknown()).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
+    if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending");
+    return c.json({ approval: a });
+  });
+
+  // ---- events ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/events", tag: "events", summary: "Recent events (paginate with beforeSeq)", query: z.object({ beforeSeq: z.coerce.number().int().optional(), afterSeq: z.coerce.number().int().optional(), types: csv(z.string()), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const ev = c.get("deps").services.events;
+    const events = query.afterSeq !== undefined ? await ev.since(scope, query.afterSeq, query.limit, query.types) : await ev.recent(scope, query.limit, query.beforeSeq, query.types);
+    return c.json({ events });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/events/stream", tag: "events", summary: "Server-sent events stream (resume with Last-Event-ID / afterSeq)", query: z.object({ afterSeq: z.coerce.number().int().optional(), types: csv(z.string()) }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return streamEvents(c, scope, bus, query.afterSeq ?? Number(c.req.header("last-event-id") ?? NaN), query.types);
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/audit", tag: "events", summary: "Audit log", query: z.object({ limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "admin");
+    return c.json({ entries: await c.get("deps").services.events.auditLog(scope, query.limit) });
+  });
+
+  // ---- knowledge ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/memories", tag: "knowledge", summary: "List or search memories", query: z.object({ q: z.string().max(500).optional(), kinds: csv(MemoryKind), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const memory = c.get("deps").services.forScope(scope).memory;
+    const memories = query.q ? await memory.search({ query: query.q, kinds: query.kinds, limit: query.limit }) : await memory.list({ kinds: query.kinds, limit: query.limit });
+    return c.json({ memories });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories", tag: "knowledge", summary: "Save a memory", body: z.object({ kind: MemoryKind, content: z.string().min(1).max(20000), title: z.string().max(200).optional(), tags: z.array(z.string().max(50)).max(20).optional(), importance: z.number().min(0).max(1).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ memory: await c.get("deps").services.forScope(scope).memory.save({ ...body, source: { type: "user", userId: scope.userId } }) }, 201);
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/memories/:id", tag: "knowledge", summary: "Forget a memory" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ ok: await c.get("deps").services.forScope(scope).memory.forget(param(c, "id")) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents", query: z.object({ folder: z.string().max(200).optional() }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ documents: await c.get("deps").services.documents.list(scope, query.folder) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Read a document" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const d = await c.get("deps").services.documents.get(scope, param(c, "id"));
+    if (!d) throw new HttpError(404, "not_found");
+    return c.json({ document: d });
+  });
+  defineRoute(app, reg, { method: "put", path: "/companies/:companyId/documents", tag: "knowledge", summary: "Create or update a document", body: z.object({ id: ID.optional(), title: z.string().min(1).max(200), content: z.string().max(500000), folder: z.string().max(200).optional(), format: z.string().max(20).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ document: await c.get("deps").services.documents.upsert(scope, body) });
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Delete a document" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ ok: await c.get("deps").services.documents.delete(scope, param(c, "id")) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/decisions", tag: "knowledge", summary: "Decision log", query: z.object({ limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ decisions: await c.get("deps").services.runs.listDecisions(scope, query.limit) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/artifacts", tag: "knowledge", summary: "Artifacts produced by runs", query: z.object({ runId: z.string().optional(), taskId: z.string().optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ artifacts: await c.get("deps").services.runs.listArtifacts(scope, query) });
+  });
+}
+
+function streamEvents(c: Ctx, scope: TenantScope, bus: EventBus | null, afterSeq: number, types?: string[]) {
+  const ev = c.get("deps").services.events;
+  return streamSSE(c, async (stream) => {
+    let cursor = Number.isFinite(afterSeq) ? afterSeq : await ev.latestSeq();
+    let wake: (() => void) | null = null;
+    const unsubscribe = bus?.subscribe((n) => {
+      if (n.organizationId === scope.organizationId && (n.companyId === null || n.companyId === scope.companyId)) wake?.();
+    });
+    let open = true;
+    stream.onAbort(() => {
+      open = false;
+      unsubscribe?.();
+      wake?.();
+    });
+    await stream.writeSSE({ event: "ready", data: JSON.stringify({ seq: cursor }) });
+    while (open) {
+      const batch = await ev.since(scope, cursor, 200, types);
+      for (const e of batch) {
+        cursor = e.seq;
+        await stream.writeSSE({ id: String(e.seq), event: e.type, data: JSON.stringify(e) });
+      }
+      if (!open) break;
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+        setTimeout(resolve, bus ? 25_000 : 2_000);
+      });
+      wake = null;
+      if (open) await stream.writeSSE({ event: "ping", data: String(Date.now()) });
+    }
+  });
+}

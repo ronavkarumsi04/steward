@@ -1,0 +1,39 @@
+{
+  "name": "@steward/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@steward/agents": "workspace:*",
+    "@steward/ai": "workspace:*",
+    "@steward/core": "workspace:*",
+    "@steward/crypto": "workspace:*",
+    "@steward/db": "workspace:*",
+    "@steward/integrations": "workspace:*",
+    "@steward/memory": "workspace:*",
+    "@steward/policy": "workspace:*",
+    "@steward/schema": "workspace:*",
+    "@steward/workflows": "workspace:*",
+    "dotenv": "^17.4.2",
+    "hono": "4.13.7",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "pg": "^8.23.0",
+    "@types/pg": "^8.23.1",
+    "vitest": "^3.2.4"
+  }
+}
