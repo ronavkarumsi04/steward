@@ -66,12 +66,18 @@ function demux(stream: NodeJS.ReadableStream, docker: Docker, maxBytes: number):
   });
   docker.modem.demuxStream(stream, stdout, stderr);
   const done = new Promise<{ stdout: string; stderr: string }>((resolve) => {
-    stream.on("end", () => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
       stdout.end();
       stderr.end();
       const trunc = (chunks: Buffer[], bytes: number) => Buffer.concat(chunks).toString("utf8") + (bytes > maxBytes ? `\n…[truncated ${bytes - maxBytes} bytes]` : "");
       resolve({ stdout: trunc(outChunks, outBytes), stderr: trunc(errChunks, errBytes) });
-    });
+    };
+    stream.on("end", finish);
+    stream.on("close", finish);
+    stream.on("error", finish);
   });
   return { stdout, stderr, done };
 }
