@@ -7,11 +7,12 @@ import { createHmac } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
-import { AuthService, createCoreContext, loadConfig, type CoreContext } from "@steward/core";
+import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { createApp } from "./app.js";
+import { CompanionHub } from "./companion-hub.js";
 import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
@@ -45,8 +46,9 @@ beforeAll(async () => {
   process.env.DATABASE_URL = DB_URL;
   await runMigrations();
   core = createCoreContext(loadConfig(ENV), "api-test");
-  services = new AgentServiceFactory({ core, env: ENV });
-  app = createApp({ core, auth: new AuthService(core.db), services, workflows: fakeTemporal(), env: ENV }, null).app;
+  const companionHub = new CompanionHub();
+  services = new AgentServiceFactory({ core, env: ENV, companionBridge: companionHub });
+  app = createApp({ core, auth: new AuthService(core.db), services, workflows: fakeTemporal(), companionHub, env: ENV }, null).app;
   stub = await startStubProvider();
 });
 afterAll(async () => {
@@ -298,6 +300,67 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     expect(decided.status).toBe(200);
     expect(decided.body.approval.status).toBe("denied");
     expect((await api.json("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "approved" })).status).toBe(409);
+  });
+});
+
+describe("local companion", () => {
+  d("pairs with a one-time code, brokers commands over long-poll, and revocation cuts the key", async () => {
+    const { api, orgId } = await register();
+    const started = await api.json<{ device: { id: string; status: string }; code: string }>("POST", `/orgs/${orgId}/companion/devices`, { name: "laptop" });
+    expect(started.status).toBe(201);
+    expect(started.body.device.status).toBe("pairing");
+    expect(started.body.code).toMatch(/^\d{6}$/);
+
+    const anon = client();
+    expect((await anon.json("POST", "/companion/pair", { code: "000000" })).status).toBe(404);
+    const paired = await anon.json<{ device: { id: string }; deviceKey: string }>("POST", "/companion/pair", { code: started.body.code, capabilities: ["ping", "codex.status", "codex.exec"] });
+    expect(paired.status).toBe(201);
+    expect(paired.body.deviceKey.startsWith("scd_")).toBe(true);
+    expect((await anon.json("POST", "/companion/pair", { code: started.body.code })).status).toBe(404);
+    const { rows } = await core.pool.query("select device_key_hash, pairing_code_hash from companion_devices where id = $1", [paired.body.device.id]);
+    expect(rows[0].device_key_hash).not.toBe(paired.body.deviceKey);
+    expect(rows[0].pairing_code_hash).toBeNull();
+
+    const device = client(paired.body.deviceKey);
+    expect((await device.json("GET", "/companion/me")).status).toBe(200);
+
+    // Companion loop: one poll outstanding while the operator pings; it answers ping and codex.status.
+    const loop = (async () => {
+      for (let i = 0; i < 4; i++) {
+        const { body } = await device.json<{ commands: Array<{ id: string; command: string }> }>("POST", "/companion/poll", { waitMs: 2000 });
+        for (const cmd of body.commands) {
+          const result = cmd.command === "ping" ? { pong: true } : cmd.command === "codex.status" ? { loggedIn: true, models: ["gpt-5-codex"] } : { text: "hello from codex" };
+          await device.json("POST", "/companion/results", { id: cmd.id, type: "result", result });
+        }
+      }
+    })();
+    await new Promise((r) => setTimeout(r, 50));
+    const listed = await api.json<{ devices: Array<{ id: string; online: boolean }> }>("GET", `/orgs/${orgId}/companion/devices`);
+    expect(listed.body.devices.find((x) => x.id === paired.body.device.id)?.online).toBe(true);
+    const ping = await api.json<{ ok: boolean; status: { loggedIn: boolean } }>("POST", `/orgs/${orgId}/companion/devices/${paired.body.device.id}/ping`);
+    expect(ping.body.ok).toBe(true);
+    expect(ping.body.status.loggedIn).toBe(true);
+
+    // Worker-side relay uses the internal token; a wrong token is rejected.
+    const internal = client(internalServiceToken(core.config, ENV));
+    const relayed = await internal.json<{ result: { text: string } }>("POST", `/internal/companion/${paired.body.device.id}/request`, { command: "codex.exec", payload: { messages: [] }, timeoutMs: 5000 });
+    expect(relayed.status).toBe(200);
+    expect(relayed.body.result.text).toBe("hello from codex");
+    expect((await client("nope").json("POST", `/internal/companion/${paired.body.device.id}/request`, { command: "ping" })).status).toBe(401);
+
+    // Codex companion provider credential routes through the paired device for model discovery.
+    const prov = await api.json<{ provider: { id: string; secretLast4: string | null } }>("POST", `/orgs/${orgId}/providers`, { providerType: "codex_companion", config: { deviceId: paired.body.device.id } });
+    expect(prov.status).toBe(201);
+    expect(prov.body.provider.secretLast4).toBeNull();
+    const test = await api.json<{ ok: boolean }>("POST", `/orgs/${orgId}/providers/${prov.body.provider.id}/test`);
+    expect(test.body.ok).toBe(true);
+    await loop;
+
+    const revoked = await api.json<{ device: { status: string } }>("DELETE", `/orgs/${orgId}/companion/devices/${paired.body.device.id}`);
+    expect(revoked.body.device.status).toBe("revoked");
+    expect((await device.json("GET", "/companion/me")).status).toBe(401);
+    const offline = await api.json<{ ok: boolean }>("POST", `/orgs/${orgId}/companion/devices/${paired.body.device.id}/ping`);
+    expect(offline.status).toBe(404);
   });
 });
 

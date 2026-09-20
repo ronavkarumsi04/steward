@@ -5,6 +5,7 @@ import { AuthService, EventBus, createCoreContext, loadConfig, type ApprovalSign
 import { runMigrations } from "@steward/db";
 import { WorkflowClient, connectTemporal, temporalConfigFromEnv } from "@steward/workflows";
 import { createApp } from "./app.js";
+import { CompanionHub } from "./companion-hub.js";
 
 async function main() {
   const config = loadConfig();
@@ -35,8 +36,9 @@ async function main() {
   const bus = new EventBus(core.pool, log);
   await bus.start();
 
-  const services = new AgentServiceFactory({ core, approvalSignal });
-  const { app } = createApp({ core, auth: new AuthService(core.db), services, workflows, env: process.env }, bus);
+  const companionHub = new CompanionHub();
+  const services = new AgentServiceFactory({ core, approvalSignal, companionBridge: companionHub });
+  const { app } = createApp({ core, auth: new AuthService(core.db), services, workflows, companionHub, env: process.env }, bus);
 
   const port = Number(process.env.API_PORT ?? new URL(config.apiUrl).port ?? 4000);
   const server = serve({ fetch: app.fetch, port, hostname: process.env.API_HOST ?? "0.0.0.0" }, (info) => log.info({ port: info.port }, "steward api listening"));

@@ -50,12 +50,12 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "post", path: "/orgs/:orgId/providers/:id/test", tag: "providers", summary: "Live-test a credential against the provider" }, async (c) => {
     const scope = orgScope(c, param(c, "orgId"), "admin");
     const deps = c.get("deps");
-    return c.json(await deps.services.providers.test(scope, param(c, "id"), deps.companionBridge));
+    return c.json(await deps.services.providers.test(scope, param(c, "id"), deps.companionHub));
   });
   defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/providers/models", tag: "providers", summary: "Models available across configured providers", query: z.object({ companyId: ID.optional() }) }, async (c) => {
     const scope = await scopeForProviders(c, "viewer");
     const deps = c.get("deps");
-    return c.json({ models: await deps.services.providers.models(scope, deps.companionBridge) });
+    return c.json({ models: await deps.services.providers.models(scope, deps.companionHub) });
   });
   defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/providers/usage", tag: "providers", summary: "AI usage and cost summary", query: z.object({ companyId: ID.optional(), days: z.coerce.number().int().min(1).max(365).optional() }) }, async (c, { query }) => {
     const scope = await scopeForProviders(c, "viewer");

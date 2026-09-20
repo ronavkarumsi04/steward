@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
+import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
 import { Card, Empty, StatusPill, ago, usd } from "./ui";
 
-export function ProvidersPanel({ orgId, types, providers, models, usage, isAdmin }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; isAdmin: boolean }) {
+export function ProvidersPanel({ orgId, types, providers, models, usage, devices, isAdmin }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; devices: CompanionDevice[]; isAdmin: boolean }) {
   const router = useRouter();
   const [type, setType] = useState(types[0]?.type ?? "openai");
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +25,15 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, isAdmin
       const secretConfigRaw = String(fd.get("secretConfig") ?? "").trim();
       const configRaw = String(fd.get("config") ?? "").trim();
       const baseUrl = String(fd.get("baseUrl") ?? "").trim();
+      const deviceId = String(fd.get("deviceId") ?? "").trim();
+      const config = configRaw ? (JSON.parse(configRaw) as Record<string, unknown>) : {};
+      if (deviceId) config.deviceId = deviceId;
       const { provider } = await browserApi.post<{ provider: ProviderCredential }>(`${base}/providers`, {
         providerType: type,
         label: String(fd.get("label") ?? "").trim() || undefined,
         secret: String(fd.get("secret") ?? "").trim() || undefined,
         secretConfig: secretConfigRaw ? (JSON.parse(secretConfigRaw) as Record<string, unknown>) : undefined,
-        config: configRaw ? (JSON.parse(configRaw) as Record<string, unknown>) : undefined,
+        config: Object.keys(config).length ? config : undefined,
         baseUrl: baseUrl || undefined,
         priority: Number(fd.get("priority") || 100),
       });
@@ -118,7 +121,16 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, isAdmin
           ) : info?.authMethod === "gcp_service_account" ? (
             <div className="md:col-span-2"><label className="label">Service-account JSON</label><textarea name="secretConfig" className="input mono min-h-32" placeholder='{"type":"service_account", …}' required /></div>
           ) : info?.authMethod === "companion" ? (
-            <p className="text-sm text-muted md:col-span-2">This provider is authenticated by the Steward Companion running on your machine. Start the companion and pair it; no secret is stored on the server.</p>
+            <div className="md:col-span-2">
+              <label className="label">Paired companion</label>
+              {devices.length === 0 ? (
+                <p className="text-sm text-warn">No paired companion yet. Pair one in the Local Companions section below first; no secret is stored on the server.</p>
+              ) : (
+                <select name="deviceId" className="input" required>
+                  {devices.map((d) => <option key={d.id} value={d.id}>{d.name}{d.online ? " (online)" : " (offline)"}</option>)}
+                </select>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-muted md:col-span-2">No credential needed. Make sure the server can reach the base URL below.</p>
           )}

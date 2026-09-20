@@ -1,5 +1,5 @@
 import pino from "pino";
-import { EnvMasterKeyProvider, EnvelopeCrypto } from "@steward/crypto";
+import { EnvMasterKeyProvider, EnvelopeCrypto, hmacSign } from "@steward/crypto";
 import { createDb, type Db } from "@steward/db";
 import type pg from "pg";
 type Pool = pg.Pool;
@@ -53,4 +53,12 @@ export function createCoreContext(config: CoreConfig, name = "steward"): CoreCon
   const { db, pool } = createDb(config.databaseUrl);
   const crypto = new EnvelopeCrypto(new EnvMasterKeyProvider(config.masterKey));
   return { db, pool, crypto, config, log: createLogger(config, name) };
+}
+
+/**
+ * Shared secret for service-to-service calls (worker → API companion proxy). Set STEWARD_INTERNAL_TOKEN
+ * explicitly in production; otherwise it is derived from the master key so single-host setups work unconfigured.
+ */
+export function internalServiceToken(config: Pick<CoreConfig, "masterKey">, env: NodeJS.ProcessEnv = process.env): string {
+  return env.STEWARD_INTERNAL_TOKEN || hmacSign(config.masterKey, "steward-internal-service-v1");
 }

@@ -255,6 +255,19 @@ export interface ProviderType {
   docsUrl?: string;
   subscriptionNote?: string;
 }
+export interface CompanionDevice {
+  id: string;
+  organizationId: string;
+  userId: string | null;
+  name: string;
+  status: "pairing" | "paired" | "revoked";
+  capabilities: string[];
+  pairingExpiresAt: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  online: boolean;
+}
+
 export interface ProviderCredential {
   id: string;
   companyId: string | null;
