@@ -25,7 +25,8 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
 
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const title = String(fd.get("title") ?? "").trim();
     if (!title) return;
     setError(null);
@@ -38,7 +39,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
         goalId: String(fd.get("goalId") ?? "") || null,
         start: fd.get("start") === "on",
       });
-      e.currentTarget.reset();
+      form.reset();
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create task");

@@ -10,6 +10,8 @@ export interface CoreConfig {
   sessionSecret: string;
   appUrl: string;
   apiUrl: string;
+  /** URL other services (worker, web SSR) use to reach the API; differs from apiUrl inside container networks. */
+  apiInternalUrl: string;
   env: "development" | "test" | "production";
   logLevel?: string;
 }
@@ -35,6 +37,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     sessionSecret: req("SESSION_SECRET"),
     appUrl: env.APP_URL ?? "http://localhost:3000",
     apiUrl: env.API_URL ?? "http://localhost:4000",
+    apiInternalUrl: env.API_INTERNAL_URL ?? env.API_URL ?? "http://localhost:4000",
     env: nodeEnv === "production" || nodeEnv === "test" ? nodeEnv : "development",
     logLevel: env.LOG_LEVEL,
   };

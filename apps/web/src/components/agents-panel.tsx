@@ -55,7 +55,8 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
 
   async function addSchedule(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     setError(null);
     try {
       await browserApi.post(`/companies/${companyId}/schedules`, {
@@ -65,7 +66,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
         timezone: String(fd.get("timezone") || "UTC"),
         instruction: String(fd.get("instruction") ?? ""),
       });
-      e.currentTarget.reset();
+      form.reset();
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create schedule (is the worker/Temporal running?)");

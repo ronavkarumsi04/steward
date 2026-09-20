@@ -52,7 +52,7 @@ async function main() {
     },
   };
   const sandbox = sandboxFromEnv(process.env);
-  const companionBridge = new HttpCompanionBridge(config.apiUrl, internalServiceToken(config));
+  const companionBridge = new HttpCompanionBridge(config.apiInternalUrl, internalServiceToken(config));
   const factory = new AgentServiceFactory({ core, sandbox, approvalSignal, companionBridge });
   const activities = createActivities({ core, factory, sandbox, approvalSignal });
 

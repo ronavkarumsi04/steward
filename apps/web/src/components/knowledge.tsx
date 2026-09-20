@@ -35,11 +35,12 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
 
   async function addMemory(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     setError(null);
     try {
       await browserApi.post(`/companies/${companyId}/memories`, { kind: "knowledge", title: String(fd.get("title")), content: String(fd.get("content")), importance: 0.8, tags: ["user"] });
-      e.currentTarget.reset();
+      form.reset();
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Save failed");

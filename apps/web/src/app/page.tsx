@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getMe } from "@/lib/server";
+import { getMeOptional } from "@/lib/server";
 
 const PILLARS = [
   ["Persistent agents", "Orchestrator, research, engineering, marketing, sales, support, finance and operations agents that plan and execute against your goals — on a schedule or on demand."],
@@ -12,7 +12,7 @@ const PILLARS = [
 ];
 
 export default async function Landing() {
-  const me = await getMe();
+  const me = await getMeOptional();
   if (me.user) redirect("/app");
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">

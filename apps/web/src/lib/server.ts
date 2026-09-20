@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ApiError, createClient, type ApiClient } from "./api";
 import type { Me } from "./types";
 
-export const API_URL = (process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+export const API_URL = (process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
 
 /** API client bound to the current request's session cookie. */
 export async function serverApi(): Promise<ApiClient> {
@@ -19,6 +19,17 @@ export async function serverApi(): Promise<ApiClient> {
 export async function getMe(): Promise<Me> {
   const api = await serverApi();
   return api.get<Me>("/auth/me");
+}
+
+/** Like getMe, but public pages stay renderable when the API is unreachable (treated as signed out). */
+export async function getMeOptional(): Promise<Me> {
+  try {
+    return await getMe();
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    console.error("steward api unreachable", e);
+    return { user: null, memberships: [] };
+  }
 }
 
 /** Loads the current user or redirects to /login (preserving the destination). */
