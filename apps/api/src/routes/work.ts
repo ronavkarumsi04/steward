@@ -229,7 +229,7 @@ function streamEvents(c: Ctx, scope: TenantScope, bus: EventBus | null, afterSeq
       const batch = await ev.since(scope, cursor, 200, types);
       for (const e of batch) {
         cursor = e.seq;
-        await stream.writeSSE({ id: String(e.seq), event: e.type, data: JSON.stringify(e) });
+        await stream.writeSSE({ id: String(e.seq), data: JSON.stringify(e) });
       }
       if (!open) break;
       await new Promise<void>((resolve) => {

@@ -3,11 +3,12 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { NativeConnection, Runtime, Worker, DefaultLogger, type LogLevel } from "@temporalio/worker";
 import { AgentServiceFactory } from "@steward/agents";
-import { createCoreContext, loadConfig, type ApprovalSignal } from "@steward/core";
+import { createCoreContext, internalServiceToken, loadConfig, type ApprovalSignal } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandbox";
 import { WorkflowClient, connectTemporal, temporalConfigFromEnv } from "@steward/workflows";
 import { createActivities } from "./activities.js";
+import { HttpCompanionBridge } from "./companion-bridge.js";
 
 const require = createRequire(import.meta.url);
 
@@ -51,7 +52,8 @@ async function main() {
     },
   };
   const sandbox = sandboxFromEnv(process.env);
-  const factory = new AgentServiceFactory({ core, sandbox, approvalSignal });
+  const companionBridge = new HttpCompanionBridge(config.apiInternalUrl, internalServiceToken(config));
+  const factory = new AgentServiceFactory({ core, sandbox, approvalSignal, companionBridge });
   const activities = createActivities({ core, factory, sandbox, approvalSignal });
 
   const connection = await NativeConnection.connect({ address: temporal.address, tls: await nativeTls(temporal), apiKey: temporal.apiKey });

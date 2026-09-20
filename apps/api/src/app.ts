@@ -7,6 +7,7 @@ import { csrf, rateLimit, requestId, securityHeaders, session } from "./middlewa
 import { RouteRegistry, openApiDocument } from "./route.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCompanyRoutes } from "./routes/companies.js";
+import { registerCompanionRoutes } from "./routes/companion.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerWorkRoutes } from "./routes/work.js";
 
@@ -55,6 +56,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerCompanyRoutes(v1, registry);
   registerWorkRoutes(v1, registry, bus);
   registerProviderRoutes(v1, registry);
+  registerCompanionRoutes(v1, registry);
 
   v1.get("/openapi.json", (c) => c.json(openApiDocument(registry, { title: "Steward API", version: API_VERSION, serverUrl: `${deps.core.config.apiUrl.replace(/\/$/, "")}/v1` })));
   app.route("/v1", v1);

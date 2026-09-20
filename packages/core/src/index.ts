@@ -8,3 +8,4 @@ export * from "./approvals.js";
 export * from "./work.js";
 export * from "./events.js";
 export * from "./integrations.js";
+export * from "./companion.js";

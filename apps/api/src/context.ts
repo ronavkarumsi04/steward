@@ -3,14 +3,14 @@ import { AgentServiceFactory } from "@steward/agents";
 import { AuthService, type CoreContext, type SessionUser } from "@steward/core";
 import type { Role, TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
-import type { CompanionBridge } from "@steward/ai";
+import type { CompanionHub } from "./companion-hub.js";
 
 export interface ApiDeps {
   core: CoreContext;
   auth: AuthService;
   services: AgentServiceFactory;
   workflows: WorkflowClient | null;
-  companionBridge?: CompanionBridge;
+  companionHub?: CompanionHub;
   env: NodeJS.ProcessEnv;
 }
 

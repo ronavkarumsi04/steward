@@ -82,7 +82,7 @@ services:
       REDIS_URL: redis://redis:6379
       TEMPORAL_ADDRESS: temporal:7233
       PORT: "4000"
-      RUN_MIGRATIONS: "true"
+      RUN_MIGRATIONS_ON_START: "true"
     depends_on:
       postgres:
         condition: service_healthy

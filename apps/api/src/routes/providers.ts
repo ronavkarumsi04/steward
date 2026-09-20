@@ -50,24 +50,26 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "post", path: "/orgs/:orgId/providers/:id/test", tag: "providers", summary: "Live-test a credential against the provider" }, async (c) => {
     const scope = orgScope(c, param(c, "orgId"), "admin");
     const deps = c.get("deps");
-    return c.json(await deps.services.providers.test(scope, param(c, "id"), deps.companionBridge));
+    return c.json(await deps.services.providers.test(scope, param(c, "id"), deps.companionHub));
   });
   defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/providers/models", tag: "providers", summary: "Models available across configured providers", query: z.object({ companyId: ID.optional() }) }, async (c) => {
     const scope = await scopeForProviders(c, "viewer");
     const deps = c.get("deps");
-    return c.json({ models: await deps.services.providers.models(scope, deps.companionBridge) });
+    return c.json({ models: await deps.services.providers.models(scope, deps.companionHub) });
   });
   defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/providers/usage", tag: "providers", summary: "AI usage and cost summary", query: z.object({ companyId: ID.optional(), days: z.coerce.number().int().min(1).max(365).optional() }) }, async (c, { query }) => {
     const scope = await scopeForProviders(c, "viewer");
     const since = new Date(Date.now() - (query.days ?? 30) * 86_400_000);
     return c.json({ usage: await c.get("deps").services.providers.usageSummary(scope, since) });
   });
-  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/routing/:purpose", tag: "providers", summary: "Routing policy for a purpose (planner, executor, verifier, embedding, ...)", query: z.object({ companyId: ID.optional() }) }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/routing/:purpose", tag: "providers", summary: "Routing policy for a purpose (default, planning, coding, research, verification, chat, cheap, embedding); requires companyId", query: z.object({ companyId: ID }) }, async (c) => {
     const scope = await scopeForProviders(c, "viewer");
+    if (!scope.companyId) throw new HttpError(400, "company_required", "Routing policies are per company; pass ?companyId=");
     return c.json({ policy: await c.get("deps").services.providers.routingPolicy(scope, param(c, "purpose")) });
   });
-  defineRoute(app, reg, { method: "put", path: "/orgs/:orgId/routing/:purpose", tag: "providers", summary: "Set routing policy for a purpose", query: z.object({ companyId: ID.optional() }), body: RoutingPolicy }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "put", path: "/orgs/:orgId/routing/:purpose", tag: "providers", summary: "Set routing policy for a purpose; requires companyId", query: z.object({ companyId: ID }), body: RoutingPolicy }, async (c, { body }) => {
     const scope = await scopeForProviders(c, "admin");
+    if (!scope.companyId) throw new HttpError(400, "company_required", "Routing policies are per company; pass ?companyId=");
     await c.get("deps").services.providers.setRoutingPolicy(scope, param(c, "purpose"), body);
     return c.json({ policy: body });
   });
@@ -97,13 +99,13 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "get", path: "/integrations/oauth/:provider/callback", tag: "integrations", summary: "OAuth redirect target", auth: "public", query: z.object({ code: z.string().optional(), state: z.string().optional(), error: z.string().optional(), error_description: z.string().optional() }) }, async (c, { query }) => {
     const deps = c.get("deps");
     const appUrl = deps.core.config.appUrl.replace(/\/$/, "");
-    if (query.error || !query.code || !query.state) return c.redirect(`${appUrl}/settings/integrations?error=${encodeURIComponent(query.error_description ?? query.error ?? "missing_code")}`);
+    if (query.error || !query.code || !query.state) return c.redirect(`${appUrl}/app?integrationError=${encodeURIComponent(query.error_description ?? query.error ?? "missing_code")}`);
     try {
       const { integration, redirectTo } = await deps.services.integrations.completeOAuth({ provider: param(c, "provider"), code: query.code, state: query.state });
-      return c.redirect(`${appUrl}${redirectTo ?? "/settings/integrations"}${redirectTo?.includes("?") ? "&" : "?"}connected=${integration.type}`);
+      return c.redirect(`${appUrl}${redirectTo ?? "/app"}${redirectTo?.includes("?") ? "&" : "?"}connected=${integration.type}`);
     } catch (e) {
       deps.core.log.warn({ err: e instanceof Error ? e.message : String(e) }, "oauth callback failed");
-      return c.redirect(`${appUrl}/settings/integrations?error=oauth_failed`);
+      return c.redirect(`${appUrl}/app?integrationError=oauth_failed`);
     }
   });
   defineRoute(app, reg, { method: "delete", path: "/orgs/:orgId/integrations/:id", tag: "integrations", summary: "Disconnect an integration (credentials destroyed)" }, async (c) => {

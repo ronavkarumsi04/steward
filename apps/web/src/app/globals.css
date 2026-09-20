@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d12;
+  --color-panel: #12151c;
+  --color-panel-2: #181c25;
+  --color-line: #262b36;
+  --color-fg: #e6e8ee;
+  --color-muted: #8b93a5;
+  --color-accent: #7c9cff;
+  --color-accent-2: #5ee0c1;
+  --color-warn: #f0b35c;
+  --color-danger: #f26d6d;
+  --color-ok: #58c98a;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+.card {
+  @apply rounded-xl border border-line bg-panel p-4;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-sm font-medium text-fg transition hover:border-accent/60 hover:bg-panel disabled:cursor-not-allowed disabled:opacity-50;
+}
+.btn-primary {
+  @apply border-accent/60 bg-accent text-black hover:bg-accent/90 hover:text-black;
+}
+.btn-danger {
+  @apply border-danger/60 text-danger hover:bg-danger/10;
+}
+.input {
+  @apply w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg outline-none placeholder:text-muted focus:border-accent;
+}
+.label {
+  @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
+}
+.pill {
+  @apply inline-flex items-center rounded-full border border-line px-2 py-0.5 text-xs font-medium;
+}
+.mono {
+  font-family: var(--font-mono);
+}
