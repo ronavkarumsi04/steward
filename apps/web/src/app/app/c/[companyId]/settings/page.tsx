@@ -19,7 +19,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ compa
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Settings</h1>
-      <SettingsPanel company={o.company} profile={o.profile} policies={o.policies} budgets={o.budgets} goals={o.goals} isAdmin={isAdmin} />
+      <SettingsPanel company={o.company} profile={o.profile?.profile ?? null} policies={o.policies} budgets={o.budgets} goals={o.goals} isAdmin={isAdmin} />
       <RoutingPanel orgId={orgId} companyId={companyId} models={models} routing={routing} isAdmin={isAdmin} />
     </div>
   );

@@ -74,9 +74,15 @@ export interface Policy {
   maxRiskWithoutApproval: RiskLevel | null;
   limits: Record<string, number>;
 }
+export interface CompanyProfileVersion {
+  version: number;
+  profile: CompanyProfile;
+  source: "user" | "agent" | "ingestion";
+  createdAt: string;
+}
 export interface CompanyOverview {
   company: Company;
-  profile: CompanyProfile | null;
+  profile: CompanyProfileVersion | null;
   goals: Goal[];
   agents: Agent[];
   budgets: Budget[];

@@ -46,8 +46,9 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.waitForURL(/\/app\/c\/[0-9a-f-]+$/);
   const companyUrl = page.url();
 
-  // Dashboard renders durable state seeded by company creation.
+  // Dashboard renders durable state seeded by company creation, including the onboarding profile.
   await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
+  await expect(page.getByText("A weekly analytics digest for small online stores.")).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
 
   // Tasks: create one without starting a run (no model provider is configured in E2E).

@@ -18,7 +18,8 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
     api.get<{ usage: UsageRow[] }>(`/orgs/${overview.company.organizationId}/providers/usage?companyId=${companyId}&days=30`),
   ]);
-  const { company, profile, goals, agents, taskCounts, budgets } = overview;
+  const { company, goals, agents, taskCounts, budgets } = overview;
+  const profile = overview.profile?.profile ?? null;
   const spend30 = usage.usage.reduce((n, r) => n + r.costUsd, 0);
   const calls30 = usage.usage.reduce((n, r) => n + r.calls, 0);
   const openTasks = (taskCounts.todo ?? 0) + (taskCounts.in_progress ?? 0) + (taskCounts.blocked ?? 0) + (taskCounts.waiting_approval ?? 0) + (taskCounts.review ?? 0);
