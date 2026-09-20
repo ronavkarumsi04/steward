@@ -11,3 +11,5 @@ coverage
 playwright-report
 test-results
 .steward
+*.tsbuildinfo
+next-env.d.ts

@@ -208,6 +208,17 @@ describe("providers", () => {
     expect(badTest.body.error.code).toBe("auth");
     expect((await api.json("GET", `/providers/types`)).status).toBe(200);
   });
+
+  d("routing policies are per company and round-trip", async () => {
+    const { api, orgId } = await register();
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Routed", autonomyLevel: 1, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    expect((await api.json("GET", `/orgs/${orgId}/routing/coding`)).status).toBe(422);
+    const policy = { fallbackChain: [], requirements: { preference: "quality", localOnly: false } };
+    expect((await api.json("PUT", `/orgs/${orgId}/routing/coding?companyId=${companyId}`, policy)).status).toBe(200);
+    const got = await api.json<{ policy: { requirements: { preference: string } } }>("GET", `/orgs/${orgId}/routing/coding?companyId=${companyId}`);
+    expect(got.body.policy.requirements.preference).toBe("quality");
+  });
 });
 
 describe("durable run pipeline (stub provider, in-process runtime)", () => {
