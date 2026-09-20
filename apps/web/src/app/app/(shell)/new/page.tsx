@@ -18,7 +18,7 @@ export default async function NewCompanyPage() {
     }),
   );
   return (
-    <main className="flex justify-center p-6 md:py-12">
+    <main className="flex justify-center px-3 py-6 sm:px-5 md:py-12">
       <OnboardingWizard memberships={me.memberships} providersByOrg={providersByOrg} />
     </main>
   );

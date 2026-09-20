@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { serverApi } from "@/lib/server";
 import type { Agent, Run } from "@/lib/types";
-import { Card, Empty, StatusPill, ago, usd } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { Card, Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
 
 export default async function RunsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ status?: string; taskId?: string }> }) {
   const { companyId } = await params;
@@ -16,27 +17,34 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
   ]);
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? "agent";
   return (
-    <Card title="Runs" action={<FilterLinks companyId={companyId} current={status} />}>
-      {runs.length === 0 ? <Empty>No runs match.</Empty> : (
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-muted">
-            <tr><th className="py-1">Intent</th><th>Agent</th><th>Status</th><th>Cost</th><th>Tokens</th><th>Started</th></tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {runs.map((r) => (
-              <tr key={r.id} className="hover:bg-panel-2">
-                <td className="max-w-md truncate py-2"><Link className="hover:text-accent" href={`/app/c/${companyId}/runs/${r.id}`}>{r.intent || "(no intent)"}</Link></td>
-                <td className="text-muted">{name(r.agentId)}</td>
-                <td><StatusPill status={r.status} /></td>
-                <td className="mono text-xs">{usd(r.costUsd)}</td>
-                <td className="mono text-xs text-muted">{r.inputTokens + r.outputTokens}</td>
-                <td className="text-xs text-muted">{ago(r.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Card>
+    <div>
+      <PageHeader eyebrow="History" title="Runs" description="Every run is a durable workflow with its plan, tool calls, cost and authorization recorded." action={<FilterLinks companyId={companyId} current={status} />} />
+      <Card className="p-0">
+        {runs.length === 0 ? (
+          <div className="p-4"><Empty icon={<Icon.Runs size={20} />}>No runs match.</Empty></div>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr><th>Intent</th><th>Agent</th><th>Status</th><th className="text-right">Cost</th><th className="text-right">Tokens</th><th className="text-right">Started</th></tr>
+              </thead>
+              <tbody>
+                {runs.map((r) => (
+                  <tr key={r.id}>
+                    <td className="max-w-md truncate font-medium"><Link className="hover:text-accent" href={`/app/c/${companyId}/runs/${r.id}`}>{r.intent || "(no intent)"}</Link></td>
+                    <td className="text-muted">{name(r.agentId)}</td>
+                    <td><StatusPill status={r.status} /></td>
+                    <td className="tnum text-right">{usd(r.costUsd)}</td>
+                    <td className="tnum text-right text-muted">{(r.inputTokens + r.outputTokens).toLocaleString()}</td>
+                    <td className="tnum text-right text-xs text-muted">{ago(r.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -44,10 +52,10 @@ function FilterLinks({ companyId, current }: { companyId: string; current?: stri
   const opts = [undefined, "executing,planning,building_context,verifying", "waiting_approval,waiting_budget,needs_review", "succeeded", "failed,cancelled"];
   const labels = ["all", "active", "waiting", "succeeded", "failed"];
   return (
-    <div className="flex gap-1 text-xs">
+    <nav aria-label="Filter runs" className="segmented">
       {opts.map((o, i) => (
-        <Link key={labels[i]} href={o ? `/app/c/${companyId}/runs?status=${o}` : `/app/c/${companyId}/runs`} className={`pill ${current === o ? "border-accent text-accent" : "text-muted"}`}>{labels[i]}</Link>
+        <Link key={labels[i]} href={o ? `/app/c/${companyId}/runs?status=${o}` : `/app/c/${companyId}/runs`} aria-current={current === o ? "page" : undefined} className="capitalize">{labels[i]}</Link>
       ))}
-    </div>
+    </nav>
   );
 }

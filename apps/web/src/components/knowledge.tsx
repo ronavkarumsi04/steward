@@ -70,7 +70,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
       {tab === "documents" && (
         <Card title="Documents" action={<button className="btn btn-primary" onClick={() => setOpen({ id: "", title: "", content: "", format: "markdown", folder: "/", version: 0, updatedAt: "" })}>New document</button>}>
           {open && (
-            <form onSubmit={saveDoc} className="mb-4 space-y-2 rounded-lg border border-accent/50 p-3">
+            <form onSubmit={saveDoc} className="mb-4 space-y-2 card-inset space-y-2">
               <div className="grid gap-2 md:grid-cols-[2fr_1fr]">
                 <input name="title" className="input" placeholder="Title" defaultValue={open.title} required />
                 <input name="folder" className="input" placeholder="/folder" defaultValue={open.folder} />

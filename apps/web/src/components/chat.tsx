@@ -111,9 +111,9 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
         {messages.length === 0 && <Empty>Say hello. Ask for a plan, a research brief, or tell the agent what to build.</Empty>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-role={m.role}>
-            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-accent text-black" : m.role === "assistant" ? "bg-panel-2" : "border border-line text-muted"}`}>
+            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-accent text-accent-fg" : m.role === "assistant" ? "bg-panel-2" : "border border-line text-muted"}`}>
               {m.content}
-              <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-black/60" : "text-muted"}`}>
+              <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-accent-fg/70" : "text-muted"}`}>
                 {ago(m.createdAt)}
                 {m.runId && m.role !== "user" && <> · <Link className="underline" href={`/app/c/${companyId}/runs/${m.runId}`}>run</Link></>}
               </div>

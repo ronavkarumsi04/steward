@@ -68,7 +68,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
         {!TERMINAL.has(run.status) && <button className="btn btn-danger" onClick={cancel} disabled={busy}>Cancel run</button>}
       </header>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {run.error && <div className="rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
+      {run.error && <div className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval">

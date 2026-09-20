@@ -79,7 +79,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin }: { o
       </Card>
 
       {open && (
-        <form onSubmit={connectFields} className="card space-y-3 border-accent/50">
+        <form onSubmit={connectFields} className="card space-y-3 border-accent/40 shadow-e2">
           <h3 className="font-semibold">Connect {open.name}</h3>
           <div><label className="label">Label</label><input name="label" className="input" placeholder={open.name} /></div>
           {open.fields.map((f) => (

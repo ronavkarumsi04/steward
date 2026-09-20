@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
+import { Icon } from "./icons";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
@@ -34,8 +35,16 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="card w-full max-w-md space-y-4">
-      <h1 className="text-xl font-semibold">{mode === "login" ? "Sign in" : "Create your account"}</h1>
+    <form onSubmit={onSubmit} className="card rise-in w-full max-w-md space-y-4 p-6 shadow-e2 sm:p-7">
+      <div className="mb-6 text-center">
+        <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
+          <Icon.Logo size={36} />
+        </Link>
+        <h1 className="mt-3 text-xl font-semibold tracking-tight">{mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
+        <p className="mt-1 text-sm text-muted">
+          {mode === "login" ? "Welcome back. Your agents kept working." : "Self-hosted. Your keys, your data, your rules."}
+        </p>
+      </div>
       {mode === "register" && (
         <div>
           <label className="label" htmlFor="name">Your name</label>
@@ -49,7 +58,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       <div>
         <label className="label" htmlFor="password">Password</label>
         <input id="password" name="password" type="password" className="input" required minLength={10} autoComplete={mode === "login" ? "current-password" : "new-password"} />
-        {mode === "register" && <p className="mt-1 text-xs text-muted">At least 10 characters.</p>}
+        {mode === "register" && <p className="hint">At least 10 characters.</p>}
       </div>
       {mode === "register" && (
         <div>
@@ -57,15 +66,16 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           <input id="orgName" name="orgName" className="input" placeholder="Defaults to your personal workspace" />
         </div>
       )}
-      {error && <p role="alert" className="rounded-lg border border-danger/50 bg-danger/10 p-2 text-sm text-danger">{error}</p>}
-      <button type="submit" className="btn btn-primary w-full" disabled={busy}>
-        {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
+      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
+        {busy && <span className="spinner" aria-hidden="true" />}
+        {mode === "login" ? "Sign in" : "Create account"}
       </button>
       <p className="text-center text-sm text-muted">
         {mode === "login" ? (
-          <>No account? <Link className="text-accent" href="/register">Register</Link></>
+          <>No account? <Link className="font-medium text-accent hover:underline" href="/register">Register</Link></>
         ) : (
-          <>Already have an account? <Link className="text-accent" href="/login">Sign in</Link></>
+          <>Already have an account? <Link className="font-medium text-accent hover:underline" href="/login">Sign in</Link></>
         )}
       </p>
     </form>

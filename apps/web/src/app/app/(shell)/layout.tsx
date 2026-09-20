@@ -7,7 +7,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   return (
     <div className="flex min-h-screen flex-col">
       <TopNav me={me} />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 rise-in">{children}</div>
     </div>
   );
 }

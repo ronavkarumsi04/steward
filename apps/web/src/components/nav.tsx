@@ -1,15 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { browserApi } from "@/lib/api";
 import type { Me } from "@/lib/types";
+import { Icon } from "./icons";
+
+const ORG_LINKS = [
+  ["providers", "Providers", Icon.Providers],
+  ["integrations", "Integrations", Icon.Integrations],
+  ["members", "Members", Icon.Members],
+] as const;
 
 export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   const router = useRouter();
+  const path = usePathname();
   const [busy, setBusy] = useState(false);
   const org = me.memberships.find((m) => m.organizationId === orgId) ?? me.memberships[0];
+
   async function logout() {
     setBusy(true);
     try {
@@ -19,22 +28,46 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
       router.refresh();
     }
   }
+
   return (
-    <header className="flex h-12 items-center justify-between border-b border-line bg-panel px-4">
-      <div className="flex items-center gap-4 text-sm">
-        <Link href="/app" className="font-semibold tracking-tight">Steward</Link>
+    <header className="glass sticky top-0 z-30 border-x-0 border-t-0">
+      <div className="mx-auto flex h-13 max-w-[1440px] items-center justify-between gap-3 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+          <Link href="/app" className="flex items-center gap-2 rounded-md py-1 pr-1 font-semibold tracking-tight">
+            <Icon.Logo size={22} className="text-fg" />
+            <span>Steward</span>
+          </Link>
+          {org && (
+            <>
+              <span className="hidden text-faint sm:inline" aria-hidden="true">/</span>
+              <Link href="/app" className="hidden min-w-0 truncate text-sm text-fg-2 hover:text-fg sm:inline">{org.name}</Link>
+            </>
+          )}
+        </div>
+
         {org && (
-          <nav className="flex items-center gap-3 text-muted">
-            <span className="text-fg">{org.name}</span>
-            <Link href={`/app/org/${org.organizationId}/providers`} className="hover:text-fg">Providers</Link>
-            <Link href={`/app/org/${org.organizationId}/integrations`} className="hover:text-fg">Integrations</Link>
-            <Link href={`/app/org/${org.organizationId}/members`} className="hover:text-fg">Members</Link>
+          <nav aria-label="Organization" className="segmented">
+            {ORG_LINKS.map(([slug, label, Glyph]) => {
+              const href = `/app/org/${org.organizationId}/${slug}`;
+              const active = path.startsWith(href);
+              return (
+                <Link key={slug} href={href} aria-current={active ? "page" : undefined} className="gap-1.5">
+                  <Glyph size={16} />
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sr-only sm:hidden">{label}</span>
+                </Link>
+              );
+            })}
           </nav>
         )}
-      </div>
-      <div className="flex items-center gap-3 text-sm">
-        <span className="text-muted">{me.user?.email}</span>
-        <button className="btn" onClick={logout} disabled={busy}>Sign out</button>
+
+        <div className="flex items-center gap-2 text-sm">
+          <span className="hidden max-w-[16rem] truncate text-muted lg:inline" title={me.user?.email}>{me.user?.email}</span>
+          <button className="btn btn-ghost btn-sm" onClick={logout} disabled={busy}>
+            {busy ? <span className="spinner" aria-hidden="true" /> : null}
+            Sign out
+          </button>
+        </div>
       </div>
     </header>
   );

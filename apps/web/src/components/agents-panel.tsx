@@ -108,7 +108,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
       </Card>
 
       {editing && (
-        <form onSubmit={save} className="card space-y-3 border-accent/50">
+        <form onSubmit={save} className="card space-y-3 border-accent/40 shadow-e2">
           <h3 className="font-semibold">Edit {editing.name}</h3>
           <div className="grid gap-3 md:grid-cols-2">
             <div><label className="label">Name</label><input name="name" className="input" defaultValue={editing.name} required /></div>

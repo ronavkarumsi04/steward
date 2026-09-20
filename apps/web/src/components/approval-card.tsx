@@ -29,7 +29,7 @@ export function ApprovalCard({ companyId, approval, onDecided }: { companyId: st
   const pending = state.status === "pending";
   const expired = new Date(state.expiresAt).getTime() < Date.now();
   return (
-    <article id={state.id} className={`rounded-xl border p-4 ${pending ? "border-warn/50 bg-warn/5" : "border-line bg-panel"}`} data-approval-status={state.status}>
+    <article id={state.id} className={`rounded-xl border p-4 ${pending ? "border-warn/40 bg-warn-soft/50 shadow-e1" : "border-line bg-panel"}`} data-approval-status={state.status}>
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">

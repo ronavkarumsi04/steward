@@ -5,6 +5,9 @@ import { useState } from "react";
 import { AUTONOMY_LABELS, type AutonomyLevel } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Company, Membership, ProviderCredential } from "@/lib/types";
+import { Icon } from "./icons";
+
+const STEPS = ["Describe the idea", "Set guardrails", "Review & launch"];
 
 type Step = 1 | 2 | 3;
 
@@ -51,16 +54,32 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
   }
 
   return (
-    <div className="card w-full max-w-2xl">
-      <ol className="mb-6 flex gap-2 text-xs text-muted">
-        {["Describe the idea", "Set guardrails", "Review & launch"].map((t, i) => (
-          <li key={t} className={`flex-1 border-t-2 pt-2 ${step > i ? "border-accent text-fg" : "border-line"}`}>{i + 1}. {t}</li>
-        ))}
+    <div className="card rise-in w-full max-w-2xl p-6 shadow-e2 sm:p-8">
+      <ol className="mb-8 flex gap-3" aria-label="Progress">
+        {STEPS.map((t, i) => {
+          const n = i + 1;
+          const state = n < step ? "done" : n === step ? "current" : "todo";
+          return (
+            <li key={t} className="flex flex-1 flex-col gap-2" aria-current={state === "current" ? "step" : undefined}>
+              <span
+                className={`h-1 rounded-full transition-colors duration-200 ${state === "todo" ? "bg-panel-3" : "bg-accent"}`}
+                aria-hidden="true"
+              />
+              <span className={`flex items-center gap-1.5 text-xs ${state === "todo" ? "text-faint" : "text-fg"}`}>
+                {state === "done" ? <Icon.Check size={13} className="text-accent" /> : <span className="tnum">{n}.</span>}
+                <span className="hidden sm:inline">{t}</span>
+              </span>
+            </li>
+          );
+        })}
       </ol>
 
       {step === 1 && (
-        <div className="space-y-4">
-          <h1 className="text-xl font-semibold">What are you building?</h1>
+        <div className="space-y-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">What are you building?</h1>
+            <p className="mt-1 text-sm text-muted">Your agents read this first. Be concrete about the customer, the problem and what &ldquo;done&rdquo; looks like.</p>
+          </div>
           {memberships.length > 1 && (
             <div>
               <label className="label" htmlFor="org">Organization</label>
@@ -76,7 +95,6 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
           <div>
             <label className="label" htmlFor="idea">The idea, in your own words</label>
             <textarea id="idea" className="input min-h-32" value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="A weekly analytics digest for Shopify stores that highlights what changed and why…" />
-            <p className="mt-1 text-xs text-muted">Your agents read this first. Be concrete about the customer, the problem and what &ldquo;done&rdquo; looks like.</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -94,59 +112,87 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
             <label className="label" htmlFor="customers">Target customers (comma-separated)</label>
             <input id="customers" className="input" value={customers} onChange={(e) => setCustomers(e.target.value)} placeholder="Shopify store owners, DTC marketing leads" />
           </div>
-          <div className="flex justify-end">
-            <button className="btn btn-primary" disabled={!name.trim() || !idea.trim() || !orgId} onClick={() => setStep(2)}>Continue</button>
+          <div className="flex justify-end pt-2">
+            <button className="btn btn-primary" disabled={!name.trim() || !idea.trim() || !orgId} onClick={() => setStep(2)}>
+              Continue
+              <Icon.ArrowRight size={16} />
+            </button>
           </div>
         </div>
       )}
 
       {step === 2 && (
-        <div className="space-y-4">
-          <h1 className="text-xl font-semibold">How much should agents do on their own?</h1>
-          <div className="space-y-2">
-            {([0, 1, 2, 3, 4] as AutonomyLevel[]).map((lvl) => (
-              <label key={lvl} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${autonomy === lvl ? "border-accent bg-panel-2" : "border-line"}`}>
-                <input type="radio" name="autonomy" className="mt-1" checked={autonomy === lvl} onChange={() => setAutonomy(lvl)} />
-                <span>
-                  <span className="font-medium">Level {lvl} — {AUTONOMY_LABELS[lvl]}</span>
-                  <span className="block text-xs text-muted">{AUTONOMY_HELP[lvl]}</span>
-                </span>
-              </label>
-            ))}
+        <div className="space-y-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">How much should agents do on their own?</h1>
+            <p className="mt-1 text-sm text-muted">You can change this at any time. Critical actions always stop for approval.</p>
           </div>
+          <fieldset className="space-y-2">
+            <legend className="label">Autonomy level</legend>
+            {([0, 1, 2, 3, 4] as AutonomyLevel[]).map((lvl) => {
+              const selected = autonomy === lvl;
+              return (
+                <label
+                  key={lvl}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-[border-color,background-color,box-shadow] duration-150 has-[:focus-visible]:shadow-[0_0_0_3px_var(--focus)] ${selected ? "border-accent bg-accent-soft/60" : "border-line hover:border-line-strong hover:bg-panel-2/50"}`}
+                >
+                  <input type="radio" name="autonomy" className="mt-1 accent-accent" checked={selected} onChange={() => setAutonomy(lvl)} />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="tnum text-muted">L{lvl}</span>
+                      {AUTONOMY_LABELS[lvl]}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">{AUTONOMY_HELP[lvl]}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
           <div>
             <label className="label" htmlFor="constraints">Constraints (comma-separated)</label>
             <input id="constraints" className="input" value={constraints} onChange={(e) => setConstraints(e.target.value)} placeholder="No paid ads before launch, never contact existing customers" />
           </div>
-          <p className="text-xs text-muted">Critical actions (payments, deletions, public publishing at scale) always require approval regardless of level. You can refine per-dimension policies and budgets later in Settings.</p>
-          <div className="flex justify-between">
+          <p className="hint">Critical actions (payments, deletions, public publishing at scale) always require approval regardless of level. You can refine per-dimension policies and budgets later in Settings.</p>
+          <div className="flex justify-between pt-2">
             <button className="btn" onClick={() => setStep(1)}>Back</button>
-            <button className="btn btn-primary" onClick={() => setStep(3)}>Continue</button>
+            <button className="btn btn-primary" onClick={() => setStep(3)}>
+              Continue
+              <Icon.ArrowRight size={16} />
+            </button>
           </div>
         </div>
       )}
 
       {step === 3 && (
-        <div className="space-y-4">
-          <h1 className="text-xl font-semibold">Review</h1>
-          <dl className="grid gap-2 text-sm md:grid-cols-[10rem_1fr]">
-            <dt className="text-muted">Company</dt><dd>{name}</dd>
+        <div className="space-y-5">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Review &amp; launch</h1>
+            <p className="mt-1 text-sm text-muted">Nothing runs until you start a task or send a message.</p>
+          </div>
+          <dl className="card-inset grid gap-x-6 gap-y-3 text-sm md:grid-cols-[9rem_1fr]">
+            <dt className="text-muted">Company</dt><dd className="font-medium">{name}</dd>
             <dt className="text-muted">Idea</dt><dd className="whitespace-pre-wrap">{idea}</dd>
-            <dt className="text-muted">Stage</dt><dd>{stage}</dd>
+            <dt className="text-muted">Stage</dt><dd className="capitalize">{stage}</dd>
             <dt className="text-muted">Autonomy</dt><dd>Level {autonomy} — {AUTONOMY_LABELS[autonomy]}</dd>
             <dt className="text-muted">Customers</dt><dd>{split(customers).join(", ") || "—"}</dd>
             <dt className="text-muted">Constraints</dt><dd>{split(constraints).join(", ") || "—"}</dd>
           </dl>
-          <div className={`rounded-lg border p-3 text-sm ${providers.length ? "border-ok/40 text-ok" : "border-warn/50 bg-warn/10 text-warn"}`}>
-            {providers.length
-              ? `${providers.length} AI provider${providers.length > 1 ? "s" : ""} configured for this organization.`
-              : "No AI provider configured yet. Your company will be created with default agents, policies and budgets, but runs will fail until you add a provider under Providers."}
+          <div className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-sm ${providers.length ? "border-ok/30 bg-ok-soft text-ok" : "border-warn/30 bg-warn-soft text-warn"}`}>
+            {providers.length ? <Icon.Check size={16} className="mt-0.5 shrink-0" /> : <Icon.Providers size={16} className="mt-0.5 shrink-0" />}
+            <span>
+              {providers.length
+                ? `${providers.length} AI provider${providers.length > 1 ? "s" : ""} configured for this organization.`
+                : "No AI provider configured yet. Your company will be created with default agents, policies and budgets, but runs will fail until you add a provider under Providers."}
+            </span>
           </div>
-          <p className="text-xs text-muted">Creating a company seeds a Chief of Staff orchestrator plus research, engineering, marketing, sales, support and finance agents, default per-dimension policies and a conservative monthly budget. Nothing runs until you start a task or send a message.</p>
-          {error && <p role="alert" className="rounded-lg border border-danger/50 bg-danger/10 p-2 text-sm text-danger">{error}</p>}
-          <div className="flex justify-between">
+          <p className="hint">Creating a company seeds a Chief of Staff orchestrator plus research, engineering, marketing, sales, support and finance agents, default per-dimension policies and a conservative monthly budget. Nothing runs until you start a task or send a message.</p>
+          {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+          <div className="flex justify-between pt-2">
             <button className="btn" onClick={() => setStep(2)} disabled={busy}>Back</button>
-            <button className="btn btn-primary" onClick={create} disabled={busy}>{busy ? "Creating…" : "Create company"}</button>
+            <button className="btn btn-primary" onClick={create} disabled={busy}>
+              {busy && <span className="spinner" aria-hidden="true" />}
+              {busy ? "Creating…" : "Create company"}
+            </button>
           </div>
         </div>
       )}
