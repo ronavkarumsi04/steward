@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { AUTONOMY_LABELS } from "@steward/schema";
 import { serverApi, tryApi } from "@/lib/server";
 import type { Approval, CompanyOverview, Run, StewardEvent, UsageRow } from "@/lib/types";
+import { Icon } from "@/components/icons";
 import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
-import { Card, Empty, Stat, StatusPill, ago, usd } from "@/components/ui";
+import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
 
 export default async function CompanyOverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -24,44 +25,63 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const calls30 = usage.usage.reduce((n, r) => n + r.calls, 0);
   const openTasks = (taskCounts.todo ?? 0) + (taskCounts.in_progress ?? 0) + (taskCounts.blocked ?? 0) + (taskCounts.waiting_approval ?? 0) + (taskCounts.review ?? 0);
   const aiBudget = budgets.find((b) => b.category === "ai") ?? budgets.find((b) => b.category === "total");
+  const base = `/app/c/${companyId}`;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{company.name}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || "No profile yet — add one in Settings."}</p>
+        <div className="min-w-0">
+          <div className="eyebrow mb-1">Overview</div>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight">{company.name}</h1>
+          <p className="mt-1.5 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || "No profile yet — add one in Settings."}</p>
         </div>
-        <div className="text-right text-xs text-muted">
-          <div>Autonomy level {company.autonomyLevel} · {AUTONOMY_LABELS[company.autonomyLevel]}</div>
-          <div>{agents.filter((a) => a.enabled).length} of {agents.length} agents enabled · {company.timezone}</div>
-        </div>
+        <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted sm:text-right">
+          <div>
+            <dt className="sr-only">Autonomy</dt>
+            <dd>Autonomy L{company.autonomyLevel} · {AUTONOMY_LABELS[company.autonomyLevel]}</dd>
+          </div>
+          <div>
+            <dt className="sr-only">Agents</dt>
+            <dd className="tnum">{agents.filter((a) => a.enabled).length} of {agents.length} agents enabled · {company.timezone}</dd>
+          </div>
+        </dl>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Open tasks" value={openTasks} hint={`${taskCounts.done ?? 0} done`} />
-        <Stat label="Pending approvals" value={overview.pendingApprovals} hint={overview.pendingApprovals ? <Link className="text-warn" href={`/app/c/${companyId}/approvals`}>needs your decision</Link> : "all clear"} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Open tasks" value={openTasks} hint={`${taskCounts.done ?? 0} done`} href={`${base}/tasks`} />
+        <Stat
+          label="Pending approvals"
+          value={overview.pendingApprovals}
+          hint={overview.pendingApprovals ? <span className="text-warn">Needs your decision</span> : "All clear"}
+          href={`${base}/approvals`}
+        />
         <Stat label="AI spend · 30d" value={usd(spend30)} hint={aiBudget ? `${calls30} calls · limit ${usd(aiBudget.limitUsd)}/${aiBudget.period}` : `${calls30} calls`} />
-        <Stat label="Active goals" value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? "no goals yet"} />
+        <Stat label="Active goals" value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? "No goals yet"} href={`${base}/settings#goals`} />
       </div>
 
       <QuickStart companyId={companyId} agents={agents} />
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Card title="Live activity" action={<Link className="text-xs text-accent" href={`/app/c/${companyId}/runs`}>all runs →</Link>}>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>}>
           <LiveFeed companyId={companyId} initial={events.events} />
         </Card>
-        <div className="space-y-4">
-          <Card title="Approvals waiting" action={<Link className="text-xs text-accent" href={`/app/c/${companyId}/approvals`}>review →</Link>}>
+        <div className="min-w-0 space-y-4">
+          <Card title="Approvals waiting" action={<Link className="btn btn-ghost btn-sm" href={`${base}/approvals`}>Review <Icon.ChevronRight size={14} /></Link>}>
             {approvals.approvals.length === 0 ? (
-              <Empty>No approvals pending.</Empty>
+              <Empty icon={<Icon.Check size={20} />}>No approvals pending.</Empty>
             ) : (
               <ul className="space-y-2 text-sm">
                 {approvals.approvals.map((a) => (
                   <li key={a.id}>
-                    <Link href={`/app/c/${companyId}/approvals#${a.id}`} className="block rounded-lg border border-warn/40 bg-warn/5 p-2 hover:border-warn">
-                      <div className="flex justify-between gap-2"><span className="font-medium">{a.action}</span><span className="text-xs text-muted">{ago(a.createdAt)}</span></div>
-                      <div className="truncate text-xs text-muted">{a.reason}</div>
+                    <Link
+                      href={`${base}/approvals#${a.id}`}
+                      className="block rounded-xl border border-warn/30 bg-warn-soft/60 px-3 py-2.5 transition-[border-color,box-shadow] duration-150 hover:border-warn/60 hover:shadow-e1"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium">{a.action}</span>
+                        <span className="tnum shrink-0 text-xs text-muted">{ago(a.createdAt)}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted">{a.reason}</div>
                     </Link>
                   </li>
                 ))}
@@ -70,28 +90,32 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
           </Card>
           <Card title="Recent runs">
             {runs.runs.length === 0 ? (
-              <Empty>No runs yet.</Empty>
+              <Empty icon={<Icon.Runs size={20} />}>No runs yet.</Empty>
             ) : (
-              <ul className="divide-y divide-line text-sm">
+              <ul className="-mx-2 text-sm">
                 {runs.runs.map((r) => (
-                  <li key={r.id} className="py-2">
-                    <Link href={`/app/c/${companyId}/runs/${r.id}`} className="flex items-center justify-between gap-2 hover:text-accent">
-                      <span className="truncate">{r.intent || agentName(agents, r.agentId)}</span>
-                      <StatusPill status={r.status} />
+                  <li key={r.id}>
+                    <Link href={`${base}/runs/${r.id}`} className="block rounded-lg px-2 py-2 transition-colors duration-100 hover:bg-panel-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium">{r.intent || agentName(agents, r.agentId)}</span>
+                        <StatusPill status={r.status} />
+                      </div>
+                      <div className="tnum mt-0.5 text-xs text-muted">{agentName(agents, r.agentId)} · {usd(r.costUsd)} · {ago(r.createdAt)}</div>
                     </Link>
-                    <div className="text-xs text-muted">{agentName(agents, r.agentId)} · {usd(r.costUsd)} · {ago(r.createdAt)}</div>
                   </li>
                 ))}
               </ul>
             )}
           </Card>
-          <Card title="Goals" action={<Link className="text-xs text-accent" href={`/app/c/${companyId}/settings#goals`}>edit →</Link>}>
-            {goals.length === 0 ? <Empty>No goals. Agents work best with 1–3 measurable goals.</Empty> : (
-              <ul className="space-y-1 text-sm">
+          <Card title="Goals" action={<Link className="btn btn-ghost btn-sm" href={`${base}/settings#goals`}>Edit <Icon.ChevronRight size={14} /></Link>}>
+            {goals.length === 0 ? (
+              <Empty>No goals. Agents work best with 1–3 measurable goals.</Empty>
+            ) : (
+              <ul className="space-y-2 text-sm">
                 {goals.map((g) => (
                   <li key={g.id} className="flex items-center justify-between gap-2">
                     <span className="truncate">{g.title}</span>
-                    <span className="text-xs text-muted">{g.metric ? `${g.metric} → ${g.target ?? "?"}` : g.status}</span>
+                    {g.metric ? <span className="tnum shrink-0 text-xs text-muted">{g.metric} → {g.target ?? "?"}</span> : <Pill>{g.status}</Pill>}
                   </li>
                 ))}
               </ul>

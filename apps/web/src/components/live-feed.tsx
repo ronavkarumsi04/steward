@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { useLiveEvents } from "@/lib/use-events";
 import type { StewardEvent } from "@/lib/types";
-import { Empty, ago } from "./ui";
+import { Empty, Ago } from "./ui";
 
 export function LiveFeed({ companyId, initial, compact = false }: { companyId: string; initial: StewardEvent[]; compact?: boolean }) {
   const { events, connected } = useLiveEvents(companyId, { initial, max: compact ? 40 : 300 });
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-xs text-muted">
-        <span>{events.length} events</span>
-        <span className="flex items-center gap-1.5" data-testid="live-status" data-connected={connected}>
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-ok" : "bg-warn"}`} />
-          {connected ? "live" : "reconnecting"}
+        <span className="tnum">{events.length} events</span>
+        <span className={`pill ${connected ? "pill-ok" : "pill-warn"}`} data-testid="live-status" data-connected={connected} role="status">
+          <span className={`dot ${connected ? "dot-live" : ""}`} aria-hidden="true" />
+          {connected ? "Live" : "Reconnecting"}
         </span>
       </div>
       {events.length === 0 ? (
@@ -21,14 +21,14 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
       ) : (
         <ol className="divide-y divide-line">
           {events.map((e) => (
-            <li key={e.seq} className="flex items-start gap-3 py-2 text-sm" data-event-type={e.type}>
-              <span className="mono mt-0.5 w-20 shrink-0 text-xs text-muted">{ago(e.createdAt)}</span>
+            <li key={e.seq} className="flex items-start gap-3 py-2.5 text-sm" data-event-type={e.type}>
+              <span className="mono tnum mt-0.5 w-16 shrink-0 text-xs text-faint"><Ago iso={e.createdAt} /></span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="mono text-xs text-accent">{e.type}</span>
+                  <span className="mono text-xs font-medium text-accent">{e.type}</span>
                   <span className="text-xs text-muted">{actorLabel(e.actor)}</span>
                 </div>
-                <div className="truncate text-muted">{summarize(e)}</div>
+                <div className="truncate text-fg-2">{summarize(e)}</div>
                 {!compact && e.correlation.runId && (
                   <Link className="text-xs text-accent hover:underline" href={`/app/c/${companyId}/runs/${e.correlation.runId}`}>view run</Link>
                 )}

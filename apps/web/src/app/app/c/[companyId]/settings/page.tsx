@@ -4,6 +4,7 @@ import type { CompanyOverview, ProviderModel } from "@/lib/types";
 import { SettingsPanel } from "@/components/settings";
 import { RoutingPanel } from "@/components/routing-panel";
 import { ROUTING_PURPOSES } from "@/lib/routing";
+import { PageHeader } from "@/components/ui";
 
 export default async function SettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -18,7 +19,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ compa
   const isAdmin = o.role === "owner" || o.role === "admin";
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Settings</h1>
+      <PageHeader eyebrow="Company" title="Settings" description="Profile, autonomy, policies, budgets, goals and model routing." />
       <SettingsPanel company={o.company} profile={o.profile?.profile ?? null} policies={o.policies} budgets={o.budgets} goals={o.goals} isAdmin={isAdmin} />
       <RoutingPanel orgId={orgId} companyId={companyId} models={models} routing={routing} isAdmin={isAdmin} />
     </div>

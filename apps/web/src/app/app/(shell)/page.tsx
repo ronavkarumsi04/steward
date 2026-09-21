@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireMe, serverApi } from "@/lib/server";
 import type { Company } from "@/lib/types";
-import { Empty, StatusPill } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { Empty, PageHeader, StatusPill } from "@/components/ui";
 import { AUTONOMY_LABELS } from "@steward/schema";
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ integrationError?: string; connected?: string }> }) {
@@ -15,28 +16,58 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const total = groups.reduce((n, g) => n + g.companies.length, 0);
   if (total === 0) redirect("/app/new");
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      {sp.integrationError && <p role="alert" className="mb-4 text-sm text-danger">Integration connection failed: {sp.integrationError}</p>}
-      {sp.connected && <p role="status" className="mb-4 text-sm text-ok">Connected {sp.connected}.</p>}
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Your companies</h1>
-        <Link href="/app/new" className="btn btn-primary">New company</Link>
-      </div>
+    <main className="mx-auto max-w-6xl px-3 py-6 sm:px-5 md:py-10">
+      {sp.integrationError && (
+        <p role="alert" className="mb-4 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+          Integration connection failed: {sp.integrationError}
+        </p>
+      )}
+      {sp.connected && (
+        <p role="status" className="mb-4 rounded-lg border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok">
+          Connected {sp.connected}.
+        </p>
+      )}
+      <PageHeader
+        title="Your companies"
+        description="Each company runs its own agents, budgets and approval policy."
+        action={
+          <Link href="/app/new" className="btn btn-primary">
+            <Icon.Plus size={16} />
+            New company
+          </Link>
+        }
+      />
       {groups.map(({ org, companies }) => (
         <section key={org.organizationId} className="mb-10">
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-muted">{org.name} · {org.role}</h2>
+          <h2 className="eyebrow mb-3">
+            {org.name} · {org.role}
+          </h2>
           {companies.length === 0 ? (
             <Empty>No companies yet in this organization.</Empty>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {companies.map((c) => (
-                <Link key={c.id} href={`/app/c/${c.id}`} className="card transition hover:border-accent/60">
+                <Link
+                  key={c.id}
+                  href={`/app/c/${c.id}`}
+                  className="card group flex flex-col gap-3 transition-[box-shadow,transform,border-color] duration-150 hover:border-line-strong hover:shadow-e2 active:scale-[0.99]"
+                >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold">{c.name}</h3>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                      <Icon.Company size={18} />
+                    </span>
                     <StatusPill status={c.status} />
                   </div>
-                  <p className="mt-2 text-xs text-muted">Autonomy {c.autonomyLevel} · {AUTONOMY_LABELS[c.autonomyLevel]}</p>
-                  {c.outboundPaused && <p className="mt-1 text-xs text-warn">Outbound actions paused</p>}
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold">{c.name}</h3>
+                    <p className="mt-0.5 text-xs text-muted">
+                      L{c.autonomyLevel} · {AUTONOMY_LABELS[c.autonomyLevel]}
+                    </p>
+                    {c.outboundPaused && <p className="mt-1 text-xs text-warn">Outbound actions paused</p>}
+                  </div>
+                  <span className="mt-auto flex items-center gap-1 text-xs font-medium text-accent opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    Open workspace <Icon.ArrowRight size={14} />
+                  </span>
                 </Link>
               ))}
             </div>

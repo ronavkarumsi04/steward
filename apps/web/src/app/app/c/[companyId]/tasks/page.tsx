@@ -1,6 +1,7 @@
 import { serverApi } from "@/lib/server";
 import type { Agent, Goal, Task } from "@/lib/types";
 import { TaskBoard } from "@/components/task-board";
+import { PageHeader } from "@/components/ui";
 
 export default async function TasksPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -12,7 +13,7 @@ export default async function TasksPage({ params }: { params: Promise<{ companyI
   ]);
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Tasks</h1>
+      <PageHeader eyebrow="Work" title="Tasks" description="Every task is a unit of work an agent can pick up. Moving a card changes its state; running it starts a durable workflow." />
       <TaskBoard companyId={companyId} tasks={tasks} agents={agents} goals={goals} />
     </div>
   );

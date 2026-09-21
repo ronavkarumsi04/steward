@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
-import { Card, Empty, StatusPill, ago, usd } from "./ui";
+import { Card, Empty, StatusPill, Ago, usd } from "./ui";
 
 export function ProvidersPanel({ orgId, types, providers, models, usage, devices, isAdmin }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; devices: CompanionDevice[]; isAdmin: boolean }) {
   const router = useRouter();
@@ -85,7 +85,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="font-medium">{p.label}</span><span className="pill text-muted">{p.providerType}</span><StatusPill status={p.status} />{!p.enabled && <span className="pill text-warn">disabled</span>}{p.companyId && <span className="pill text-muted">company-scoped</span>}</div>
                   <div className="text-xs text-muted">
-                    {p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · verified {ago(p.lastVerifiedAt)}
+                    {p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · verified <Ago iso={p.lastVerifiedAt} />
                     {p.lastError && <span className="text-danger"> · {p.lastError}</span>}
                   </div>
                   {testResult[p.id] !== undefined && <div className={`text-xs ${testResult[p.id]?.startsWith("OK") ? "text-ok" : "text-danger"}`}>{testResult[p.id]}</div>}

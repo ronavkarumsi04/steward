@@ -7,7 +7,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
-import { Card, Empty, Json, RiskPill, StatusPill, ago, usd } from "./ui";
+import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -61,14 +61,14 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
             <span>· trigger {String(run.trigger.kind ?? "?")}</span>
             <span>· {run.iterations} iterations</span>
             <span>· {usd(run.costUsd)} · {run.inputTokens}/{run.outputTokens} tok</span>
-            <span>· started {ago(run.startedAt ?? run.createdAt)}</span>
+            <span>· started <Ago iso={run.startedAt ?? run.createdAt} /></span>
             {run.workflowId && <span className="mono">· {run.workflowId}</span>}
           </div>
         </div>
         {!TERMINAL.has(run.status) && <button className="btn btn-danger" onClick={cancel} disabled={busy}>Cancel run</button>}
       </header>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {run.error && <div className="rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
+      {run.error && <div className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval">
@@ -76,7 +76,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Card title={`Steps (${steps.length})`}>
           {steps.length === 0 ? <Empty>No steps recorded yet.</Empty> : (
             <ol className="space-y-2">

@@ -6,7 +6,10 @@ import { useState, type FormEvent } from "react";
 import type { TaskStatus } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, Goal, Run, Task } from "@/lib/types";
-import { Empty, StatusPill, ago } from "./ui";
+import { Icon } from "./icons";
+import { Pill, StatusPill, Ago, type Tone } from "./ui";
+
+const PRIORITY_TONE: Record<string, Tone> = { urgent: "danger", high: "warn", medium: "neutral", low: "neutral" };
 
 const COLUMNS: Array<{ status: TaskStatus; label: string }> = [
   { status: "backlog", label: "Backlog" },
@@ -75,7 +78,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
 
   return (
     <div className="space-y-4">
-      <form onSubmit={create} className="card grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
+      <form onSubmit={create} className="card grid gap-2 shadow-e1 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
         <input name="title" className="input" placeholder="New task title" required aria-label="Task title" />
         <select name="agentId" className="input" aria-label="Assignee" defaultValue={agents.find((a) => a.kind === "orchestrator")?.id ?? ""}>
           <option value="">Unassigned</option>
@@ -88,40 +91,48 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
         <select name="priority" className="input" aria-label="Priority" defaultValue="medium">
           {["low", "medium", "high", "urgent"].map((p) => <option key={p}>{p}</option>)}
         </select>
-        <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" name="start" defaultChecked /> start now</label>
-        <button className="btn btn-primary">Add</button>
+        <label className="flex items-center gap-1.5 whitespace-nowrap px-1 text-xs text-muted"><input type="checkbox" name="start" className="accent-accent" defaultChecked /> Start now</label>
+        <button className="btn btn-primary"><Icon.Plus size={16} />Add</button>
         <textarea name="description" className="input md:col-span-6" placeholder="Description / acceptance criteria (optional)" rows={2} />
       </form>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {columns.map((col) => (
-          <section key={col.status} className="rounded-xl border border-line bg-panel p-2" data-column={col.status}>
-            <h3 className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted">{col.label}<span>{col.tasks.length}</span></h3>
-            {col.tasks.length === 0 ? <Empty>—</Empty> : (
+          <section key={col.status} className="card-inset w-[17rem] shrink-0 snap-start p-2 xl:w-auto" data-column={col.status}>
+            <h3 className="mb-2 flex items-center justify-between px-1.5 pt-0.5 text-xs font-medium text-muted">
+              <span className="eyebrow">{col.label}</span>
+              <span className="tnum">{col.tasks.length}</span>
+            </h3>
+            {col.tasks.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-line px-2 py-6 text-center text-xs text-faint">Empty</div>
+            ) : (
               <ul className="space-y-2">
                 {col.tasks.map((t) => (
-                  <li key={t.id} className="rounded-lg border border-line bg-bg p-2 text-sm" data-task-id={t.id}>
-                    <div className="font-medium">{t.title}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">
-                      <span className={`pill ${t.priority === "urgent" ? "text-danger" : t.priority === "high" ? "text-warn" : ""}`}>{t.priority}</span>
-                      <span>{agentName(t.assigneeAgentId)}</span>
-                      <span>· {ago(t.updatedAt)}</span>
+                  <li key={t.id} className="card p-2.5 text-sm shadow-e1 transition-[box-shadow,border-color] duration-150 hover:border-line-strong hover:shadow-e2" data-task-id={t.id}>
+                    <div className="font-medium leading-snug">{t.title}</div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      <Pill tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{t.priority}</Pill>
+                      <span className="truncate">{agentName(t.assigneeAgentId)}</span>
+                      <span className="tnum">· <Ago iso={t.updatedAt} /></span>
                     </div>
-                    {t.status === "blocked" && <div className="mt-1"><StatusPill status="blocked" /></div>}
-                    <div className="mt-2 flex flex-wrap gap-1">
+                    {t.status === "blocked" && <div className="mt-1.5"><StatusPill status="blocked" /></div>}
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1">
                       {t.status !== "done" && t.status !== "cancelled" && (
-                        <button className="btn px-2 py-0.5 text-xs" disabled={busyId === t.id} onClick={() => runTask(t)}>Run</button>
+                        <button className="btn btn-sm" disabled={busyId === t.id} onClick={() => runTask(t)}>
+                          {busyId === t.id ? <span className="spinner" aria-hidden="true" /> : null}
+                          Run
+                        </button>
                       )}
                       <select
                         aria-label="Move task"
-                        className="input w-auto px-1 py-0.5 text-xs"
+                        className="input h-8 w-auto px-2 py-0 text-xs"
                         value={t.status}
                         disabled={busyId === t.id}
                         onChange={(e) => move(t, e.target.value as TaskStatus)}
                       >
                         {["backlog", "todo", "in_progress", "blocked", "review", "done", "cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <Link href={`/app/c/${companyId}/runs?taskId=${t.id}`} className="btn px-2 py-0.5 text-xs">Runs</Link>
+                      <Link href={`/app/c/${companyId}/runs?taskId=${t.id}`} className="btn btn-ghost btn-sm">Runs</Link>
                     </div>
                   </li>
                 ))}

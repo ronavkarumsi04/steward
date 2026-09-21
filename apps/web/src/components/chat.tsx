@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, Conversation, Message, Run } from "@/lib/types";
-import { Empty, StatusPill, ago } from "./ui";
+import { Empty, StatusPill, Ago } from "./ui";
 
 export function ConversationList({ companyId, conversations, activeId }: { companyId: string; conversations: Conversation[]; activeId?: string }) {
   const router = useRouter();
@@ -30,7 +30,7 @@ export function ConversationList({ companyId, conversations, activeId }: { compa
             <li key={c.id}>
               <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate rounded-lg px-3 py-1.5 ${c.id === activeId ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2 hover:text-fg"}`}>
                 {c.title || "New conversation"}
-                <span className="block text-xs text-muted">{ago(c.updatedAt)}</span>
+                <span className="block text-xs text-muted"><Ago iso={c.updatedAt} /></span>
               </Link>
             </li>
           ))}
@@ -111,10 +111,10 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
         {messages.length === 0 && <Empty>Say hello. Ask for a plan, a research brief, or tell the agent what to build.</Empty>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-role={m.role}>
-            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-accent text-black" : m.role === "assistant" ? "bg-panel-2" : "border border-line text-muted"}`}>
+            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-accent text-accent-fg" : m.role === "assistant" ? "bg-panel-2" : "border border-line text-muted"}`}>
               {m.content}
-              <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-black/60" : "text-muted"}`}>
-                {ago(m.createdAt)}
+              <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-accent-fg/70" : "text-muted"}`}>
+                <Ago iso={m.createdAt} />
                 {m.runId && m.role !== "user" && <> · <Link className="underline" href={`/app/c/${companyId}/runs/${m.runId}`}>run</Link></>}
               </div>
             </div>

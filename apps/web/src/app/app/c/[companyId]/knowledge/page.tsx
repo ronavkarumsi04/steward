@@ -1,6 +1,7 @@
 import { serverApi } from "@/lib/server";
 import type { Artifact, Decision, Document, Memory } from "@/lib/types";
 import { KnowledgePanel } from "@/components/knowledge";
+import { PageHeader } from "@/components/ui";
 
 export default async function KnowledgePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -13,7 +14,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ comp
   ]);
   return (
     <div>
-      <h1 className="mb-4 text-xl font-semibold">Knowledge</h1>
+      <PageHeader eyebrow="Memory" title="Knowledge" description="Documents, decisions, memories and artifacts your agents read before acting." />
       <KnowledgePanel companyId={companyId} documents={documents} decisions={decisions} memories={memories} artifacts={artifacts} />
     </div>
   );
