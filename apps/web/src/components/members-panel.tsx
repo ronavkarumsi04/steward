@@ -13,7 +13,7 @@ const ROLES = ["owner", "admin", "member", "viewer"];
 export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgId: string; members: Member[]; invitations: Invitation[]; me: string; myRole: string | undefined }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [acceptUrl, setAcceptUrl] = useState<string | null>(null);
+  const [invited, setInvited] = useState<{ acceptUrl: string; emailed: boolean; email: string } | null>(null);
   const isAdmin = myRole === "owner" || myRole === "admin";
   const isOwner = myRole === "owner";
   const base = `/orgs/${orgId}`;
@@ -24,8 +24,9 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
     const fd = new FormData(form);
     setError(null);
     try {
-      const r = await browserApi.post<{ acceptUrl: string }>(`${base}/invitations`, { email: String(fd.get("email")), role: String(fd.get("role")) });
-      setAcceptUrl(r.acceptUrl);
+      const email = String(fd.get("email"));
+      const r = await browserApi.post<{ acceptUrl: string; emailed: boolean }>(`${base}/invitations`, { email, role: String(fd.get("role")) });
+      setInvited({ ...r, email });
       form.reset();
       router.refresh();
     } catch (err) {
@@ -67,9 +68,10 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
           <select name="role" className="input" defaultValue="member" disabled={!isAdmin}>{ROLES.filter((r) => r !== "owner" || isOwner).map((r) => <option key={r}>{r}</option>)}</select>
           <button className="btn btn-primary" disabled={!isAdmin}>Invite</button>
         </form>
-        {acceptUrl && (
-          <p className="mb-3 rounded-lg border border-line bg-panel-2 p-2 text-xs">
-            Share this one-time link with them (it is not emailed automatically): <span className="mono break-all">{acceptUrl}</span>
+        {invited && (
+          <p role="status" className="mb-3 rounded-lg border border-line bg-panel-2 p-2 text-xs">
+            {invited.emailed ? `Invitation emailed to ${invited.email}. ` : `Email delivery failed for ${invited.email} — share this link instead. `}
+            <span className="text-muted">One-time link (also works if the email doesn&apos;t arrive):</span> <span className="mono break-all">{invited.acceptUrl}</span>
           </p>
         )}
         {invitations.length === 0 ? <Empty>No pending invitations.</Empty> : (

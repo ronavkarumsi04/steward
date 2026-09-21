@@ -64,6 +64,17 @@ export class OrganizationService {
     return rows.length > 0;
   }
 
+  /** Public preview of a pending invitation (no membership required); null when invalid or expired. */
+  async peekInvitation(token: string) {
+    const [row] = await this.db
+      .select({ email: invitations.email, role: invitations.role, organizationName: organizations.name, expiresAt: invitations.expiresAt })
+      .from(invitations)
+      .innerJoin(organizations, eq(organizations.id, invitations.organizationId))
+      .where(and(eq(invitations.tokenHash, hashToken(token)), isNull(invitations.acceptedAt), gt(invitations.expiresAt, new Date())))
+      .limit(1);
+    return row ? { ...row, role: row.role as Role } : null;
+  }
+
   /** Accepts an invitation for the signed-in user; the invite email must match the user's email. */
   async acceptInvitation(userId: string, token: string) {
     const hash = hashToken(token);

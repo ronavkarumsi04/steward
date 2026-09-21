@@ -5,7 +5,7 @@ import { emailVerifications, memberships, oauthIdentities, organizations, sessio
 import type { Role } from "@steward/schema";
 
 export class AuthError extends Error {
-  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch", message?: string) {
+  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch" | "signup_closed", message?: string) {
     super(message ?? code);
     this.name = "AuthError";
   }
@@ -21,6 +21,15 @@ export interface SessionUser {
   emailVerified: boolean;
   isSuperadmin: boolean;
 }
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  name: string;
+  orgName?: string;
+}
+
+type Organization = typeof organizations.$inferSelect;
 
 export interface AuthSession {
   id: string;
@@ -43,14 +52,17 @@ export class AuthService {
     return argon2.hash(pw, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
   }
 
-  /** Registers a user and creates a personal organization owned by them. */
-  async register(input: { email: string; password: string; name: string; orgName?: string }) {
+  /** Creates the user and, unless `personalOrganization` is false (invited sign-up), an owner workspace for them. */
+  async register(input: RegisterInput & { personalOrganization?: true }): Promise<{ user: SessionUser; organization: Organization }>;
+  async register(input: RegisterInput & { personalOrganization: boolean }): Promise<{ user: SessionUser; organization: Organization | null }>;
+  async register(input: RegisterInput & { personalOrganization?: boolean }) {
     const email = input.email.trim().toLowerCase();
     const passwordHash = await this.hashPassword(input.password);
     return this.db.transaction(async (tx) => {
       const existing = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
       if (existing.length) throw new AuthError("email_taken", "An account with this email already exists");
       const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim() }).returning();
+      if (input.personalOrganization === false) return { user: toSessionUser(user!), organization: null };
       const orgName = input.orgName?.trim() || `${input.name.trim() || email.split("@")[0]}'s workspace`;
       const org = await this.createOrganizationTx(tx, user!.id, orgName);
       return { user: toSessionUser(user!), organization: org };
@@ -149,6 +161,11 @@ export class AuthService {
     const passwordHash = await this.hashPassword(newPassword);
     await this.db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
     await this.revokeAllSessions(userId);
+  }
+
+  async hasAnyUsers(): Promise<boolean> {
+    const [row] = await this.db.select({ id: users.id }).from(users).limit(1);
+    return Boolean(row);
   }
 
   async findUserByEmail(email: string) {

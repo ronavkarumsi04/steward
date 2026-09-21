@@ -44,7 +44,7 @@ cp .env.example .env   # fill STEWARD_MASTER_KEY and SESSION_SECRET
 docker compose --profile app up -d --build
 ```
 
-This builds `infra/docker/{api,worker,web}.Dockerfile` and runs the full stack. The API applies migrations on start (`RUN_MIGRATIONS_ON_START=true`).
+This builds `infra/docker/{api,worker,web}.Dockerfile` and runs the full stack. The API applies migrations on start (`RUN_MIGRATIONS_ON_START=true`). For production — the web app on Vercel and the API/worker/Temporal behind auto-TLS on any Docker host — see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Verifying an install
 
@@ -95,6 +95,7 @@ Key toggles:
 
 ## Documentation
 
+- [Deploying to production](docs/DEPLOY.md) (Vercel web + self-hosted backend)
 - [Architecture](docs/ARCHITECTURE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security policy](SECURITY.md)
 - [AI providers](docs/PROVIDERS.md) · [Integrations](docs/INTEGRATIONS.md) · [Local companion](apps/companion/README.md)
 - [MegaPlan](docs/MEGAPLAN.md) · [ADRs](docs/adr/) · [Research](docs/research/)

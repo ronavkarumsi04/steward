@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, boot verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # version is read from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start infrastructure (Postgres, Redis, Temporal)
+        run: |
+          docker compose up -d postgres redis temporal
+          for i in $(seq 1 60); do
+            healthy=$(docker compose ps --format json postgres temporal | grep -c '"Health":"healthy"' || true)
+            [ "$healthy" -ge 2 ] && break
+            sleep 2
+          done
+          docker compose ps
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Migrate
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://steward:steward@localhost:5432/steward
+
+      - name: Unit and integration tests
+        run: pnpm test
+        env:
+          DATABASE_URL: postgres://steward:steward@localhost:5432/steward
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @steward/web exec playwright install --with-deps chromium
+
+      - name: Boot verification (production build, crash recovery, golden path)
+        run: SKIP_INSTALL=1 pnpm verify:boot
+        env:
+          CI: "true"
+
+      - name: Upload boot logs and Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-boot-artifacts
+          path: |
+            data/verify-boot/*.log
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  images:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, worker, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/${{ matrix.service }}.Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
