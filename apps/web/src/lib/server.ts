@@ -21,15 +21,47 @@ export async function getMe(): Promise<Me> {
   return api.get<Me>("/auth/me");
 }
 
-/** Like getMe, but public pages stay renderable when the API is unreachable (treated as signed out). */
-export async function getMeOptional(): Promise<Me> {
+/**
+ * Runs an API call, substituting `fallback` only when the API itself is unreachable (network error).
+ * `cookies()` is read before the try so Next's dynamic-rendering bailout is never swallowed.
+ */
+async function withFallback<T>(what: string, fn: (api: ApiClient) => Promise<T>, fallback: T): Promise<T> {
+  const api = await serverApi();
   try {
-    return await getMe();
+    return await fn(api);
   } catch (e) {
     if (e instanceof ApiError) throw e;
-    console.error("steward api unreachable", e);
-    return { user: null, memberships: [] };
+    console.error(`steward ${what} unavailable`, e instanceof Error ? e.message : e);
+    return fallback;
   }
+}
+
+/** Like getMe, but public pages stay renderable when the API is unreachable (treated as signed out). */
+export function getMeOptional(): Promise<Me> {
+  return withFallback("api", (api) => api.get<Me>("/auth/me"), { user: null, memberships: [] });
+}
+
+export interface AuthConfig {
+  signupOpen: boolean;
+  inviteOnly: boolean;
+}
+
+/** Public sign-up policy; assumes open when the API is unreachable so the page still renders. */
+export function getAuthConfig(): Promise<AuthConfig> {
+  return withFallback("auth config", (api) => api.get<AuthConfig>("/auth/config"), { signupOpen: true, inviteOnly: false });
+}
+
+export interface InvitationPreview {
+  email: string;
+  role: string;
+  organizationName: string;
+  expiresAt: string;
+}
+
+/** Public preview of a pending invitation; null when invalid or expired. */
+export async function peekInvitation(token: string): Promise<InvitationPreview | null> {
+  const api = await serverApi();
+  return tryApi(async () => (await api.get<{ invitation: InvitationPreview }>(`/invitations/${encodeURIComponent(token)}`)).invitation);
 }
 
 /** Loads the current user or redirects to /login (preserving the destination). */

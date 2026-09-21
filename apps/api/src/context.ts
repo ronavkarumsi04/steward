@@ -1,6 +1,6 @@
 import type { Context as HonoContext } from "hono";
 import { AgentServiceFactory } from "@steward/agents";
-import { AuthService, type CoreContext, type SessionUser } from "@steward/core";
+import { AuthService, type CoreContext, type Mailer, type SessionUser } from "@steward/core";
 import type { Role, TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import type { CompanionHub } from "./companion-hub.js";
@@ -8,6 +8,7 @@ import type { CompanionHub } from "./companion-hub.js";
 export interface ApiDeps {
   core: CoreContext;
   auth: AuthService;
+  mailer: Mailer;
   services: AgentServiceFactory;
   workflows: WorkflowClient | null;
   companionHub?: CompanionHub;

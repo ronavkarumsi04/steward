@@ -7,7 +7,7 @@ import { createHmac } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
-import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext } from "@steward/core";
+import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
@@ -29,10 +29,19 @@ const ENV: NodeJS.ProcessEnv = {
 
 let available = false;
 let core: CoreContext;
+let closedCore: CoreContext;
 let services: AgentServiceFactory;
 let app: ReturnType<typeof createApp>["app"];
+/** Same database, but ALLOW_SIGNUP=false. */
+let closedApp: ReturnType<typeof createApp>["app"];
 let stub: StubProvider;
 const uniq = () => Math.random().toString(36).slice(2, 10);
+
+const outbox: MailMessage[] = [];
+const mailer: Mailer = { provider: "console", send: async (m) => void outbox.push(m) };
+const lastMailTo = (email: string) => [...outbox].reverse().find((m) => m.to === email);
+/** Extracts the last path segment of the first URL in an email body (the one-time token). */
+const tokenFromMail = (m: MailMessage) => /https?:\/\/\S+\/([A-Za-z0-9_-]+)/.exec(m.text)?.[1];
 
 beforeAll(async () => {
   try {
@@ -48,12 +57,16 @@ beforeAll(async () => {
   core = createCoreContext(loadConfig(ENV), "api-test");
   const companionHub = new CompanionHub();
   services = new AgentServiceFactory({ core, env: ENV, companionBridge: companionHub });
-  app = createApp({ core, auth: new AuthService(core.db), services, workflows: fakeTemporal(), companionHub, env: ENV }, null).app;
+  app = createApp({ core, auth: new AuthService(core.db), mailer, services, workflows: fakeTemporal(), companionHub, env: ENV }, null).app;
+  const closedEnv = { ...ENV, ALLOW_SIGNUP: "false" };
+  closedCore = createCoreContext(loadConfig(closedEnv), "api-test-closed");
+  closedApp = createApp({ core: closedCore, auth: new AuthService(closedCore.db), mailer, services, workflows: fakeTemporal(), companionHub, env: closedEnv }, null).app;
   stub = await startStubProvider();
 });
 afterAll(async () => {
   await stub?.close();
   await core?.pool.end();
+  await closedCore?.pool.end();
 });
 
 const d = (name: string, fn: () => Promise<void>) => it(name, async () => {
@@ -68,12 +81,12 @@ interface Client {
   json<T = Record<string, unknown>>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<{ status: number; body: T }>;
 }
 
-function client(token = "", cookie = ""): Client {
+function client(token = "", cookie = "", target: () => typeof app = () => app): Client {
   const c: Client = {
     token,
     cookie,
     call: async (method, path, body, headers = {}) =>
-      app.request(`http://api.test/v1${path}`, {
+      target().request(`http://api.test/v1${path}`, {
         method,
         headers: {
           ...(body !== undefined ? { "content-type": "application/json" } : {}),
@@ -157,6 +170,65 @@ describe("auth + sessions", () => {
     const anon = client();
     expect((await anon.json("POST", "/auth/register", { email: `w-${uniq()}@example.com`, password: "short", name: "W" })).status).toBe(422);
     expect((await anon.json("POST", "/auth/login", { email: "nobody@example.com", password: "wrong-password-xx" })).status).toBe(401);
+  });
+
+  d("forgot/reset password: 202 for unknown emails, one-time token, old sessions revoked", async () => {
+    const { api, email } = await register("Reset");
+    const anon = client();
+    const before = outbox.length;
+    expect((await anon.json("POST", "/auth/password/forgot", { email: `ghost-${uniq()}@example.com` })).status).toBe(202);
+    expect(outbox.length).toBe(before);
+    expect((await anon.json("POST", "/auth/password/forgot", { email })).status).toBe(202);
+    const mail = lastMailTo(email)!;
+    expect(mail.subject).toMatch(/reset/i);
+    const token = tokenFromMail(mail)!;
+    expect(token.startsWith("reset_")).toBe(true);
+    expect((await anon.json("POST", "/auth/password/reset", { token: "reset_bogus_token_value", password: "another-long-password" })).status).toBe(400);
+    const reset = await anon.json<{ token: string }>("POST", "/auth/password/reset", { token, password: "brand-new-passphrase" });
+    expect(reset.status).toBe(200);
+    expect((await anon.json("POST", "/auth/password/reset", { token, password: "replay-attempt-pass" })).status).toBe(400);
+    expect((await api.json<{ user: unknown }>("GET", "/auth/me")).body.user).toBeNull();
+    expect((await anon.json("POST", "/auth/login", { email, password: "correct-horse-battery" })).status).toBe(401);
+    expect((await anon.json("POST", "/auth/login", { email, password: "brand-new-passphrase" })).status).toBe(200);
+    expect((await client(reset.body.token).json("GET", "/auth/me")).body).toMatchObject({ user: { email } });
+  });
+});
+
+describe("sign-up policy (ALLOW_SIGNUP=false)", () => {
+  const closed = () => client("", "", () => closedApp);
+
+  d("advertises closed sign-up and rejects public registration once a user exists", async () => {
+    await register(); // guarantees bootstrap is over
+    expect((await closed().json("GET", "/auth/config")).body).toEqual({ signupOpen: false, inviteOnly: true });
+    expect((await client().json("GET", "/auth/config")).body).toEqual({ signupOpen: true, inviteOnly: false });
+    const res = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `late-${uniq()}@example.com`, password: "correct-horse-battery", name: "Late" });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("signup_closed");
+  });
+
+  d("invited emails can still register; the invite is accepted atomically and emailed", async () => {
+    const owner = await register("Owner");
+    const email = `invitee-${uniq()}@example.com`;
+    const inv = await owner.api.json<{ acceptUrl: string; emailed: boolean }>("POST", `/orgs/${owner.orgId}/invitations`, { email, role: "member" });
+    expect(inv.status).toBe(201);
+    expect(inv.body.emailed).toBe(true);
+    const token = inv.body.acceptUrl.split("/").pop()!;
+    expect(tokenFromMail(lastMailTo(email)!)).toBe(token);
+    expect((await client().json<{ invitation: { email: string } }>("GET", `/invitations/${token}`)).body.invitation).toMatchObject({ email, role: "member" });
+    expect((await client().json("GET", `/invitations/not-a-real-token`)).status).toBe(404);
+
+    const wrongEmail = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `other-${uniq()}@example.com`, password: "correct-horse-battery", name: "Other", inviteToken: token });
+    expect(wrongEmail.status).toBe(400);
+    expect(wrongEmail.body.error.code).toBe("invitation_email_mismatch");
+    const joined = await closed().json<{ token: string; joined: { organizationId: string; role: string } }>("POST", "/auth/register", { email, password: "correct-horse-battery", name: "Invitee", inviteToken: token });
+    expect(joined.status).toBe(201);
+    expect(joined.body.joined).toEqual({ organizationId: owner.orgId, role: "member" });
+    expect((await client(joined.body.token).json("GET", `/orgs/${owner.orgId}`)).status).toBe(200);
+    const orgs = await client(joined.body.token).json<{ organizations: { organizationId: string }[] }>("GET", "/orgs");
+    expect(orgs.body.organizations.map((o) => o.organizationId)).toEqual([owner.orgId]);
+    const replay = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `again-${uniq()}@example.com`, password: "correct-horse-battery", name: "Again", inviteToken: token });
+    expect(replay.status).toBe(400);
+    expect(replay.body.error.code).toBe("invalid_invitation");
   });
 });
 

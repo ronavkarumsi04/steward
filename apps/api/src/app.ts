@@ -66,7 +66,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     const rid = c.get("requestId");
     if (err instanceof HttpError) return c.json({ error: { code: err.code, message: err.message, details: err.details, requestId: rid } }, err.status);
     if (err instanceof AuthError) {
-      const status = err.code === "invalid_credentials" ? 401 : err.code === "forbidden" ? 403 : err.code === "not_found" ? 404 : err.code === "email_taken" ? 409 : 400;
+      const status = err.code === "invalid_credentials" ? 401 : err.code === "forbidden" || err.code === "signup_closed" ? 403 : err.code === "not_found" ? 404 : err.code === "email_taken" ? 409 : 400;
       return c.json({ error: { code: err.code, message: err.message, requestId: rid } }, status);
     }
     if (err instanceof TenantError) return c.json({ error: { code: "tenant_scope", message: err.message, requestId: rid } }, 400);

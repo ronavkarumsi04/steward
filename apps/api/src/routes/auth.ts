@@ -1,24 +1,95 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { OrganizationService } from "@steward/core";
+import { AuthError, OrganizationService, renderEmail } from "@steward/core";
 import { Role } from "@steward/schema";
-import { HttpError, orgScope, requireUser, type AppEnv, param } from "../context.js";
+import { HttpError, orgScope, requireUser, type ApiDeps, type AppEnv, param } from "../context.js";
 import { clearSessionCookie, clientIp, rateLimit, setSessionCookie } from "../middleware.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 
 const Credentials = z.object({ email: z.email(), password: z.string().min(10).max(200) });
+const RESET_TOKEN_TTL_MS = 1000 * 60 * 30;
+
+/**
+ * Public sign-up is open when ALLOW_SIGNUP is true, or when no user exists yet (first-owner bootstrap).
+ * Invited emails can always register: the invitation is accepted atomically with the account.
+ */
+async function signupOpen(deps: ApiDeps) {
+  return deps.core.config.allowSignup || !(await deps.auth.hasAnyUsers());
+}
 
 export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   const authLimiter = rateLimit({ capacity: 10, refillPerSec: 10 / 60, key: (c) => `auth:${clientIp(c)}` });
   app.use("/auth/register", authLimiter);
   app.use("/auth/login", authLimiter);
+  app.use("/auth/password/forgot", rateLimit({ capacity: 5, refillPerSec: 5 / 300, key: (c) => `auth-forgot:${clientIp(c)}` }));
+  app.use("/auth/password/reset", authLimiter);
 
-  defineRoute(app, reg, { method: "post", path: "/auth/register", tag: "auth", summary: "Register a user and personal organization", auth: "public", body: Credentials.extend({ name: z.string().min(1).max(120), orgName: z.string().max(120).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "get", path: "/auth/config", tag: "auth", summary: "Public auth configuration (sign-up policy)", auth: "public" }, async (c) => {
+    const deps = c.get("deps");
+    c.header("cache-control", "no-store");
+    return c.json({ signupOpen: await signupOpen(deps), inviteOnly: !deps.core.config.allowSignup });
+  });
+
+  defineRoute(
+    app,
+    reg,
+    {
+      method: "post",
+      path: "/auth/register",
+      tag: "auth",
+      summary: "Register a user and personal organization (or join an org via invitation token)",
+      auth: "public",
+      body: Credentials.extend({ name: z.string().min(1).max(120), orgName: z.string().max(120).optional(), inviteToken: z.string().min(10).max(200).optional() }),
+    },
+    async (c, { body }) => {
+      const deps = c.get("deps");
+      const { auth } = deps;
+      const orgs = new OrganizationService(deps.core.db);
+      const invitation = body.inviteToken ? await orgs.peekInvitation(body.inviteToken) : null;
+      if (body.inviteToken && !invitation) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
+      if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
+      if (!invitation && !(await signupOpen(deps))) throw new AuthError("signup_closed", "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.");
+
+      const { user, organization } = await auth.register({ ...body, personalOrganization: !invitation });
+      const joined = body.inviteToken ? await orgs.acceptInvitation(user.id, body.inviteToken) : null;
+      const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
+      setSessionCookie(c, token);
+      return c.json({ user, organization, joined, session: { expiresAt: session.expiresAt }, token }, 201);
+    },
+  );
+
+  defineRoute(app, reg, { method: "post", path: "/auth/password/forgot", tag: "auth", summary: "Email a password-reset link (always 202 to avoid account enumeration)", auth: "public", body: z.object({ email: z.email() }) }, async (c, { body }) => {
+    const deps = c.get("deps");
+    const user = await deps.auth.findUserByEmail(body.email);
+    if (user) {
+      const token = await deps.auth.issueEmailToken(user.id, "reset_password", RESET_TOKEN_TTL_MS);
+      const resetUrl = `${deps.core.config.appUrl}/reset-password/${token}`;
+      try {
+        await deps.mailer.send({
+          to: user.email,
+          subject: "Reset your Steward password",
+          ...renderEmail({
+            title: "Reset your password",
+            intro: `Someone requested a password reset for ${user.email}. The link below is valid for 30 minutes and can be used once.`,
+            actionLabel: "Choose a new password",
+            actionUrl: resetUrl,
+            footer: "If you didn't request this, you can safely ignore this email — your password will not change.",
+          }),
+        });
+      } catch (err) {
+        deps.core.log.error({ err, userId: user.id }, "failed to send password reset email");
+      }
+    }
+    return c.json({ ok: true }, 202);
+  });
+
+  defineRoute(app, reg, { method: "post", path: "/auth/password/reset", tag: "auth", summary: "Set a new password using a reset token; signs the user in", auth: "public", body: z.object({ token: z.string().min(10).max(200), password: z.string().min(10).max(200) }) }, async (c, { body }) => {
     const { auth } = c.get("deps");
-    const { user, organization } = await auth.register(body);
-    const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
+    const userId = await auth.consumeEmailToken(body.token, "reset_password");
+    await auth.resetPassword(userId, body.password);
+    const { token, session } = await auth.createSession(userId, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
     setSessionCookie(c, token);
-    return c.json({ user, organization, session: { expiresAt: session.expiresAt }, token }, 201);
+    return c.json({ ok: true, session: { expiresAt: session.expiresAt }, token });
   });
 
   defineRoute(app, reg, { method: "post", path: "/auth/login", tag: "auth", summary: "Sign in with email and password", auth: "public", body: Credentials }, async (c, { body }) => {
@@ -96,7 +167,34 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const orgs = new OrganizationService(deps.core.db);
     const { invitation, token } = await orgs.invite(scope.organizationId, scope.userId!, scope.role!, body);
     const acceptUrl = `${deps.core.config.appUrl}/invite/${token}`;
-    return c.json({ invitation, acceptUrl }, 201);
+    const org = await orgs.get(scope.organizationId);
+    const inviter = requireUser(c);
+    let emailed = true;
+    try {
+      await deps.mailer.send({
+        to: body.email,
+        subject: `${inviter.name || inviter.email} invited you to ${org?.name ?? "a Steward organization"}`,
+        ...renderEmail({
+          title: `Join ${org?.name ?? "your team"} on Steward`,
+          intro: `${inviter.name || inviter.email} invited you to join as ${body.role}. Accept within 7 days to get access.`,
+          actionLabel: "Accept invitation",
+          actionUrl: acceptUrl,
+          footer: "If you weren't expecting this invitation, you can ignore this email.",
+        }),
+      });
+    } catch (err) {
+      emailed = false;
+      deps.core.log.error({ err, invitationId: invitation.id }, "failed to send invitation email");
+    }
+    return c.json({ invitation, acceptUrl, emailed }, 201);
+  });
+
+  defineRoute(app, reg, { method: "get", path: "/invitations/:token", tag: "organizations", summary: "Preview a pending invitation", auth: "public" }, async (c) => {
+    const orgs = new OrganizationService(c.get("deps").core.db);
+    const invitation = await orgs.peekInvitation(param(c, "token"));
+    if (!invitation) throw new HttpError(404, "invalid_invitation", "Invitation is invalid or expired");
+    c.header("cache-control", "no-store");
+    return c.json({ invitation });
   });
 
   defineRoute(app, reg, { method: "delete", path: "/orgs/:orgId/invitations/:id", tag: "organizations", summary: "Revoke an invitation" }, async (c) => {

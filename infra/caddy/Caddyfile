@@ -1,0 +1,23 @@
+# Terminates TLS for the Steward API. Certificates are issued and renewed automatically for API_DOMAIN
+# (ports 80 and 443 must be reachable from the internet). With API_DOMAIN=localhost Caddy issues a
+# locally-trusted certificate instead, which is enough for smoke tests.
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy api:4000 {
+		# SSE / long-poll endpoints must not be buffered.
+		flush_interval -1
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

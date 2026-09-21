@@ -6,7 +6,14 @@ import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { Icon } from "./icons";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+export interface InviteContext {
+  token: string;
+  email: string;
+  organizationName: string;
+  role: string;
+}
+
+export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?: InviteContext }) {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +24,12 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setBusy(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    const body: Record<string, string> = { email: String(fd.get("email")), password: String(fd.get("password")) };
+    const body: Record<string, string> = { email: invite?.email ?? String(fd.get("email")), password: String(fd.get("password")) };
     if (mode === "register") {
       body.name = String(fd.get("name"));
       const org = String(fd.get("orgName") ?? "").trim();
       if (org) body.orgName = org;
+      if (invite) body.inviteToken = invite.token;
     }
     try {
       await browserApi.post(`/auth/${mode}`, body);
@@ -40,9 +48,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
-        <h1 className="mt-3 text-xl font-semibold tracking-tight">{mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
+        <h1 className="mt-3 text-xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted">
-          {mode === "login" ? "Welcome back. Your agents kept working." : "Self-hosted. Your keys, your data, your rules."}
+          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Welcome back. Your agents kept working." : "Self-hosted. Your keys, your data, your rules."}
         </p>
       </div>
       {mode === "register" && (
@@ -53,14 +61,18 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       )}
       <div>
         <label className="label" htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" className="input" required autoComplete="email" />
+        <input id="email" name="email" type="email" className="input" required autoComplete="email" defaultValue={invite?.email} readOnly={Boolean(invite)} aria-describedby={invite ? "email-hint" : undefined} />
+        {invite && <p id="email-hint" className="hint">The invitation is tied to this address.</p>}
       </div>
       <div>
-        <label className="label" htmlFor="password">Password</label>
+        <div className="flex items-baseline justify-between">
+          <label className="label" htmlFor="password">Password</label>
+          {mode === "login" && <Link href="/forgot-password" className="text-xs font-medium text-accent hover:underline">Forgot password?</Link>}
+        </div>
         <input id="password" name="password" type="password" className="input" required minLength={10} autoComplete={mode === "login" ? "current-password" : "new-password"} />
         {mode === "register" && <p className="hint">At least 10 characters.</p>}
       </div>
-      {mode === "register" && (
+      {mode === "register" && !invite && (
         <div>
           <label className="label" htmlFor="orgName">Organization name <span className="normal-case">(optional)</span></label>
           <input id="orgName" name="orgName" className="input" placeholder="Defaults to your personal workspace" />
@@ -69,21 +81,29 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
         {busy && <span className="spinner" aria-hidden="true" />}
-        {mode === "login" ? "Sign in" : "Create account"}
+        {mode === "login" ? "Sign in" : invite ? "Create account & join" : "Create account"}
       </button>
       <p className="text-center text-sm text-muted">
         {mode === "login" ? (
           <>No account? <Link className="font-medium text-accent hover:underline" href="/register">Register</Link></>
         ) : (
-          <>Already have an account? <Link className="font-medium text-accent hover:underline" href="/login">Sign in</Link></>
+          <>Already have an account? <Link className="font-medium text-accent hover:underline" href={invite ? `/login?next=${encodeURIComponent(`/invite/${invite.token}`)}` : "/login"}>Sign in</Link></>
         )}
       </p>
     </form>
   );
 }
 
-function friendly(err: ApiError): string {
+export function friendly(err: ApiError): string {
   switch (err.code) {
+    case "signup_closed":
+      return "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.";
+    case "invalid_invitation":
+      return "This invitation is invalid or has expired. Ask your admin for a new one.";
+    case "invitation_email_mismatch":
+      return "This invitation was issued to a different email address.";
+    case "expired":
+      return "This link is invalid or has expired. Request a new one.";
     case "invalid_credentials":
       return "Email or password is incorrect.";
     case "email_taken":
