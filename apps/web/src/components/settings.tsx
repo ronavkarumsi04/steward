@@ -236,7 +236,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title="Goals">
+      <Card title="Goals" id="goals" className="scroll-mt-20">
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">

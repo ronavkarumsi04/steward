@@ -61,11 +61,11 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
 
       <QuickStart companyId={companyId} agents={agents} />
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>}>
           <LiveFeed companyId={companyId} initial={events.events} />
         </Card>
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card title="Approvals waiting" action={<Link className="btn btn-ghost btn-sm" href={`${base}/approvals`}>Review <Icon.ChevronRight size={14} /></Link>}>
             {approvals.approvals.length === 0 ? (
               <Empty icon={<Icon.Check size={20} />}>No approvals pending.</Empty>

@@ -8,15 +8,17 @@ export function Card({
   action,
   children,
   className = "",
+  id,
 }: {
   title?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
-    <section className={`card ${className}`}>
+    <section id={id} className={`card min-w-0 ${className}`}>
       {(title || action) && (
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">

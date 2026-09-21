@@ -76,7 +76,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Card title={`Steps (${steps.length})`}>
           {steps.length === 0 ? <Empty>No steps recorded yet.</Empty> : (
             <ol className="space-y-2">
