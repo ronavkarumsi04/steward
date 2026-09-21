@@ -355,7 +355,7 @@ textarea {
   transition-timing-function: var(--ease-out);
 }
 .input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 .input:hover {
   border-color: color-mix(in srgb, var(--fg) 28%, transparent);
