@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import { Card, Empty, ago } from "./ui";
+import { Card, Empty, Ago } from "./ui";
 
 export interface Member { userId: string; role: string; email: string; name: string; joinedAt: string }
 export interface Invitation { id: string; email: string; role: string; expiresAt: string; createdAt: string }
@@ -49,7 +49,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
         <ul className="divide-y divide-line text-sm">
           {members.map((m) => (
             <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <div><span className="font-medium">{m.name || m.email}</span> <span className="text-muted">{m.email}</span>{m.userId === me && <span className="pill ml-2 text-muted">you</span>}<div className="text-xs text-muted">joined {ago(m.joinedAt)}</div></div>
+              <div><span className="font-medium">{m.name || m.email}</span> <span className="text-muted">{m.email}</span>{m.userId === me && <span className="pill ml-2 text-muted">you</span>}<div className="text-xs text-muted">joined <Ago iso={m.joinedAt} /></div></div>
               <div className="flex items-center gap-1">
                 <select className="input w-auto py-0.5 text-xs" value={m.role} disabled={!isOwner || m.userId === me} aria-label="Role" onChange={(e) => act(() => browserApi.patch(`${base}/members/${m.userId}`, { role: e.target.value }))}>
                   {ROLES.map((r) => <option key={r}>{r}</option>)}
@@ -76,7 +76,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
           <ul className="divide-y divide-line text-sm">
             {invitations.map((i) => (
               <li key={i.id} className="flex items-center justify-between gap-2 py-2">
-                <div>{i.email} <span className="pill text-muted">{i.role}</span><div className="text-xs text-muted">expires {ago(i.expiresAt)}</div></div>
+                <div>{i.email} <span className="pill text-muted">{i.role}</span><div className="text-xs text-muted">expires <Ago iso={i.expiresAt} /></div></div>
                 <button className="btn px-2 py-0.5 text-xs" disabled={!isAdmin} onClick={() => act(() => browserApi.del(`${base}/invitations/${i.id}`))}>Revoke</button>
               </li>
             ))}

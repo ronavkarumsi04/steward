@@ -7,7 +7,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
-import { Card, Empty, Json, RiskPill, StatusPill, ago, usd } from "./ui";
+import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -61,7 +61,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
             <span>· trigger {String(run.trigger.kind ?? "?")}</span>
             <span>· {run.iterations} iterations</span>
             <span>· {usd(run.costUsd)} · {run.inputTokens}/{run.outputTokens} tok</span>
-            <span>· started {ago(run.startedAt ?? run.createdAt)}</span>
+            <span>· started <Ago iso={run.startedAt ?? run.createdAt} /></span>
             {run.workflowId && <span className="mono">· {run.workflowId}</span>}
           </div>
         </div>

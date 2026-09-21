@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent } from "@/lib/types";
-import { Card, Empty, StatusPill, ago } from "./ui";
+import { Card, Empty, StatusPill, Ago } from "./ui";
 
 export interface Schedule {
   id: string;
@@ -142,7 +142,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>
                   <span className="font-medium">{s.name}</span> <span className="mono text-xs text-muted">{s.cron} {s.timezone}</span>
-                  <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired {ago(s.lastFiredAt)} · <StatusPill status={s.enabled ? "active" : "paused"} /></div>
+                  <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · <StatusPill status={s.enabled ? "active" : "paused"} /></div>
                 </div>
                 <div className="flex gap-1">
                   <button className="btn" onClick={() => scheduleAction(s, "trigger")}>Run now</button>

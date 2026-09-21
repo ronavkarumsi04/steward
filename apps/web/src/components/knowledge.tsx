@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Artifact, Decision, Document, Memory } from "@/lib/types";
-import { Card, Empty, Json, ago } from "./ui";
+import { Card, Empty, Json, Ago } from "./ui";
 
 type Tab = "documents" | "decisions" | "memory" | "artifacts";
 
@@ -86,7 +86,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
                   <button className="min-w-0 flex-1 truncate text-left hover:text-accent" onClick={() => setOpen(d)}>
                     <span className="mono text-xs text-muted">{d.folder}</span> {d.title}
                   </button>
-                  <span className="text-xs text-muted">v{d.version} · {ago(d.updatedAt)}</span>
+                  <span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span>
                 </li>
               ))}
             </ul>
@@ -100,7 +100,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
             <ul className="space-y-3">
               {decisions.map((d) => (
                 <li key={d.id} className="rounded-lg border border-line p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2"><span className="font-medium">{d.title}</span><span className="text-xs text-muted">{ago(d.createdAt)}</span></div>
+                  <div className="flex items-center justify-between gap-2"><span className="font-medium">{d.title}</span><span className="text-xs text-muted"><Ago iso={d.createdAt} /></span></div>
                   <p className="mt-1 whitespace-pre-wrap text-muted">{d.rationale}</p>
                   <div className="mt-1 text-xs text-muted">by {String(d.decidedBy.type ?? "")} {String(d.decidedBy.agentName ?? d.decidedBy.userId ?? "")}{d.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${d.runId}`}>run</Link></>}</div>
                 </li>
@@ -140,7 +140,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
               {artifacts.map((a) => (
                 <li key={a.id} className="py-2">
                   <div className="flex items-center justify-between gap-2"><span>{a.title}</span><span className="pill text-muted">{a.kind}</span></div>
-                  <div className="text-xs text-muted">{ago(a.createdAt)}{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>
+                  <div className="text-xs text-muted"><Ago iso={a.createdAt} />{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>
                   {a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}
                 </li>
               ))}

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { CompanionDevice } from "@/lib/types";
-import { Card, Empty, ago } from "./ui";
+import { Card, Empty, Ago } from "./ui";
 
 interface PingResult {
   ok: boolean;
@@ -73,9 +73,9 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{d.name}</span>
                   <span className={`pill ${d.status === "paired" ? (d.online ? "text-ok" : "text-warn") : "text-muted"}`}>{d.status === "paired" ? (d.online ? "online" : "offline") : d.status}</span>
-                  {d.status === "pairing" && d.pairingExpiresAt && <span className="text-xs text-muted">code expires {ago(d.pairingExpiresAt)}</span>}
+                  {d.status === "pairing" && d.pairingExpiresAt && <span className="text-xs text-muted">code expires <Ago iso={d.pairingExpiresAt} /></span>}
                 </div>
-                <div className="mono text-xs text-muted">{d.id} · last seen {ago(d.lastSeenAt)} · {d.capabilities.join(", ")}</div>
+                <div className="mono text-xs text-muted">{d.id} · last seen <Ago iso={d.lastSeenAt} /> · {d.capabilities.join(", ")}</div>
                 {ping[d.id] && <div className={`text-xs ${ping[d.id]?.startsWith("OK") ? "text-ok" : "text-danger"}`}>{ping[d.id]}</div>}
               </div>
               <div className="flex gap-1">

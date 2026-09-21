@@ -168,6 +168,14 @@ export function ago(iso: string | null | undefined): string {
   return future ? `in ${span}` : `${span} ago`;
 }
 
+export function Ago({ iso, className }: { iso: string | null | undefined; className?: string }) {
+  return (
+    <time dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined} className={className} suppressHydrationWarning>
+      {ago(iso)}
+    </time>
+  );
+}
+
 export function Json({ value }: { value: unknown }) {
   if (value === undefined || value === null) return <span className="text-muted">—</span>;
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);

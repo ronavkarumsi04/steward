@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useLiveEvents } from "@/lib/use-events";
 import type { StewardEvent } from "@/lib/types";
-import { Empty, ago } from "./ui";
+import { Empty, Ago } from "./ui";
 
 export function LiveFeed({ companyId, initial, compact = false }: { companyId: string; initial: StewardEvent[]; compact?: boolean }) {
   const { events, connected } = useLiveEvents(companyId, { initial, max: compact ? 40 : 300 });
@@ -22,7 +22,7 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
         <ol className="divide-y divide-line">
           {events.map((e) => (
             <li key={e.seq} className="flex items-start gap-3 py-2.5 text-sm" data-event-type={e.type}>
-              <span className="mono tnum mt-0.5 w-16 shrink-0 text-xs text-faint">{ago(e.createdAt)}</span>
+              <span className="mono tnum mt-0.5 w-16 shrink-0 text-xs text-faint"><Ago iso={e.createdAt} /></span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="mono text-xs font-medium text-accent">{e.type}</span>

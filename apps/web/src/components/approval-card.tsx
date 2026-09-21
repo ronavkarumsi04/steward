@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Approval } from "@/lib/types";
-import { Json, RiskPill, StatusPill, ago, usd } from "./ui";
+import { Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 export function ApprovalCard({ companyId, approval, onDecided }: { companyId: string; approval: Approval; onDecided?: (a: Approval) => void }) {
   const [state, setState] = useState(approval);
@@ -41,8 +41,8 @@ export function ApprovalCard({ companyId, approval, onDecided }: { companyId: st
           <p className="mt-1 text-sm">{state.reason}</p>
         </div>
         <div className="text-right text-xs text-muted">
-          <div>requested {ago(state.createdAt)}</div>
-          <div>{pending ? (expired ? "expired" : `expires ${ago(state.expiresAt)}`) : `resolved ${ago(state.resolvedAt)}`}</div>
+          <div>requested <Ago iso={state.createdAt} /></div>
+          <div>{pending ? (expired ? "expired" : <>expires <Ago iso={state.expiresAt} /></>) : <>resolved <Ago iso={state.resolvedAt} /></>}</div>
         </div>
       </header>
       <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs md:grid-cols-2">

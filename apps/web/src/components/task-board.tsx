@@ -7,7 +7,7 @@ import type { TaskStatus } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, Goal, Run, Task } from "@/lib/types";
 import { Icon } from "./icons";
-import { Pill, StatusPill, ago, type Tone } from "./ui";
+import { Pill, StatusPill, Ago, type Tone } from "./ui";
 
 const PRIORITY_TONE: Record<string, Tone> = { urgent: "danger", high: "warn", medium: "neutral", low: "neutral" };
 
@@ -113,7 +113,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                       <Pill tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{t.priority}</Pill>
                       <span className="truncate">{agentName(t.assigneeAgentId)}</span>
-                      <span className="tnum">· {ago(t.updatedAt)}</span>
+                      <span className="tnum">· <Ago iso={t.updatedAt} /></span>
                     </div>
                     {t.status === "blocked" && <div className="mt-1.5"><StatusPill status="blocked" /></div>}
                     <div className="mt-2.5 flex flex-wrap items-center gap-1">

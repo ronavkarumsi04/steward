@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
-import { Card, Empty, StatusPill, ago } from "./ui";
+import { Card, Empty, StatusPill, Ago } from "./ui";
 
 export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin }: { orgId: string; catalog: IntegrationCatalogEntry[]; integrations: Integration[]; isAdmin: boolean }) {
   const router = useRouter();
@@ -66,7 +66,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin }: { o
               <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-integration-id={i.id}>
                 <div>
                   <div className="flex items-center gap-2"><span className="font-medium">{i.label}</span><span className="pill text-muted">{i.definition.name}</span><StatusPill status={i.status} />{i.companyId && <span className="pill text-muted">company-scoped</span>}</div>
-                  <div className="text-xs text-muted">{i.authKind}{i.externalAccountId ? ` · ${i.externalAccountId}` : ""}{i.scopes.length ? ` · ${i.scopes.join(" ")}` : ""} · connected {ago(i.createdAt)}{i.lastError && <span className="text-danger"> · {i.lastError}</span>}</div>
+                  <div className="text-xs text-muted">{i.authKind}{i.externalAccountId ? ` · ${i.externalAccountId}` : ""}{i.scopes.length ? ` · ${i.scopes.join(" ")}` : ""} · connected <Ago iso={i.createdAt} />{i.lastError && <span className="text-danger"> · {i.lastError}</span>}</div>
                 </div>
                 <div className="flex gap-1">
                   {i.status === "needs_reauth" && i.definition.oauth && <button className="btn" disabled={!isAdmin} onClick={() => startOAuth(i.definition)}>Re-authorize</button>}
