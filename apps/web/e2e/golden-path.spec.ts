@@ -47,7 +47,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
   const companyUrl = page.url();
 
   // Dashboard renders durable state seeded by company creation, including the onboarding profile.
-  await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
   await expect(page.getByText("A weekly analytics digest for small online stores.")).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Build" })).toBeVisible();
@@ -106,5 +106,5 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/app\/c\/[0-9a-f-]+$/);
-  await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
 });
