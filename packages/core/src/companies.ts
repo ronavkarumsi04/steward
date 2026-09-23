@@ -5,7 +5,7 @@ import { CompanyProfile, type Actor, type AgentKind, type AutonomyLevel, type Po
 import { slugify } from "./auth.js";
 
 export const DEFAULT_AGENTS: Array<{ kind: AgentKind; name: string; description: string; toolAllowlist: string[] }> = [
-  { kind: "orchestrator", name: "Chief of Staff", description: "Owns strategy, weekly planning, prioritization and delegation to specialist agents.", toolAllowlist: ["memory.*", "task.*", "document.*", "decision.*", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"] },
+  { kind: "orchestrator", name: "Chief of Staff", description: "Owns strategy, weekly planning, prioritization and delegation to specialist agents.", toolAllowlist: ["memory.*", "task.*", "delegate.run", "document.*", "decision.*", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"] },
   { kind: "engineering", name: "Engineer", description: "Builds and ships software in an isolated sandbox, opens pull requests and deploys with approval.", toolAllowlist: ["sandbox.*", "github.*", "deploy.*", "web.*", "memory.*", "task.update", "document.*", "decision.record", "company.profile"] },
   { kind: "marketing", name: "Growth Marketer", description: "Researches positioning, writes content, and runs approved campaigns.", toolAllowlist: ["web.*", "memory.*", "document.*", "decision.record", "campaign.*", "lead.*", "email.send", "social.publish", "task.update", "goal.list", "company.profile"] },
   { kind: "sales", name: "Sales", description: "Finds leads, drafts outreach, and manages the pipeline.", toolAllowlist: ["web.*", "memory.*", "campaign.list", "lead.*", "email.send", "document.*", "decision.record", "task.update", "goal.list", "company.profile"] },

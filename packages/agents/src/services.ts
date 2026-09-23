@@ -6,6 +6,10 @@ import type { SandboxProvider } from "@steward/sandbox";
 import type { SearchProvider } from "@steward/tools";
 import type { TenantScope } from "@steward/schema";
 
+export interface RunWorkflowLauncher {
+  start(input: { runId: string; scope: { organizationId: string; companyId: string } }): Promise<{ workflowId: string; workflowRunId: string }>;
+}
+
 /** Everything a running agent may touch. Constructed per run by the worker with the run's tenant scope. */
 export interface AgentServices {
   db: Db;
@@ -24,6 +28,8 @@ export interface AgentServices {
   growth: GrowthService;
   providers: ProviderCredentialService;
   events: EventService;
+  /** Starts an already-persisted run as a durable workflow. Present in worker runtimes. */
+  runWorkflowLauncher?: RunWorkflowLauncher;
   sandbox?: SandboxProvider;
   search?: SearchProvider;
   /** Operator-configured platform sender for transactional mail sent on behalf of a company. */

@@ -114,7 +114,7 @@ const taskList = defineTool({
 
 const taskCreate = defineTool({
   name: "task.create",
-  description: "Create a task. Assign it to a specialist agent (by kind) to delegate work; the orchestrator will schedule a run for it.",
+  description: "Create a task for planning or later work. Assign it to a specialist by kind, but use delegate.run when the work should start immediately.",
   input: z.object({ title: z.string().min(3).max(200), description: z.string().max(8000).default(""), priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"), assigneeKind: z.enum(["orchestrator", "research", "engineering", "marketing", "sales", "support", "finance", "operations"]).optional(), goalId: z.string().optional(), dueInDays: z.number().int().min(0).max(365).optional() }),
   risk: "LOW",
   sideEffects: "internal",
@@ -123,6 +123,81 @@ const taskCreate = defineTool({
     const assignee = input.assigneeKind ? await s.agents.byKind(s.scope, input.assigneeKind) : null;
     const t = await s.tasks.create(s.scope, { title: input.title, description: input.description, priority: input.priority, assigneeAgentId: assignee?.id ?? null, goalId: input.goalId ?? null, parentTaskId: ctx.taskId ?? null, dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null });
     return { ok: true, content: `Created task ${t.id} "${t.title}"${assignee ? ` assigned to ${assignee.name}` : ""}.`, data: { id: t.id } };
+  },
+});
+
+const SpecialistKind = z.enum(["research", "engineering", "marketing", "sales", "support", "finance", "operations"]);
+const MAX_DELEGATIONS_PER_RUN = 8;
+
+const delegateRun = defineTool({
+  name: "delegate.run",
+  description: "Delegate a concrete objective to a specialist now. Creates a child task and starts a separate durable run with that specialist's own tools, budget, policy checks, approvals, and audit trail.",
+  input: z.object({
+    assigneeKind: SpecialistKind,
+    title: z.string().min(3).max(200),
+    instruction: z.string().min(10).max(8000),
+    priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+    goalId: z.string().optional(),
+    dueInDays: z.number().int().min(0).max(365).optional(),
+  }),
+  risk: "MEDIUM",
+  dimension: "ai_spend",
+  sideEffects: "internal",
+  costCategory: "ai",
+  preflight: async ({ assigneeKind, title }, ctx) => {
+    const s = svc(ctx);
+    const assignee = await s.agents.byKind(s.scope, assigneeKind);
+    const budget = assignee?.budgetUsdPerRun === null || assignee?.budgetUsdPerRun === undefined ? undefined : Number(assignee.budgetUsdPerRun);
+    return {
+      summary: `Delegate \"${title}\" to ${assignee?.name ?? assigneeKind}`,
+      affectedSystem: "Steward specialist runtime",
+      estimatedCostUsd: Number.isFinite(budget) && budget! > 0 ? budget : undefined,
+      risk: "MEDIUM",
+      alternatives: ["Create a task without starting it", "Keep the work in the Chief of Staff planning queue"],
+    };
+  },
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    if (!ctx.runId) return fail("Delegation requires a parent run.");
+    if (!s.runWorkflowLauncher) return fail("Durable workflow launcher is unavailable in this runtime.");
+    const assignee = await s.agents.byKind(s.scope, input.assigneeKind);
+    if (!assignee) return fail(`No enabled ${input.assigneeKind} agent exists for this company.`);
+    if (assignee.id === ctx.agentId) return fail("A run cannot delegate back to itself.");
+
+    const parentLabel = `delegated-from:${ctx.runId}`;
+    const tasks = await s.tasks.list(s.scope, { limit: 200 });
+    const activeDelegations = tasks.filter((t) => Array.isArray(t.labels) && t.labels.includes(parentLabel) && t.status !== "cancelled").length;
+    if (activeDelegations >= MAX_DELEGATIONS_PER_RUN) return fail(`This run already created ${MAX_DELEGATIONS_PER_RUN} specialist delegations. Finish or review those workers before spawning more.`);
+
+    const task = await s.tasks.create(s.scope, {
+      title: input.title,
+      description: input.instruction,
+      priority: input.priority,
+      assigneeAgentId: assignee.id,
+      goalId: input.goalId ?? null,
+      parentTaskId: ctx.taskId ?? null,
+      dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null,
+      labels: ["delegated", parentLabel, `specialist:${input.assigneeKind}`],
+    });
+    const run = await s.runs.create(s.scope, {
+      agentId: assignee.id,
+      taskId: task.id,
+      trigger: { kind: "delegation", instruction: input.instruction, parentRunId: ctx.runId, parentAgentId: ctx.agentId },
+    });
+    try {
+      const wf = await s.runWorkflowLauncher.start({ runId: run.id, scope: { organizationId: s.scope.organizationId, companyId: s.scope.companyId! } });
+      await s.runs.attachWorkflow(s.scope, run.id, wf.workflowId, wf.workflowRunId);
+      return {
+        ok: true,
+        content: `Delegated \"${task.title}\" to ${assignee.name}. Specialist run ${run.id} is queued independently.`,
+        data: { taskId: task.id, runId: run.id, agentId: assignee.id, agentKind: assignee.kind, workflowId: wf.workflowId },
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.runs.setStatus(s.scope, run.id, "failed", { error: `Delegation launch failed: ${msg}` }).catch(() => undefined);
+      await s.tasks.update(s.scope, task.id, { status: "blocked", result: { summary: `Specialist workflow could not start: ${msg}`, parentRunId: ctx.runId } }).catch(() => undefined);
+      return fail(`Specialist workflow could not start: ${msg}`);
+    }
   },
 });
 
@@ -801,14 +876,14 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
 
 /** Default tool allowlists per agent kind; company operators can override per agent. */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
+  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
   research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*"],
   engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "github.*", "sandbox.*", "deploy.*"],
   marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "social.publish", "email.send"],

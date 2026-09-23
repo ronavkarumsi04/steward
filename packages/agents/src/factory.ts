@@ -4,13 +4,14 @@ import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
 import { searchProviderFromEnv } from "@steward/tools";
-import type { AgentServices } from "./services.js";
+import type { AgentServices, RunWorkflowLauncher } from "./services.js";
 
 export interface AgentServiceFactoryOptions {
   core: CoreContext;
   sandbox?: SandboxProvider;
   approvalSignal?: ApprovalSignal;
   companionBridge?: CompanionBridge;
+  runWorkflowLauncher?: RunWorkflowLauncher;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -69,6 +70,7 @@ export class AgentServiceFactory {
       growth: this.growth,
       providers: this.providers,
       events: this.events,
+      runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),
       emailFrom: this.env.PLATFORM_EMAIL_FROM,

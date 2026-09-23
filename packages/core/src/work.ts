@@ -91,8 +91,10 @@ export class AgentService {
 }
 
 export interface RunTrigger {
-  kind: "user" | "schedule" | "task" | "event" | "chat" | "system";
+  kind: "user" | "schedule" | "task" | "event" | "chat" | "system" | "delegation";
   instruction: string;
+  parentRunId?: string;
+  parentAgentId?: string;
   scheduleId?: string;
   conversationId?: string;
   messageId?: string;
@@ -119,7 +121,7 @@ export class RunService {
   async create(scope: TenantScope, input: { agentId: string; taskId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
     return this.db.transaction(async (tx) => {
       const [r] = await tx.insert(agentRuns).values({ organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, trigger: input.trigger.kind }, correlation: { runId: r!.id, taskId: input.taskId ?? "" } });
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}) } });
       return r!;
     });
   }
