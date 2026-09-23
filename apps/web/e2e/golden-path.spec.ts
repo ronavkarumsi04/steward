@@ -54,6 +54,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Earn" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Turn on Autopilot/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Work Steward delegated" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What exists outside Steward" })).toBeVisible();
   await expect(page.getByText("Not live yet")).toBeVisible();
 

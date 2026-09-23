@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, BusinessPulse, Run } from "@/lib/types";
 import { Icon } from "./icons";
-import { Pill } from "./ui";
+import { Pill, StatusPill, ago, usd } from "./ui";
 
 export interface StudioSchedule {
   id: string;
@@ -92,6 +92,7 @@ export function FounderStudio({
   companyName,
   timezone,
   agents,
+  runs,
   schedules,
   stats,
 }: {
@@ -100,12 +101,18 @@ export function FounderStudio({
   companyName: string;
   timezone: string;
   agents: Agent[];
+  runs: Run[];
   schedules: StudioSchedule[];
   stats: StudioStats;
 }) {
   const router = useRouter();
   const operator = useMemo(() => agents.find((a) => a.enabled && a.kind === "orchestrator") ?? agents.find((a) => a.enabled), [agents]);
   const agentByKind = useMemo(() => new Map(agents.filter((a) => a.enabled).map((a) => [a.kind, a])), [agents]);
+  const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
+  const delegatedRuns = useMemo(() => runs.filter((r) => r.trigger?.kind === "delegation").slice(0, 8), [runs]);
+  const activeWorkers = delegatedRuns.filter((r) => ["queued", "building_context", "planning", "executing", "verifying"].includes(r.status)).length;
+  const waitingWorkers = delegatedRuns.filter((r) => ["waiting_approval", "waiting_budget", "needs_review"].includes(r.status)).length;
+  const completedWorkers = delegatedRuns.filter((r) => r.status === "succeeded").length;
   const autopilotSchedules = schedules.filter((s) => s.name.startsWith(AUTOPILOT_PREFIX));
   const autopilotEnabled = autopilotSchedules.some((s) => s.enabled);
   const [instruction, setInstruction] = useState("");
@@ -274,6 +281,54 @@ export function FounderStudio({
             </article>
           );
         })}
+      </div>
+
+      <div className="border-t border-line bg-panel-2/35 px-5 py-5 sm:px-6" aria-label="Specialist workers">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="eyebrow">Specialist workers</div>
+            <h3 className="mt-1 text-lg font-semibold tracking-tight">Work Steward delegated</h3>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted">Each worker is a separate durable run with its own specialist permissions, AI budget, approvals, verification, and evidence trail.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Pill tone={activeWorkers ? "accent" : "neutral"}>{activeWorkers} active</Pill>
+            <Pill tone={waitingWorkers ? "warn" : "neutral"}>{waitingWorkers} waiting</Pill>
+            <Pill tone={completedWorkers ? "ok" : "neutral"}>{completedWorkers} completed</Pill>
+            <Link className="btn btn-sm" href={`/app/c/${companyId}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>
+          </div>
+        </div>
+
+        {delegatedRuns.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-line bg-panel px-4 py-5 text-sm text-muted">
+            No specialist workers yet. Give the Steward Operator a multi-step outcome; the Chief of Staff can split independent work into durable Engineering, Growth, Sales, Research, Support, Finance, or Operations runs.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {delegatedRuns.map((run) => {
+              const agent = agentById.get(run.agentId);
+              const summary = typeof run.result?.summary === "string" ? run.result.summary : run.error;
+              return (
+                <Link key={run.id} href={`/app/c/${companyId}/runs/${run.id}`} className="card-inset group block min-w-0 p-4 transition hover:border-accent/40 hover:bg-panel">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold">{agent?.name ?? "Specialist"}</div>
+                      <div className="mt-0.5 text-[11px] capitalize text-muted">{agent?.kind ?? "agent"}</div>
+                    </div>
+                    <StatusPill status={run.status} />
+                  </div>
+                  <div className="mt-3 line-clamp-2 text-sm font-medium leading-5">{run.intent || "Delegated work"}</div>
+                  <p className="mt-2 line-clamp-2 min-h-9 text-xs leading-4 text-muted">
+                    {summary || (run.status === "waiting_approval" ? "Waiting for a founder approval before the next external action." : "Worker evidence will appear here when the run produces a verified result.")}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-faint">
+                    <span>{ago(run.createdAt)}</span>
+                    <span className="tnum">{usd(run.costUsd)}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="border-t border-line bg-panel px-5 py-5 sm:px-6">

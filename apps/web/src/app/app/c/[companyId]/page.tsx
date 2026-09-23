@@ -16,7 +16,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   if (!overview) notFound();
   const [events, runs, approvals, usage, schedules, artifacts, documents, integrations] = await Promise.all([
     api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=50`),
-    api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=8`),
+    api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=20`),
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
     api.get<{ usage: UsageRow[] }>(`/orgs/${overview.company.organizationId}/providers/usage?companyId=${companyId}&days=30`),
     api.get<{ schedules: StudioSchedule[] }>(`/companies/${companyId}/schedules`),
@@ -86,6 +86,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         companyName={company.name}
         timezone={company.timezone}
         agents={agents}
+        runs={runs.runs}
         schedules={schedules.schedules}
         stats={{
           artifacts: artifacts.artifacts.length,
