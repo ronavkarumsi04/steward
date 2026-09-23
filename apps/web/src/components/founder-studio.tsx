@@ -37,7 +37,7 @@ const AUTOPILOT_PREFIX = "Steward Autopilot · ";
 
 const AUTOPILOT_CYCLES = [
   { kind: "engineering", name: "Build", cron: "0 9 * * *", instruction: "AUTOPILOT BUILD cycle: review company goals, recent work, customer evidence, code, deployment state, and open product gaps. Choose the single highest-leverage shippable product improvement, execute it with connected engineering tools, verify it, and leave durable artifacts and follow-up tasks. Do not create busywork." },
-  { kind: "marketing", name: "Grow", cron: "0 11 * * *", instruction: "AUTOPILOT GROW cycle: review the target customer, offer, product state, channels, prior growth work, and measurable signals. Choose one bounded distribution or customer-learning experiment, create the assets, execute allowed outreach/publishing, and record what should be measured next. Never manufacture traction." },
+  { kind: "marketing", name: "Grow", cron: "0 11 * * *", instruction: "AUTOPILOT GROW cycle: review the target customer, offer, product state, channels, prior growth work, and measurable signals. Choose one bounded distribution or customer-learning experiment, create the assets, execute allowed outreach/publishing, record evidence-backed prospects in the lead pipeline, and record what should be measured next. Never manufacture traction or prospect data." },
   { kind: "finance", name: "Earn", cron: "0 13 * * *", instruction: "AUTOPILOT EARN cycle: review the offer, pricing, payment state, revenue signals, and current product. Improve the path from real demand to payment using connected financial tools when appropriate, subject to policy and approvals. Never fabricate revenue, customers, or orders." },
 ] as const;
 
@@ -56,7 +56,7 @@ const LANES = [
     kicker: "Reach real people",
     description: "Create a bounded acquisition move: positioning, launch content, outreach, follow-up, or a measurable distribution test.",
     prompt:
-      "GROW mission: inspect the target customer, offer, existing channels, integrations, prior outreach, and evidence. Choose one bounded growth experiment with a named audience and measurable response, create the assets, execute allowed actions, and record what should be measured next. Never manufacture traction.",
+      "GROW mission: inspect the target customer, offer, existing channels, integrations, prior outreach, and evidence. Choose one bounded growth experiment with a named audience and measurable response, create the assets, execute allowed actions, record evidence-backed prospects in the lead pipeline, and record what should be measured next. Never manufacture traction or prospect data.",
   },
   {
     id: "earn",

@@ -36,6 +36,13 @@ export const Icon = {
       <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16H6.5A2.5 2.5 0 0 1 4 13.5z" />
     </Base>
   ),
+  Growth: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M4 19V5M4 19h16" />
+      <path d="M7 15l4-4 3 2 5-6" />
+      <path d="M16 7h3v3" />
+    </Base>
+  ),
   Tasks: (p: IconProps) => (
     <Base {...p}>
       <path d="M4 6h3M4 12h3M4 18h3" />

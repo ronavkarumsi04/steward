@@ -66,6 +66,17 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.reload();
   await expect(page.getByText("Draft positioning statement")).toBeVisible();
 
+  // Growth: a lead is durable and visible in the customer pipeline.
+  await page.goto(`${companyUrl}/growth`);
+  await page.getByLabel("Lead title").fill("Pilot design partner");
+  await page.getByLabel("Lead email").fill(`pilot-${Date.now()}@example.com`);
+  await page.getByLabel("Lead company").fill("E2E Retailer");
+  await page.getByLabel("Lead value USD").fill("1200");
+  await page.getByRole("button", { name: "Add lead" }).click();
+  await expect(page.getByText("Pilot design partner")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Pilot design partner")).toBeVisible();
+
   // Agents seeded by company creation.
   await page.goto(`${companyUrl}/agents`);
   await expect(page.getByText(/orchestrator|chief of staff/i).first()).toBeVisible();

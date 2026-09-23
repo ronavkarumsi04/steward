@@ -344,3 +344,37 @@ export interface BusinessPulse {
     newCustomers: number;
   } | null;
 }
+
+export type LeadStage = "new" | "qualified" | "contacted" | "interested" | "won" | "lost";
+export interface Lead {
+  id: string;
+  contactId: string | null;
+  title: string;
+  stage: LeadStage;
+  valueUsd: string | null;
+  notes: string;
+  externalRef: Record<string, string>;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactCompany: string | null;
+  source: string | null;
+  optedOutAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface OutboundActivity {
+  id: string;
+  channel: string;
+  provider: string;
+  recipient: string;
+  subject: string | null;
+  status: string;
+  externalId: string | null;
+  runId: string | null;
+  error: string | null;
+  createdAt: string;
+}
+export interface GrowthSnapshot {
+  leads: Lead[];
+  outbound: OutboundActivity[];
+}

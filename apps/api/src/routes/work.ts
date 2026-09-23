@@ -7,7 +7,7 @@ import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, ty
 import type { WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
-import type { EventBus } from "@steward/core";
+import { LEAD_STAGES, type EventBus } from "@steward/core";
 
 const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
 const limit = z.coerce.number().int().min(1).max(200).optional();
@@ -150,6 +150,24 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
     if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending");
     return c.json({ approval: a });
+  });
+
+  // ---- growth pipeline ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/growth", tag: "growth", summary: "Lead pipeline and recent outbound activity", query: z.object({ stage: z.enum(LEAD_STAGES).optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const growth = c.get("deps").services.growth;
+    const [leads, outbound] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30)]);
+    return c.json({ leads, outbound });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/leads", tag: "growth", summary: "Create a lead/contact in the company pipeline", body: z.object({ title: z.string().min(1).max(300), stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional(), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ lead: await c.get("deps").services.growth.createLead(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/leads/:id", tag: "growth", summary: "Update a lead stage/value/notes", body: z.object({ stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).nullable().optional(), notes: z.string().max(8000).optional(), title: z.string().min(1).max(300).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const lead = await c.get("deps").services.growth.updateLead(scope, param(c, "id"), body);
+    if (!lead) throw new HttpError(404, "not_found", "Lead not found");
+    return c.json({ lead });
   });
 
   // ---- business pulse ----

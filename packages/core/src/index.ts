@@ -10,3 +10,4 @@ export * from "./events.js";
 export * from "./integrations.js";
 export * from "./companion.js";
 export * from "./mailer.js";
+export * from "./growth.js";

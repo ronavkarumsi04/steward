@@ -268,6 +268,49 @@ const socialPublish = defineTool({
   },
 });
 
+// ---------- Growth pipeline ----------
+
+const LeadStage = z.enum(["new", "qualified", "contacted", "interested", "won", "lost"]);
+
+const leadList = defineTool({
+  name: "lead.list",
+  description: "List the company's current sales/growth leads and contact context.",
+  input: z.object({ stage: LeadStage.optional(), limit: z.number().int().min(1).max(100).default(50) }),
+  risk: "LOW",
+  idempotent: true,
+  execute: async ({ stage, limit }, ctx) => {
+    const rows = await svc(ctx).growth.listLeads(svc(ctx).scope, { stage, limit });
+    return { ok: true, content: rows.length ? JSON.stringify(rows, null, 2) : "No leads yet.", data: rows };
+  },
+});
+
+const leadCreate = defineTool({
+  name: "lead.create",
+  description: "Record a real prospective customer in the company pipeline. Use only evidence-backed prospects; do not invent people or contact details.",
+  input: z.object({ title: z.string().min(1).max(300), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional(), stage: LeadStage.default("new"), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const lead = await s.growth.createLead(s.scope, input);
+    return { ok: true, content: `Recorded lead ${lead.title} (${lead.stage}).`, data: lead };
+  },
+});
+
+const leadUpdate = defineTool({
+  name: "lead.update",
+  description: "Update a lead's stage, value, title, or notes based on new evidence.",
+  input: z.object({ id: z.string().min(1), stage: LeadStage.optional(), valueUsd: z.number().nonnegative().max(100_000_000).nullable().optional(), title: z.string().min(1).max(300).optional(), notes: z.string().max(8000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => {
+    const s = svc(ctx);
+    const lead = await s.growth.updateLead(s.scope, id, patch);
+    if (!lead) return fail("Lead not found.");
+    return { ok: true, content: `Updated lead ${lead.title} → ${lead.stage}.`, data: lead };
+  },
+});
+
 // ---------- Engineering ----------
 
 async function github(s: AgentServices) {
@@ -622,18 +665,18 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
 
 /** Default tool allowlists per agent kind; company operators can override per agent. */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "web.*", "slack.post"],
+  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "lead.list", "web.*", "slack.post"],
   research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*"],
   engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "social.publish", "email.send"],
-  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "email.send"],
+  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "lead.*", "web.*", "social.publish", "email.send"],
+  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "lead.*", "web.*", "email.send"],
   support: ["memory.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
   finance: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
   operations: ["memory.*", "document.*", "task.*", "company.profile", "web.*", "slack.post"],

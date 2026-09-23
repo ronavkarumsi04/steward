@@ -305,6 +305,25 @@ describe("providers", () => {
   });
 });
 
+describe("growth pipeline", () => {
+  d("persists real leads, updates stages, and preserves tenant isolation", async () => {
+    const a = await register("GrowthA");
+    const co = await a.api.json<{ company: { id: string } }>("POST", `/orgs/${a.orgId}/companies`, { name: "Growth Co", autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const created = await a.api.json<{ lead: { id: string; stage: string } }>("POST", `/companies/${companyId}/leads`, { title: "Pilot customer", name: "Ada", email: `ada-${uniq()}@example.com`, company: "Analytical Engines", source: "research", valueUsd: 1200 });
+    expect(created.status).toBe(201);
+    expect(created.body.lead.stage).toBe("new");
+    const updated = await a.api.json<{ lead: { stage: string; valueUsd: string } }>("PATCH", `/companies/${companyId}/leads/${created.body.lead.id}`, { stage: "interested", valueUsd: 1500 });
+    expect(updated.body.lead.stage).toBe("interested");
+    expect(Number(updated.body.lead.valueUsd)).toBe(1500);
+    const growth = await a.api.json<{ leads: Array<{ id: string; contactName: string; contactCompany: string; source: string }> }>("GET", `/companies/${companyId}/growth`);
+    expect(growth.body.leads).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.lead.id, contactName: "Ada", contactCompany: "Analytical Engines", source: "research" })]));
+
+    const b = await register("GrowthB");
+    expect((await b.api.json("GET", `/companies/${companyId}/growth`)).status).toBe(404);
+  });
+});
+
 describe("durable run pipeline (stub provider, in-process runtime)", () => {
   d("chat message → run → plan → tool calls → verify → artifacts, usage, events", async () => {
     const { api, orgId } = await register();
