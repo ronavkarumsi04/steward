@@ -85,13 +85,14 @@ export class AgentRuntime {
     try {
       const company = await this.s.companies.get(this.scope);
       if (!company) throw new Error("Company not found");
-      const [profileRow, goals, task, recentDecisions, budgets, projectSnapshot] = await Promise.all([
+      const [profileRow, goals, task, recentDecisions, budgets, projectSnapshot, playbooks] = await Promise.all([
         this.s.companies.profile(this.scope),
         this.s.companies.listGoals(this.scope),
         run.taskId ? this.s.tasks.get(this.scope, run.taskId) : Promise.resolve(null),
         this.s.runs.listDecisions(this.scope, 8, run.projectId ?? undefined),
         this.s.budgets.list(this.scope),
         run.projectId ? this.s.projects.snapshot(this.scope, run.projectId) : Promise.resolve(null),
+        this.s.documents.playbooksForContext(this.scope, agent.kind, run.projectId),
       ]);
       const trigger = run.trigger as { kind: string; instruction: string; conversationId?: string };
       const instruction = trigger.instruction || task?.title || "Review the company state and propose the next most valuable work.";
@@ -106,6 +107,10 @@ export class AgentRuntime {
       const sections: string[] = [];
       sections.push(`# Company: ${company.name}`);
       if (profile) sections.push(`Profile:\n${JSON.stringify(profile, null, 1).slice(0, 6000)}`);
+      if (playbooks.length) {
+        const playbookBlock = playbooks.map((p) => `## ${p.title} (v${p.version}${p.projectId ? ", project-specific" : ", company-wide"})\n${p.content.slice(0, 3500)}`).join("\n\n").slice(0, 14000);
+        sections.push(`Company playbooks (founder-managed operating instructions; follow them unless they conflict with Steward's safety, policy, budget, or approval rules):\n${playbookBlock}`);
+      }
       if (projectSnapshot) {
         const p = projectSnapshot.project;
         const recentTasks = projectSnapshot.tasks.slice(0, 8).map((x) => `- [${x.status}] ${x.title}`).join("\n");

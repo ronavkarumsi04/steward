@@ -295,11 +295,28 @@ export interface StewardEvent {
 export interface Document {
   id: string;
   title: string;
+  content?: string;
+  format: string;
+  folder: string;
+  kind: "document" | "playbook";
+  projectId: string | null;
+  agentKinds: string[];
+  version: number;
+  updatedAt: string;
+}
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  version: number;
+  title: string;
   content: string;
   format: string;
   folder: string;
-  version: number;
-  updatedAt: string;
+  kind: "document" | "playbook";
+  projectId: string | null;
+  agentKinds: string[];
+  createdBy: Record<string, unknown>;
+  createdAt: string;
 }
 export interface Decision {
   id: string;

@@ -57,7 +57,7 @@ const documentRead = defineTool({
 
 const documentList = defineTool({
   name: "document.list",
-  description: "List company documents (title, folder, version).",
+  description: "List company documents and playbooks (metadata only). Playbook content is injected automatically when relevant.",
   input: z.object({ folder: z.string().optional() }),
   risk: "LOW",
   idempotent: true,
@@ -75,8 +75,8 @@ const documentWrite = defineTool({
   sideEffects: "internal",
   execute: async ({ title, content, folder }, ctx) => {
     const s = svc(ctx);
-    const existing = await s.documents.findByTitle(s.scope, title, folder);
-    const d = await s.documents.upsert(s.scope, { id: existing?.id, title, content, folder });
+    const existing = await s.documents.findByTitle(s.scope, title, folder, "document");
+    const d = await s.documents.upsert(s.scope, { id: existing?.id, title, content, folder, kind: "document" });
     if (!d) return fail("Failed to write document.");
     await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title, metadata: { documentId: d.id, version: d.version } });
     return { ok: true, content: `Wrote document "${title}" (v${d.version}, id ${d.id}).`, data: { id: d.id, version: d.version } };

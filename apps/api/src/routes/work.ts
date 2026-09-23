@@ -3,11 +3,11 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AgentServiceFactory } from "@steward/agents";
 import { StripeClient } from "@steward/integrations";
-import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
+import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
-import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, LEAD_STAGES, PROJECT_STATUSES, type EventBus } from "@steward/core";
+import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus } from "@steward/core";
 
 const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
 const limit = z.coerce.number().int().min(1).max(200).optional();
@@ -260,23 +260,54 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const scope = await companyScope(c, param(c, "companyId"), "member");
     return c.json({ ok: await c.get("deps").services.forScope(scope).memory.forget(param(c, "id")) });
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents", query: z.object({ folder: z.string().max(200).optional() }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents and playbooks", query: z.object({ folder: z.string().max(200).optional(), kind: z.enum(DOCUMENT_KINDS).optional(), projectId: ID.optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
-    return c.json({ documents: await c.get("deps").services.documents.list(scope, query.folder) });
+    return c.json({ documents: await c.get("deps").services.documents.list(scope, query.folder, { kind: query.kind, projectId: query.projectId }) });
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Read a document" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Read a document or playbook" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const d = await c.get("deps").services.documents.get(scope, param(c, "id"));
     if (!d) throw new HttpError(404, "not_found");
     return c.json({ document: d });
   });
-  defineRoute(app, reg, { method: "put", path: "/companies/:companyId/documents", tag: "knowledge", summary: "Create or update a document", body: z.object({ id: ID.optional(), title: z.string().min(1).max(200), content: z.string().max(500000), folder: z.string().max(200).optional(), format: z.string().max(20).optional() }) }, async (c, { body }) => {
-    const scope = await companyScope(c, param(c, "companyId"), "member");
-    return c.json({ document: await c.get("deps").services.documents.upsert(scope, body) });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id/versions", tag: "knowledge", summary: "Immutable document/playbook version history", query: z.object({ limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const d = await c.get("deps").services.documents.get(scope, param(c, "id"));
+    if (!d) throw new HttpError(404, "not_found");
+    return c.json({ versions: await c.get("deps").services.documents.versions(scope, d.id, query.limit ?? 50) });
   });
-  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Delete a document" }, async (c) => {
-    const scope = await companyScope(c, param(c, "companyId"), "member");
-    return c.json({ ok: await c.get("deps").services.documents.delete(scope, param(c, "id")) });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/documents/:id/versions/:version/restore", tag: "knowledge", summary: "Restore a historical document/playbook version as a new version" }, async (c) => {
+    const companyId = param(c, "companyId");
+    const readScope = await companyScope(c, companyId);
+    const current = await c.get("deps").services.documents.get(readScope, param(c, "id"));
+    if (!current) throw new HttpError(404, "not_found");
+    const scope = await companyScope(c, companyId, current.kind === "playbook" ? "admin" : "member");
+    const version = Number(param(c, "version"));
+    if (!Number.isInteger(version) || version < 1) throw new HttpError(400, "invalid_version");
+    const document = await c.get("deps").services.documents.restore(scope, current.id, version);
+    if (!document) throw new HttpError(404, "not_found");
+    return c.json({ document });
+  });
+  defineRoute(app, reg, { method: "put", path: "/companies/:companyId/documents", tag: "knowledge", summary: "Create or update a document or playbook", body: z.object({ id: ID.optional(), title: z.string().min(1).max(200), content: z.string().max(500000), folder: z.string().max(200).optional(), format: z.string().max(20).optional(), kind: z.enum(DOCUMENT_KINDS).optional(), projectId: ID.nullable().optional(), agentKinds: z.array(AgentKind).max(9).optional() }) }, async (c, { body }) => {
+    const companyId = param(c, "companyId");
+    let kind = body.kind ?? "document";
+    if (body.id) {
+      const readScope = await companyScope(c, companyId);
+      const current = await c.get("deps").services.documents.get(readScope, body.id);
+      if (!current) throw new HttpError(404, "not_found");
+      kind = current.kind as (typeof DOCUMENT_KINDS)[number];
+      if (body.kind && body.kind !== kind) throw new HttpError(409, "document_kind_immutable", "Document kind cannot be changed after creation");
+    }
+    const scope = await companyScope(c, companyId, kind === "playbook" ? "admin" : "member");
+    return c.json({ document: await c.get("deps").services.documents.upsert(scope, { ...body, kind }) });
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Delete a document or playbook" }, async (c) => {
+    const companyId = param(c, "companyId");
+    const readScope = await companyScope(c, companyId);
+    const current = await c.get("deps").services.documents.get(readScope, param(c, "id"));
+    if (!current) throw new HttpError(404, "not_found");
+    const scope = await companyScope(c, companyId, current.kind === "playbook" ? "admin" : "member");
+    return c.json({ ok: await c.get("deps").services.documents.delete(scope, current.id) });
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/decisions", tag: "knowledge", summary: "Decision log", query: z.object({ limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));

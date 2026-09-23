@@ -50,6 +50,13 @@
       "when": 1790201191167,
       "tag": "0006_reactive_autopilot",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790205400000,
+      "tag": "0007_company_playbooks",
+      "breakpoints": true
     }
   ]
 }

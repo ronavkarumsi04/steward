@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
-import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import type { AgentKind, RunStatus, StepKind, TaskStatus, TenantScope } from "@steward/schema";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
@@ -302,33 +302,75 @@ export class RunService {
   }
 }
 
+export const DOCUMENT_KINDS = ["document", "playbook"] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+
 export class DocumentService {
   constructor(private readonly db: Db) {}
-  list(scope: TenantScope, folder?: string) {
-    return this.db.select({ id: documents.id, title: documents.title, folder: documents.folder, format: documents.format, version: documents.version, updatedAt: documents.updatedAt, createdBy: documents.createdBy }).from(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, folder ? eq(documents.folder, folder) : undefined)).orderBy(documents.folder, documents.title);
+
+  list(scope: TenantScope, folder?: string, filter: { kind?: DocumentKind; projectId?: string | null } = {}) {
+    return this.db
+      .select({ id: documents.id, title: documents.title, folder: documents.folder, format: documents.format, kind: documents.kind, projectId: documents.projectId, agentKinds: documents.agentKinds, version: documents.version, updatedAt: documents.updatedAt, createdBy: documents.createdBy })
+      .from(documents)
+      .where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, folder ? eq(documents.folder, folder) : undefined, filter.kind ? eq(documents.kind, filter.kind) : undefined, filter.projectId === null ? isNull(documents.projectId) : filter.projectId ? eq(documents.projectId, filter.projectId) : undefined))
+      .orderBy(documents.kind, documents.folder, documents.title);
   }
+
   async get(scope: TenantScope, id: string) {
     const [d] = await this.db.select().from(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.id, id))).limit(1);
     return d ?? null;
   }
-  async findByTitle(scope: TenantScope, title: string, folder = "/") {
-    const [d] = await this.db.select().from(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.title, title), eq(documents.folder, folder))).limit(1);
+
+  async findByTitle(scope: TenantScope, title: string, folder = "/", kind: DocumentKind = "document") {
+    const [d] = await this.db.select().from(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.title, title), eq(documents.folder, folder), eq(documents.kind, kind))).limit(1);
     return d ?? null;
   }
-  async upsert(scope: TenantScope, input: { id?: string; title: string; content: string; folder?: string; format?: string }) {
+
+  async playbooksForContext(scope: TenantScope, agentKind: AgentKind, projectId?: string | null) {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.kind, "playbook"), projectId ? or(isNull(documents.projectId), eq(documents.projectId, projectId)) : isNull(documents.projectId)))
+      .orderBy(asc(documents.projectId), asc(documents.title))
+      .limit(50);
+    return rows.filter((row) => !row.agentKinds.length || row.agentKinds.includes(agentKind)).slice(0, 12);
+  }
+
+  async upsert(scope: TenantScope, input: { id?: string; title: string; content: string; folder?: string; format?: string; kind?: DocumentKind; projectId?: string | null; agentKinds?: AgentKind[] }) {
+    const kind = input.kind ?? "document";
+    const projectId = kind === "playbook" ? input.projectId ?? null : null;
+    const agentKinds = kind === "playbook" ? input.agentKinds ?? [] : [];
+    await assertScopedProject(this.db, scope, projectId);
     if (input.id) {
       return this.db.transaction(async (tx) => {
-        const [d] = await tx.update(documents).set({ title: input.title, content: input.content, folder: input.folder, format: input.format, version: sql`${documents.version} + 1`, updatedAt: new Date() }).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.id, input.id!))).returning();
-        if (d) await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "document.updated", actor: scope.actor, payload: { documentId: d.id, title: d.title, version: d.version } });
-        return d ?? null;
+        const [existing] = await tx.select({ id: documents.id, kind: documents.kind }).from(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.id, input.id!))).limit(1);
+        if (!existing) return null;
+        if (existing.kind !== kind) throw new Error("Document kind cannot be changed after creation");
+        const [d] = await tx.update(documents).set({ title: input.title, content: input.content, folder: input.folder ?? (kind === "playbook" ? "/playbooks" : "/"), format: input.format ?? "markdown", kind, projectId, agentKinds, version: sql`${documents.version} + 1`, updatedAt: new Date() }).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.id, input.id!))).returning();
+        if (!d) return null;
+        await tx.insert(documentVersions).values({ organizationId: scope.organizationId, companyId: scope.companyId!, documentId: d.id, version: d.version, title: d.title, content: d.content, format: d.format, folder: d.folder, kind: d.kind, projectId: d.projectId, agentKinds: d.agentKinds, createdBy: scope.actor as Record<string, unknown> });
+        await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "document.updated", actor: scope.actor, payload: { documentId: d.id, title: d.title, version: d.version, kind: d.kind, projectId: d.projectId } });
+        return d;
       });
     }
     return this.db.transaction(async (tx) => {
-      const [d] = await tx.insert(documents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title, content: input.content, folder: input.folder ?? "/", format: input.format ?? "markdown", createdBy: scope.actor as Record<string, unknown> }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "document.created", actor: scope.actor, payload: { documentId: d!.id, title: d!.title, folder: d!.folder } });
+      const [d] = await tx.insert(documents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title, content: input.content, folder: input.folder ?? (kind === "playbook" ? "/playbooks" : "/"), format: input.format ?? "markdown", kind, projectId, agentKinds, createdBy: scope.actor as Record<string, unknown> }).returning();
+      await tx.insert(documentVersions).values({ organizationId: scope.organizationId, companyId: scope.companyId!, documentId: d!.id, version: d!.version, title: d!.title, content: d!.content, format: d!.format, folder: d!.folder, kind: d!.kind, projectId: d!.projectId, agentKinds: d!.agentKinds, createdBy: scope.actor as Record<string, unknown> });
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "document.created", actor: scope.actor, payload: { documentId: d!.id, title: d!.title, folder: d!.folder, kind: d!.kind, projectId: d!.projectId } });
       return d!;
     });
   }
+
+  versions(scope: TenantScope, documentId: string, limit = 50) {
+    return this.db.select().from(documentVersions).where(scoped(scope, { organizationId: documentVersions.organizationId, companyId: documentVersions.companyId }, eq(documentVersions.documentId, documentId))).orderBy(desc(documentVersions.version)).limit(limit);
+  }
+
+  async restore(scope: TenantScope, documentId: string, version: number) {
+    const [snapshot] = await this.db.select().from(documentVersions).where(scoped(scope, { organizationId: documentVersions.organizationId, companyId: documentVersions.companyId }, eq(documentVersions.documentId, documentId), eq(documentVersions.version, version))).limit(1);
+    if (!snapshot) return null;
+    return this.upsert(scope, { id: documentId, title: snapshot.title, content: snapshot.content, folder: snapshot.folder, format: snapshot.format, kind: snapshot.kind as DocumentKind, projectId: snapshot.projectId, agentKinds: snapshot.agentKinds as AgentKind[] });
+  }
+
   async delete(scope: TenantScope, id: string) {
     const rows = await this.db.delete(documents).where(scoped(scope, { organizationId: documents.organizationId, companyId: documents.companyId }, eq(documents.id, id))).returning({ id: documents.id });
     return rows.length > 0;

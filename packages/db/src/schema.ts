@@ -757,11 +757,31 @@ export const documents = pgTable("documents", {
   content: text("content").notNull().default(""),
   format: text("format").notNull().default("markdown"),
   folder: text("folder").notNull().default("/"),
+  kind: text("kind").notNull().default("document"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  agentKinds: json<string[]>("agent_kinds").notNull().default([]),
   createdBy: json<Record<string, unknown>>("created_by").notNull(),
   version: integer("version").notNull().default(1),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (t) => [index("documents_company_idx").on(t.companyId, t.folder)]);
+}, (t) => [index("documents_company_idx").on(t.companyId, t.folder), index("documents_playbook_idx").on(t.companyId, t.kind, t.projectId)]);
+
+export const documentVersions = pgTable("document_versions", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  format: text("format").notNull().default("markdown"),
+  folder: text("folder").notNull().default("/"),
+  kind: text("kind").notNull().default("document"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  agentKinds: json<string[]>("agent_kinds").notNull().default([]),
+  createdBy: json<Record<string, unknown>>("created_by").notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("document_versions_document_version_idx").on(t.documentId, t.version), index("document_versions_company_idx").on(t.companyId, t.documentId, t.version)]);
 
 export const financialSnapshots = pgTable("financial_snapshots", {
   id: id(),
