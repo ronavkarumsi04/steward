@@ -326,7 +326,7 @@ export class DocumentService {
     return d ?? null;
   }
 
-  async playbooksForContext(scope: TenantScope, agentKind: AgentKind, projectId?: string | null) {
+  async playbooksForContext(scope: TenantScope, agentKind: string, projectId?: string | null) {
     const rows = await this.db
       .select()
       .from(documents)
