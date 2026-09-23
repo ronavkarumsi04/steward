@@ -1,9 +1,13 @@
 import { desc, eq, sql } from "drizzle-orm";
-import { auditLog, contacts, leads, outboundMessages, scoped, type Db } from "@steward/db";
+import { auditLog, campaigns, contacts, leads, outboundMessages, scoped, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 
 export const LEAD_STAGES = ["new", "qualified", "contacted", "interested", "won", "lost"] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];
+export const CAMPAIGN_CHANNELS = ["email", "social", "ads"] as const;
+export type CampaignChannel = (typeof CAMPAIGN_CHANNELS)[number];
+export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "completed", "cancelled"] as const;
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
 export interface CreateLeadInput {
   title: string;
@@ -106,6 +110,60 @@ export class GrowthService {
     });
   }
 
+  async getCampaign(scope: TenantScope, id: string) {
+    const [row] = await this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId }, eq(campaigns.id, id))).limit(1);
+    return row ?? null;
+  }
+
+  async listCampaigns(scope: TenantScope) {
+    const rows = await this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId })).orderBy(desc(campaigns.updatedAt));
+    const deliveries = await this.db
+      .select({ campaignId: outboundMessages.campaignId, status: outboundMessages.status, count: sql<number>`count(*)::int` })
+      .from(outboundMessages)
+      .where(scoped(scope, { organizationId: outboundMessages.organizationId, companyId: outboundMessages.companyId }, sql`${outboundMessages.campaignId} is not null`))
+      .groupBy(outboundMessages.campaignId, outboundMessages.status);
+    const byCampaign = new Map<string, Record<string, number>>();
+    for (const row of deliveries) {
+      if (!row.campaignId) continue;
+      const stats = byCampaign.get(row.campaignId) ?? {};
+      stats[row.status] = Number(row.count);
+      byCampaign.set(row.campaignId, stats);
+    }
+    return rows.map((row) => ({ ...row, delivery: byCampaign.get(row.id) ?? {} }));
+  }
+
+  async createCampaign(scope: TenantScope, input: { name: string; channel: CampaignChannel; objective?: string; audience?: string; budgetUsd?: number }) {
+    return this.db.transaction(async (tx) => {
+      const [campaign] = await tx.insert(campaigns).values({
+        organizationId: scope.organizationId,
+        companyId: scope.companyId!,
+        name: input.name.trim(),
+        channel: input.channel,
+        status: "draft",
+        config: { objective: input.objective?.trim() ?? "", audience: input.audience?.trim() ?? "", budgetUsd: input.budgetUsd ?? null },
+      }).returning();
+      await tx.insert(auditLog).values({ organizationId: scope.organizationId, companyId: scope.companyId!, actor: scope.actor, action: "campaign.create", target: campaign!.id, metadata: { channel: input.channel } });
+      return campaign!;
+    });
+  }
+
+  async updateCampaign(scope: TenantScope, id: string, patch: Partial<{ status: CampaignStatus; objective: string; audience: string; budgetUsd: number | null; name: string }>) {
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId }, eq(campaigns.id, id))).limit(1);
+      if (!existing) return null;
+      const config = { ...(existing.config ?? {}) } as Record<string, unknown>;
+      if (patch.objective !== undefined) config.objective = patch.objective.trim();
+      if (patch.audience !== undefined) config.audience = patch.audience.trim();
+      if (patch.budgetUsd !== undefined) config.budgetUsd = patch.budgetUsd;
+      const set: Record<string, unknown> = { updatedAt: new Date(), config };
+      if (patch.status !== undefined) set.status = patch.status;
+      if (patch.name !== undefined) set.name = patch.name.trim();
+      const [campaign] = await tx.update(campaigns).set(set).where(eq(campaigns.id, id)).returning();
+      await tx.insert(auditLog).values({ organizationId: scope.organizationId, companyId: scope.companyId!, actor: scope.actor, action: "campaign.update", target: id, metadata: { fields: Object.keys(patch), status: campaign!.status } });
+      return campaign!;
+    });
+  }
+
   recentOutbound(scope: TenantScope, limit = 30) {
     return this.db
       .select({
@@ -116,6 +174,7 @@ export class GrowthService {
         subject: outboundMessages.subject,
         status: outboundMessages.status,
         externalId: outboundMessages.externalId,
+        campaignId: outboundMessages.campaignId,
         runId: outboundMessages.runId,
         error: outboundMessages.error,
         createdAt: outboundMessages.createdAt,

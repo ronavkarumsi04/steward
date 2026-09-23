@@ -362,6 +362,21 @@ export interface Lead {
   createdAt: string;
   updatedAt: string;
 }
+export type CampaignChannel = "email" | "social" | "ads";
+export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "cancelled";
+export interface Campaign {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  name: string;
+  channel: CampaignChannel;
+  status: CampaignStatus;
+  config: { objective?: string; audience?: string; budgetUsd?: number | null; [key: string]: unknown };
+  stats: Record<string, number>;
+  delivery: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface OutboundActivity {
   id: string;
   channel: string;
@@ -370,6 +385,7 @@ export interface OutboundActivity {
   subject: string | null;
   status: string;
   externalId: string | null;
+  campaignId: string | null;
   runId: string | null;
   error: string | null;
   createdAt: string;
@@ -377,4 +393,5 @@ export interface OutboundActivity {
 export interface GrowthSnapshot {
   leads: Lead[];
   outbound: OutboundActivity[];
+  campaigns: Campaign[];
 }

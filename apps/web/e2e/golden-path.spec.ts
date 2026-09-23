@@ -77,6 +77,18 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.reload();
   await expect(page.getByText("Pilot design partner")).toBeVisible();
 
+  // Campaigns persist as plans; creation itself does not send anything.
+  await page.getByLabel("Campaign name").fill("Design partner launch");
+  await page.getByLabel("Campaign channel").selectOption("email");
+  await page.getByLabel("Campaign audience").fill("Independent retailers");
+  await page.getByLabel("Campaign objective").fill("Book five customer interviews");
+  await page.getByLabel("Campaign budget USD").fill("250");
+  await page.getByRole("button", { name: "Create campaign" }).click();
+  await expect(page.getByText("Design partner launch")).toBeVisible();
+  await expect(page.getByText("Book five customer interviews")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Design partner launch")).toBeVisible();
+
   // Agents seeded by company creation.
   await page.goto(`${companyUrl}/agents`);
   await expect(page.getByText(/orchestrator|chief of staff/i).first()).toBeVisible();

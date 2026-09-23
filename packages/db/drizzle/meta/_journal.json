@@ -15,6 +15,13 @@
       "when": 1790163600000,
       "tag": "0001_growth_pipeline",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790166600000,
+      "tag": "0002_campaign_permissions",
+      "breakpoints": true
     }
   ]
 }

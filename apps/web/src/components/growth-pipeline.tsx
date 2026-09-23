@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, browserApi } from "@/lib/api";
-import type { GrowthSnapshot, Lead, LeadStage } from "@/lib/types";
+import type { CampaignChannel, CampaignStatus, GrowthSnapshot, Lead, LeadStage } from "@/lib/types";
 import { Empty, PageHeader, Pill } from "./ui";
 
 const STAGES: Array<{ id: LeadStage; label: string; tone: "neutral" | "accent" | "warn" | "ok" | "danger" }> = [
@@ -13,6 +13,14 @@ const STAGES: Array<{ id: LeadStage; label: string; tone: "neutral" | "accent" |
   { id: "interested", label: "Interested", tone: "accent" },
   { id: "won", label: "Won", tone: "ok" },
   { id: "lost", label: "Lost", tone: "danger" },
+];
+
+const CAMPAIGN_STATUSES: Array<{ id: CampaignStatus; label: string }> = [
+  { id: "draft", label: "Draft" },
+  { id: "active", label: "Active" },
+  { id: "paused", label: "Paused" },
+  { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
 ];
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -71,6 +79,43 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
     }
   }
 
+  async function createCampaign(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const rawBudget = String(data.get("budgetUsd") ?? "").trim();
+    setBusy("campaign-create");
+    setError(null);
+    try {
+      await browserApi.post(`/companies/${companyId}/campaigns`, {
+        name: String(data.get("campaignName") ?? "").trim(),
+        channel: String(data.get("channel") ?? "email") as CampaignChannel,
+        objective: String(data.get("objective") ?? "").trim() || undefined,
+        audience: String(data.get("audience") ?? "").trim() || undefined,
+        budgetUsd: rawBudget ? Number(rawBudget) : undefined,
+      });
+      form.reset();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Campaign could not be created");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updateCampaign(id: string, status: CampaignStatus) {
+    setBusy(`campaign-${id}`);
+    setError(null);
+    try {
+      await browserApi.patch(`/companies/${companyId}/campaigns/${id}`, { status });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Campaign could not be updated");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader eyebrow="Growth" title="Customer pipeline" description="One place for prospects, pipeline value, and the outreach Steward has actually sent." />
@@ -81,6 +126,54 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         <div className="card p-4"><div className="eyebrow">Won value</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.won)}</div></div>
         <div className="card p-4"><div className="eyebrow">Recent outreach</div><div className="tnum mt-2 text-2xl font-semibold">{summary.outbound}</div></div>
       </div>
+
+      <section className="card overflow-hidden">
+        <div className="border-b border-line px-4 py-4 sm:px-5">
+          <div className="eyebrow">Campaigns</div>
+          <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">Plan the experiment, then let policy gate the sends</h2>
+              <p className="mt-1 text-xs text-muted">Campaign records hold the objective, audience, budget context, lifecycle and delivery evidence. Creating a campaign does not publish anything.</p>
+            </div>
+          </div>
+        </div>
+        <form onSubmit={createCampaign} className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-6 sm:p-5">
+          <div className="lg:col-span-2"><label className="label">Campaign name</label><input name="campaignName" aria-label="Campaign name" className="input" placeholder="Design partner outreach" required maxLength={200} /></div>
+          <div><label className="label">Channel</label><select name="channel" aria-label="Campaign channel" className="input"><option value="email">Email</option><option value="social">Social</option><option value="ads">Ads plan</option></select></div>
+          <div><label className="label">Budget context</label><input name="budgetUsd" aria-label="Campaign budget USD" className="input tnum" type="number" min={0} step="0.01" placeholder="$" /></div>
+          <div className="lg:col-span-2"><label className="label">Audience</label><input name="audience" aria-label="Campaign audience" className="input" placeholder="20 Shopify operators with 5–20 employees" maxLength={2000} /></div>
+          <div className="sm:col-span-2 lg:col-span-5"><label className="label">Objective</label><input name="objective" aria-label="Campaign objective" className="input" placeholder="Book 5 discovery calls and learn the top objection" maxLength={2000} /></div>
+          <button className="btn btn-primary min-h-10 self-end" disabled={busy !== null}>{busy === "campaign-create" ? "Creating…" : "Create campaign"}</button>
+        </form>
+        {initial.campaigns.length === 0 ? (
+          <div className="p-5 text-sm text-muted">No campaigns yet. Create one here or let the Growth agent create an evidence-backed experiment.</div>
+        ) : (
+          <div className="divide-y divide-line">
+            {initial.campaigns.map((campaign) => {
+              const sent = campaign.delivery.sent ?? 0;
+              const failed = campaign.delivery.failed ?? 0;
+              const budget = typeof campaign.config.budgetUsd === "number" ? campaign.config.budgetUsd : null;
+              return (
+                <article key={campaign.id} className="grid gap-3 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)_auto]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2"><Pill tone={campaign.status === "active" ? "ok" : campaign.status === "paused" ? "warn" : campaign.status === "cancelled" ? "danger" : "neutral"}>{campaign.status}</Pill><span className="text-xs font-medium uppercase tracking-wide text-muted">{campaign.channel}</span></div>
+                    <div className="mt-1 truncate text-sm font-semibold">{campaign.name}</div>
+                    <div className="mt-1 text-xs text-muted">{budget === null ? "No campaign budget set" : `${money(budget)} budget context`}</div>
+                  </div>
+                  <div className="min-w-0 text-xs leading-5 text-muted">
+                    {campaign.config.objective ? <div><span className="font-medium text-fg-2">Objective:</span> {String(campaign.config.objective)}</div> : null}
+                    {campaign.config.audience ? <div><span className="font-medium text-fg-2">Audience:</span> {String(campaign.config.audience)}</div> : null}
+                    <div className="mt-1"><span className="tnum font-medium text-fg-2">{sent}</span> sent · <span className="tnum font-medium text-fg-2">{failed}</span> failed</div>
+                  </div>
+                  <select aria-label={`Status for campaign ${campaign.name}`} className="input h-9 w-auto min-w-32 py-1.5 text-xs" value={campaign.status} disabled={busy === `campaign-${campaign.id}`} onChange={(e) => updateCampaign(campaign.id, e.target.value as CampaignStatus)}>
+                    {CAMPAIGN_STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <form onSubmit={createLead} className="card p-4 sm:p-5">
         <div className="flex flex-wrap items-end gap-3">

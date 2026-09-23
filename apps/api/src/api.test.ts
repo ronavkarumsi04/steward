@@ -316,11 +316,22 @@ describe("growth pipeline", () => {
     const updated = await a.api.json<{ lead: { stage: string; valueUsd: string } }>("PATCH", `/companies/${companyId}/leads/${created.body.lead.id}`, { stage: "interested", valueUsd: 1500 });
     expect(updated.body.lead.stage).toBe("interested");
     expect(Number(updated.body.lead.valueUsd)).toBe(1500);
-    const growth = await a.api.json<{ leads: Array<{ id: string; contactName: string; contactCompany: string; source: string }> }>("GET", `/companies/${companyId}/growth`);
+
+    const createdCampaign = await a.api.json<{ campaign: { id: string; status: string; channel: string } }>("POST", `/companies/${companyId}/campaigns`, { name: "Design partner outreach", channel: "email", objective: "Book five discovery calls", audience: "Independent retailers", budgetUsd: 250 });
+    expect(createdCampaign.status).toBe(201);
+    expect(createdCampaign.body.campaign).toMatchObject({ status: "draft", channel: "email" });
+    const campaignId = createdCampaign.body.campaign.id;
+    const campaignUpdated = await a.api.json<{ campaign: { status: string; config: { budgetUsd: number } } }>("PATCH", `/companies/${companyId}/campaigns/${campaignId}`, { status: "active", budgetUsd: 300 });
+    expect(campaignUpdated.body.campaign.status).toBe("active");
+    expect(campaignUpdated.body.campaign.config.budgetUsd).toBe(300);
+
+    const growth = await a.api.json<{ leads: Array<{ id: string; contactName: string; contactCompany: string; source: string }>; campaigns: Array<{ id: string; name: string; status: string; config: { objective: string } }> }>("GET", `/companies/${companyId}/growth`);
     expect(growth.body.leads).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.lead.id, contactName: "Ada", contactCompany: "Analytical Engines", source: "research" })]));
+    expect(growth.body.campaigns).toEqual(expect.arrayContaining([expect.objectContaining({ id: campaignId, name: "Design partner outreach", status: "active", config: expect.objectContaining({ objective: "Book five discovery calls" }) })]));
 
     const b = await register("GrowthB");
     expect((await b.api.json("GET", `/companies/${companyId}/growth`)).status).toBe(404);
+    expect((await b.api.json("PATCH", `/companies/${companyId}/campaigns/${campaignId}`, { status: "completed" })).status).toBe(404);
   });
 });
 

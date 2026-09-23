@@ -7,7 +7,7 @@ import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, ty
 import type { WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
-import { LEAD_STAGES, type EventBus } from "@steward/core";
+import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, LEAD_STAGES, type EventBus } from "@steward/core";
 
 const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
 const limit = z.coerce.number().int().min(1).max(200).optional();
@@ -156,8 +156,8 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/growth", tag: "growth", summary: "Lead pipeline and recent outbound activity", query: z.object({ stage: z.enum(LEAD_STAGES).optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const growth = c.get("deps").services.growth;
-    const [leads, outbound] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30)]);
-    return c.json({ leads, outbound });
+    const [leads, outbound, campaigns] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope)]);
+    return c.json({ leads, outbound, campaigns });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/leads", tag: "growth", summary: "Create a lead/contact in the company pipeline", body: z.object({ title: z.string().min(1).max(300), stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional(), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
@@ -168,6 +168,16 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const lead = await c.get("deps").services.growth.updateLead(scope, param(c, "id"), body);
     if (!lead) throw new HttpError(404, "not_found", "Lead not found");
     return c.json({ lead });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/campaigns", tag: "growth", summary: "Create a tracked growth campaign plan", body: z.object({ name: z.string().min(1).max(200), channel: z.enum(CAMPAIGN_CHANNELS), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ campaign: await c.get("deps").services.growth.createCampaign(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/campaigns/:id", tag: "growth", summary: "Update a campaign plan or lifecycle status", body: z.object({ status: z.enum(CAMPAIGN_STATUSES).optional(), name: z.string().min(1).max(200).optional(), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).nullable().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const campaign = await c.get("deps").services.growth.updateCampaign(scope, param(c, "id"), body);
+    if (!campaign) throw new HttpError(404, "not_found", "Campaign not found");
+    return c.json({ campaign });
   });
 
   // ---- business pulse ----

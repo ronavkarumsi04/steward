@@ -182,6 +182,11 @@ const companyProfileUpdate = defineTool({
 
 // ---------- Outbound communication ----------
 
+async function validCampaign(s: AgentServices, campaignId?: string) {
+  if (!campaignId) return true;
+  return Boolean(await s.growth.getCampaign(s.scope, campaignId));
+}
+
 async function checkOutbound(s: AgentServices, channel: string, recipient: string) {
   const [sup] = await s.db.select({ id: suppressionList.id }).from(suppressionList).where(and(eq(suppressionList.companyId, s.scope.companyId!), eq(suppressionList.channel, channel), sql`lower(${suppressionList.address}) = lower(${recipient})`)).limit(1);
   if (sup) return `${recipient} is on the suppression list.`;
@@ -194,7 +199,7 @@ async function checkOutbound(s: AgentServices, channel: string, recipient: strin
 const emailSend = defineTool({
   name: "email.send",
   description: "Send an email through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Externally visible; subject to approval policy.",
-  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional() }),
+  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional(), campaignId: z.string().optional() }),
   risk: "HIGH",
   dimension: "email_send",
   sideEffects: "external",
@@ -208,22 +213,23 @@ const emailSend = defineTool({
     const s = svc(ctx);
     const integ = (await Promise.all(["resend", "postmark", "sendgrid", "smtp"].map((t) => s.integrations.findByType(s.scope, t)))).find(Boolean);
     if (!integ) return fail("No email provider is connected. Connect Resend, Postmark, SendGrid or SMTP in Settings → Integrations.");
+    if (!(await validCampaign(s, input.campaignId))) return fail("Campaign not found in this company.");
     const blocked = await checkOutbound(s, "email", input.to);
     if (blocked) return fail(blocked);
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
     const from = input.from ?? (integ.config.fromAddress as string | undefined) ?? secret.fields?.fromAddress ?? s.emailFrom;
     if (!from) return fail("No sender address configured for the email integration.");
-    const key = idempotencyKey("email", ctx.runId, input.to, input.subject);
+    const key = idempotencyKey("email", ctx.runId, input.campaignId, input.to, input.subject);
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Email already sent (id ${existing.externalId}).` };
     const provider = emailProviderFor(integ.type, secret);
     try {
       const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" } });
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
       return { ok: true, content: `Email sent to ${input.to} via ${integ.type} (id ${res.id}).`, data: res };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "failed", runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "failed", campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
       return fail(`Email send failed: ${msg}`);
     }
   },
@@ -232,39 +238,100 @@ const emailSend = defineTool({
 const slackPost = defineTool({
   name: "slack.post",
   description: "Post a message to a Slack channel via the connected Slack workspace.",
-  input: z.object({ channel: z.string().min(1), text: z.string().min(1).max(4000) }),
+  input: z.object({ channel: z.string().min(1), text: z.string().min(1).max(4000), campaignId: z.string().optional() }),
   risk: "MEDIUM",
   dimension: "customer_comms",
   sideEffects: "external",
-  execute: async ({ channel, text }, ctx) => {
+  execute: async ({ channel, text, campaignId }, ctx) => {
     const s = svc(ctx);
     const integ = await s.integrations.findByType(s.scope, "slack");
     if (!integ) return fail("Slack is not connected.");
+    if (!(await validCampaign(s, campaignId))) return fail("Campaign not found in this company.");
+    const key = idempotencyKey("slack", ctx.runId, campaignId, channel, text);
+    const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
+    if (existing?.status === "sent") return { ok: true, content: `Already posted to ${channel} (id ${existing.externalId}).` };
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
-    const res = await new SlackClient(secret).postMessage({ channel, text });
-    return { ok: true, content: `Posted to ${channel}.`, data: res };
+    try {
+      const res = await new SlackClient(secret).postMessage({ channel, text });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "slack", provider: "slack", recipient: channel, body: text, status: "sent", externalId: res.ts, campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      return { ok: true, content: `Posted to ${channel} (id ${res.ts}).`, data: res };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "slack", provider: "slack", recipient: channel, body: text, status: "failed", campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      return fail(`Slack post failed: ${msg}`);
+    }
   },
 });
 
 const socialPublish = defineTool({
   name: "social.publish",
   description: "Publish a post to a connected social account (X or LinkedIn). Public and irreversible; requires approval by default.",
-  input: z.object({ network: z.enum(["x", "linkedin"]), text: z.string().min(1).max(3000) }),
+  input: z.object({ network: z.enum(["x", "linkedin"]), text: z.string().min(1).max(3000), campaignId: z.string().optional() }),
   risk: "HIGH",
   dimension: "social_publish",
   sideEffects: "external",
   preflight: async ({ network, text }) => ({ summary: `Publish to ${network}: "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"`, affectedSystem: network, alternatives: ["Save as a draft document", "Schedule for later review"] }),
-  execute: async ({ network, text }, ctx) => {
+  execute: async ({ network, text, campaignId }, ctx) => {
     const s = svc(ctx);
     const integ = await s.integrations.findByType(s.scope, network);
     if (!integ) return fail(`${network} is not connected.`);
+    if (!(await validCampaign(s, campaignId))) return fail("Campaign not found in this company.");
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
-    const key = idempotencyKey("social", ctx.runId, network, text);
+    const key = idempotencyKey("social", ctx.runId, campaignId, network, text);
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Already published (id ${existing.externalId}).` };
-    const res = network === "x" ? await new XClient(secret).publish({ text }) : await new LinkedInClient(secret).publish({ text });
-    await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "sent", externalId: res.id, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
-    return { ok: true, content: `Published to ${network} (id ${res.id}).`, data: res };
+    try {
+      const res = network === "x" ? await new XClient(secret).publish({ text }) : await new LinkedInClient(secret).publish({ text });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "sent", externalId: res.id, campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      return { ok: true, content: `Published to ${network} (id ${res.id}).`, data: res };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "failed", campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      return fail(`${network} publish failed: ${msg}`);
+    }
+  },
+});
+
+const CampaignChannel = z.enum(["email", "social", "ads"]);
+const CampaignStatus = z.enum(["draft", "active", "paused", "completed", "cancelled"]);
+
+const campaignList = defineTool({
+  name: "campaign.list",
+  description: "List growth campaigns with objectives, status, budget context, and persisted delivery counts.",
+  input: z.object({}),
+  risk: "LOW",
+  idempotent: true,
+  execute: async (_input, ctx) => {
+    const s = svc(ctx);
+    const rows = await s.growth.listCampaigns(s.scope);
+    return { ok: true, content: rows.length ? JSON.stringify(rows, null, 2) : "No campaigns yet.", data: rows };
+  },
+});
+
+const campaignCreate = defineTool({
+  name: "campaign.create",
+  description: "Create a campaign plan in Steward. This does not send or publish anything by itself.",
+  input: z.object({ name: z.string().min(1).max(200), channel: CampaignChannel, objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const row = await s.growth.createCampaign(s.scope, input);
+    return { ok: true, content: `Created ${row.channel} campaign ${row.name} in draft. Use its id ${row.id} when sending campaign-linked messages.`, data: row };
+  },
+});
+
+const campaignUpdate = defineTool({
+  name: "campaign.update",
+  description: "Update a campaign's plan or lifecycle status. External sends remain separately policy-gated.",
+  input: z.object({ id: z.string().min(1), status: CampaignStatus.optional(), name: z.string().min(1).max(200).optional(), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).nullable().optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => {
+    const s = svc(ctx);
+    const row = await s.growth.updateCampaign(s.scope, id, patch);
+    if (!row) return fail("Campaign not found.");
+    return { ok: true, content: `Updated campaign ${row.name} → ${row.status}.`, data: row };
   },
 });
 
@@ -734,18 +801,18 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
 
 /** Default tool allowlists per agent kind; company operators can override per agent. */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "lead.list", "web.*", "slack.post"],
+  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
   research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*"],
   engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "lead.*", "web.*", "social.publish", "email.send"],
-  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "lead.*", "web.*", "email.send"],
+  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "social.publish", "email.send"],
+  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "email.send"],
   support: ["memory.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
   finance: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
   operations: ["memory.*", "document.*", "task.*", "company.profile", "web.*", "slack.post"],

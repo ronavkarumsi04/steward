@@ -36,10 +36,11 @@ describe("operator capability surface", () => {
     expect(finance).toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("deploy.create_project");
-    expect(orchestrator).toContain("lead.list");
+    expect(orchestrator).toEqual(expect.arrayContaining(["lead.list", "campaign.list"]));
     const marketing = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.marketing ?? [] }).map((t) => t.manifest.name);
     const sales = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.sales ?? [] }).map((t) => t.manifest.name);
-    expect(marketing).toEqual(expect.arrayContaining(["lead.list", "lead.create", "lead.update"]));
-    expect(sales).toEqual(expect.arrayContaining(["lead.list", "lead.create", "lead.update"]));
+    expect(marketing).toEqual(expect.arrayContaining(["lead.list", "lead.create", "lead.update", "campaign.list", "campaign.create", "campaign.update"]));
+    expect(sales).toEqual(expect.arrayContaining(["lead.list", "lead.create", "lead.update", "campaign.list"]));
+    expect(sales).not.toContain("campaign.create");
   });
 });
