@@ -463,6 +463,49 @@ const deployList = defineTool({
   },
 });
 
+const deployCreateProject = defineTool({
+  name: "deploy.create_project",
+  description: "Create a deployable Vercel or Render project, optionally linked to a GitHub repository. May create billable infrastructure and is policy-gated.",
+  input: z.object({
+    name: z.string().min(1).max(100),
+    repo: repoRef.optional(),
+    branch: z.string().min(1).max(200).optional(),
+    framework: z.string().max(80).optional(),
+    rootDirectory: z.string().max(500).optional(),
+  }),
+  risk: "MEDIUM",
+  dimension: "infra_spend",
+  sideEffects: "external",
+  costCategory: "infra",
+  preflight: async ({ name, repo }) => ({
+    summary: `Create deployment project ${name}${repo ? ` linked to ${repo}` : ""}`,
+    affectedSystem: "deployment provider",
+    risk: "MEDIUM",
+    alternatives: ["Use an existing deployment project", "Prepare the repository without provisioning hosting"],
+  }),
+  execute: async ({ name, repo, branch, framework, rootDirectory }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected. Connect Vercel or Render first.");
+    if (d.type === "render" && !repo) return fail("Render project creation requires a GitHub repository (owner/repo).");
+    const project = await d.provider.createProject({
+      name,
+      repo: repo ? { provider: "github" as const, fullName: repo, branch } : undefined,
+      framework,
+      rootDirectory,
+    });
+    await s.runs.addArtifact(s.scope, {
+      runId: ctx.runId,
+      taskId: ctx.taskId,
+      kind: "deployment_project",
+      title: `${name} deployment project`,
+      url: project.url,
+      metadata: { provider: d.type, projectId: project.id, repo: repo ?? null, branch: branch ?? null },
+    });
+    return { ok: true, content: `Created ${d.type} project ${project.name} (id ${project.id})${project.url ? ` → ${project.url}` : ""}.`, data: project };
+  },
+});
+
 const deployCreate = defineTool({
   name: "deploy.create_deployment",
   description: "Trigger a deployment for a project. production=true deploys to production (HIGH risk, approval by default); otherwise a preview.",
@@ -516,11 +559,70 @@ const stripeSummary = defineTool({
   },
 });
 
+const stripeCreateOffer = defineTool({
+  name: "stripe.create_offer",
+  description: "Create a Stripe product with a price and a hosted checkout link. This changes the external payment account and is approval-gated by the payments policy.",
+  input: z.object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    amountUsd: z.number().positive().max(1_000_000),
+    currency: z.string().regex(/^[a-zA-Z]{3}$/).default("usd"),
+    interval: z.enum(["month", "year"]).optional(),
+    successUrl: z.string().url(),
+    cancelUrl: z.string().url(),
+    quantity: z.number().int().min(1).max(1000).default(1),
+  }),
+  risk: "HIGH",
+  dimension: "payments",
+  sideEffects: "external",
+  costCategory: "payments",
+  preflight: async ({ name, amountUsd, currency, interval }) => ({
+    summary: `Create Stripe offer ${name} for ${amountUsd.toFixed(2)} ${currency.toUpperCase()}${interval ? `/${interval}` : ""} and generate a checkout link`,
+    affectedSystem: "stripe",
+    risk: "HIGH",
+    alternatives: ["Save the proposed offer and pricing as a document", "Create the checkout manually in Stripe"],
+  }),
+  execute: async ({ name, description, amountUsd, currency, interval, successUrl, cancelUrl, quantity }, ctx) => {
+    const s = svc(ctx);
+    const integ = await s.integrations.findByType(s.scope, "stripe");
+    if (!integ) return fail("Stripe is not connected. Connect Stripe before creating a paid offer.");
+    const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
+    const client = new StripeClient(secret);
+    const unitAmountMinor = Math.round(amountUsd * 100);
+    const baseKey = idempotencyKey("stripe-offer", ctx.runId, name, unitAmountMinor, currency.toLowerCase(), interval);
+    const product = await client.createProduct({ name, description, unitAmountMinor, currency: currency.toLowerCase(), interval }, `${baseKey}-product`);
+    const checkout = await client.createCheckoutSession({
+      priceId: product.default_price,
+      successUrl,
+      cancelUrl,
+      mode: interval ? "subscription" : "payment",
+      quantity,
+    }, `${baseKey}-checkout`);
+    await s.runs.addArtifact(s.scope, {
+      runId: ctx.runId,
+      taskId: ctx.taskId,
+      kind: "checkout",
+      title: `${name} checkout`,
+      url: checkout.url,
+      metadata: {
+        provider: "stripe",
+        productId: product.id,
+        priceId: product.default_price,
+        checkoutSessionId: checkout.id,
+        amountUsd,
+        currency: currency.toLowerCase(),
+        interval: interval ?? null,
+      },
+    });
+    return { ok: true, content: `Created Stripe offer ${name} and checkout link → ${checkout.url}`, data: { product, checkout } };
+  },
+});
+
 // ---------- Registry ----------
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreate, deployStatus, stripeSummary] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }

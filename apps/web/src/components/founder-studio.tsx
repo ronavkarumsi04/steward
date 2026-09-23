@@ -30,10 +30,13 @@ interface StudioStats {
   recentRuns: number;
 }
 
-const AUTOPILOT_NAME = "Steward Autopilot";
-const AUTOPILOT_CRON = "0 9 * * *";
-const AUTOPILOT_INSTRUCTION =
-  "Act as the company operator. Review current goals, recent runs, approvals, documents, connected integrations, budgets, and business signals. Choose the single highest-leverage next action that is allowed by policy, execute useful work, leave durable artifacts, and create follow-up tasks when needed. Prefer measurable customer or revenue progress over busywork.";
+const AUTOPILOT_PREFIX = "Steward Autopilot · ";
+
+const AUTOPILOT_CYCLES = [
+  { kind: "engineering", name: "Build", cron: "0 9 * * *", instruction: "AUTOPILOT BUILD cycle: review company goals, recent work, customer evidence, code, deployment state, and open product gaps. Choose the single highest-leverage shippable product improvement, execute it with connected engineering tools, verify it, and leave durable artifacts and follow-up tasks. Do not create busywork." },
+  { kind: "marketing", name: "Grow", cron: "0 11 * * *", instruction: "AUTOPILOT GROW cycle: review the target customer, offer, product state, channels, prior growth work, and measurable signals. Choose one bounded distribution or customer-learning experiment, create the assets, execute allowed outreach/publishing, and record what should be measured next. Never manufacture traction." },
+  { kind: "finance", name: "Earn", cron: "0 13 * * *", instruction: "AUTOPILOT EARN cycle: review the offer, pricing, payment state, revenue signals, and current product. Improve the path from real demand to payment using connected financial tools when appropriate, subject to policy and approvals. Never fabricate revenue, customers, or orders." },
+] as const;
 
 const LANES = [
   {
@@ -81,17 +84,20 @@ export function FounderStudio({
 }) {
   const router = useRouter();
   const operator = useMemo(() => agents.find((a) => a.enabled && a.kind === "orchestrator") ?? agents.find((a) => a.enabled), [agents]);
-  const autopilot = schedules.find((s) => s.name === AUTOPILOT_NAME);
+  const agentByKind = useMemo(() => new Map(agents.filter((a) => a.enabled).map((a) => [a.kind, a])), [agents]);
+  const autopilotSchedules = schedules.filter((s) => s.name.startsWith(AUTOPILOT_PREFIX));
+  const autopilotEnabled = autopilotSchedules.some((s) => s.enabled);
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function launch(text: string, key = "operator") {
-    if (!operator || !text.trim()) return;
+  async function launch(text: string, key = "operator", preferredKind?: string) {
+    const agent = (preferredKind ? agentByKind.get(preferredKind) : undefined) ?? operator;
+    if (!agent || !text.trim()) return;
     setBusy(key);
     setError(null);
     try {
-      const { run } = await browserApi.post<{ run: Run }>(`/companies/${companyId}/runs`, { agentId: operator.id, instruction: text.trim() });
+      const { run } = await browserApi.post<{ run: Run }>(`/companies/${companyId}/runs`, { agentId: agent.id, instruction: text.trim() });
       setInstruction("");
       router.push(`/app/c/${companyId}/runs/${run.id}`);
     } catch (err) {
@@ -111,16 +117,21 @@ export function FounderStudio({
     setBusy("autopilot");
     setError(null);
     try {
-      if (autopilot) {
-        await browserApi.patch(`/companies/${companyId}/schedules/${autopilot.id}`, { enabled: !autopilot.enabled });
+      if (autopilotSchedules.length) {
+        const enabled = !autopilotEnabled;
+        await Promise.all(autopilotSchedules.map((s) => browserApi.patch(`/companies/${companyId}/schedules/${s.id}`, { enabled })));
       } else {
-        await browserApi.post(`/companies/${companyId}/schedules`, {
-          agentId: operator.id,
-          name: AUTOPILOT_NAME,
-          cron: AUTOPILOT_CRON,
-          timezone: timezone || "UTC",
-          instruction: AUTOPILOT_INSTRUCTION,
+        const cycles = AUTOPILOT_CYCLES.flatMap((cycle) => {
+          const agent = agentByKind.get(cycle.kind) ?? operator;
+          return agent ? [{ cycle, agent }] : [];
         });
+        await Promise.all(cycles.map(({ cycle, agent }) => browserApi.post(`/companies/${companyId}/schedules`, {
+          agentId: agent.id,
+          name: `${AUTOPILOT_PREFIX}${cycle.name}`,
+          cron: cycle.cron,
+          timezone: timezone || "UTC",
+          instruction: cycle.instruction,
+        })));
       }
       router.refresh();
     } catch (err) {
@@ -140,10 +151,10 @@ export function FounderStudio({
             <p className="mt-1.5 text-sm leading-6 text-muted">Tell Steward the outcome. It will plan the work, use the specialists and connected tools, stop for approvals when policy requires it, and leave the work inspectable.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Pill tone={autopilot?.enabled ? "ok" : "neutral"}>{autopilot?.enabled ? "Autopilot on" : "Autopilot off"}</Pill>
+            <Pill tone={autopilotEnabled ? "ok" : "neutral"}>{autopilotEnabled ? "Autopilot on" : "Autopilot off"}</Pill>
             <button className="btn btn-sm" onClick={toggleAutopilot} disabled={busy !== null || !operator}>
               {busy === "autopilot" ? <span className="spinner" aria-hidden="true" /> : <Icon.Sparkle size={14} />}
-              {autopilot?.enabled ? "Pause Autopilot" : "Turn on Autopilot"}
+              {autopilotEnabled ? "Pause Autopilot" : "Turn on Autopilot"}
             </button>
           </div>
         </div>
@@ -183,7 +194,7 @@ export function FounderStudio({
                 <span className="tnum text-xs text-muted">{signal}</span>
               </div>
               <p className="mt-2 min-h-12 text-sm leading-6 text-muted">{lane.description}</p>
-              <button className="btn mt-4 w-full justify-between" onClick={() => launch(lane.prompt, lane.id)} disabled={busy !== null || !operator}>
+              <button className="btn mt-4 w-full justify-between" onClick={() => launch(lane.prompt, lane.id, lane.id === "build" ? "engineering" : lane.id === "grow" ? "marketing" : "finance")} disabled={busy !== null || !operator}>
                 <span>{busy === lane.id ? "Starting…" : `Work on ${lane.title}`}</span>
                 {busy === lane.id ? <span className="spinner" aria-hidden="true" /> : <Icon.ArrowRight size={15} />}
               </button>
@@ -199,7 +210,7 @@ export function FounderStudio({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel-2/50 px-5 py-3 text-xs text-muted sm:px-6">
         <span>{stats.pendingApprovals ? `${stats.pendingApprovals} decision${stats.pendingApprovals === 1 ? "" : "s"} waiting for you` : "No approvals blocking work"} · {stats.recentRuns} recent runs</span>
-        <span>Autopilot checks daily at 09:00 {timezone || "UTC"}; policies, budgets, quiet hours and outbound pause still apply.</span>
+        <span>Autopilot runs Build, Grow and Earn specialist cycles daily in {timezone || "UTC"}; policies, budgets, quiet hours and outbound pause still apply.</span>
       </div>
     </section>
   );
