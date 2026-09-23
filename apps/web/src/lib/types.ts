@@ -329,3 +329,18 @@ export interface UsageRow {
   outputTokens: number;
   errors: number;
 }
+
+export interface BusinessPulse {
+  windowDays: number;
+  payments: { connected: boolean; available: boolean; provider: "stripe" | null };
+  balance: {
+    available: Array<{ amount: number; currency: string }>;
+    pending: Array<{ amount: number; currency: string }>;
+  } | null;
+  revenue: {
+    chargesCount: number;
+    grossByCurrencyMinor: Record<string, number>;
+    activeSubscriptions: number;
+    newCustomers: number;
+  } | null;
+}

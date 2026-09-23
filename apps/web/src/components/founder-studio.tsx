@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Agent, Run } from "@/lib/types";
+import type { Agent, BusinessPulse, Run } from "@/lib/types";
 import { Icon } from "./icons";
 import { Pill } from "./ui";
 
@@ -25,6 +25,9 @@ interface StudioStats {
   documents: number;
   connectedIntegrations: number;
   stripeConnected: boolean;
+  deploymentConnected: boolean;
+  growthConnected: boolean;
+  liveProductUrl: string | null;
   activeGoals: number;
   pendingApprovals: number;
   recentRuns: number;
@@ -65,6 +68,21 @@ const LANES = [
   },
 ] as const;
 
+function moneyMinor(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+  } catch {
+    return `${currency.toUpperCase()} ${(amount / 100).toFixed(2)}`;
+  }
+}
+
+function revenueLabel(pulse: BusinessPulse) {
+  if (!pulse.payments.available || !pulse.revenue) return "—";
+  const entries = Object.entries(pulse.revenue.grossByCurrencyMinor);
+  if (!entries.length) return "0.00";
+  return entries.slice(0, 2).map(([currency, amount]) => moneyMinor(amount, currency)).join(" · ");
+}
+
 export function FounderStudio({
   companyId,
   organizationId,
@@ -90,6 +108,23 @@ export function FounderStudio({
   const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [businessPulse, setBusinessPulse] = useState<BusinessPulse>({
+    windowDays: 30,
+    payments: { connected: stats.stripeConnected, available: false, provider: stats.stripeConnected ? "stripe" : null },
+    balance: null,
+    revenue: null,
+  });
+  const [pulseLoading, setPulseLoading] = useState(stats.stripeConnected);
+
+  useEffect(() => {
+    let active = true;
+    setPulseLoading(stats.stripeConnected);
+    browserApi.get<BusinessPulse>(`/companies/${companyId}/business/pulse?days=30`)
+      .then((pulse) => { if (active) setBusinessPulse(pulse); })
+      .catch(() => { /* Business metrics are non-critical; keep the Studio usable. */ })
+      .finally(() => { if (active) setPulseLoading(false); });
+    return () => { active = false; };
+  }, [companyId, stats.stripeConnected]);
 
   async function launch(text: string, key = "operator", preferredKind?: string) {
     const agent = (preferredKind ? agentByKind.get(preferredKind) : undefined) ?? operator;
@@ -206,6 +241,55 @@ export function FounderStudio({
             </article>
           );
         })}
+      </div>
+
+      <div className="border-t border-line bg-panel px-5 py-5 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="eyebrow">Business pulse</div>
+            <h3 className="mt-1 text-lg font-semibold tracking-tight">What exists outside Steward</h3>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Pill tone={stats.liveProductUrl ? "ok" : stats.deploymentConnected ? "accent" : "neutral"}>{stats.liveProductUrl ? "Product live" : stats.deploymentConnected ? "Hosting ready" : "Hosting missing"}</Pill>
+            <Pill tone={stats.growthConnected ? "ok" : "neutral"}>{stats.growthConnected ? "Growth channel ready" : "Growth channel missing"}</Pill>
+            <Pill tone={businessPulse.payments.connected ? "ok" : "neutral"}>{businessPulse.payments.connected ? "Payments connected" : "Payments missing"}</Pill>
+            <Pill tone={autopilotEnabled ? "ok" : "neutral"}>{autopilotEnabled ? "Autopilot active" : "Autopilot paused"}</Pill>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="card-inset min-w-0 p-4">
+            <div className="eyebrow">Live product</div>
+            {stats.liveProductUrl ? (
+              <a className="mt-2 block truncate text-sm font-semibold text-accent hover:underline" href={stats.liveProductUrl} target="_blank" rel="noreferrer">Open live product ↗</a>
+            ) : (
+              <p className="mt-2 text-sm font-semibold">Not live yet</p>
+            )}
+          </div>
+          <div className="card-inset p-4">
+            <div className="eyebrow">Revenue · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : revenueLabel(businessPulse)}</div>
+          </div>
+          <div className="card-inset p-4">
+            <div className="eyebrow">Orders · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.chargesCount ?? 0 : "—"}</div>
+          </div>
+          <div className="card-inset p-4">
+            <div className="eyebrow">Subscriptions</div>
+            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.activeSubscriptions ?? 0 : "—"}</div>
+          </div>
+          <div className="card-inset p-4">
+            <div className="eyebrow">New customers · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.newCustomers ?? 0 : "—"}</div>
+          </div>
+        </div>
+
+        {!businessPulse.payments.connected && (
+          <p className="mt-3 text-xs text-muted">Connect Stripe in <Link className="font-medium text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>Integrations</Link> to turn Earn into a real checkout + revenue loop.</p>
+        )}
+        {businessPulse.payments.connected && !businessPulse.payments.available && !pulseLoading && (
+          <p className="mt-3 text-xs text-warn">Stripe is connected, but live business metrics are temporarily unavailable. Steward can continue working.</p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel-2/50 px-5 py-3 text-xs text-muted sm:px-6">

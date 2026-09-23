@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AgentServiceFactory } from "@steward/agents";
+import { StripeClient } from "@steward/integrations";
 import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
@@ -149,6 +150,23 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
     if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending");
     return c.json({ approval: a });
+  });
+
+  // ---- business pulse ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/business/pulse", tag: "business", summary: "Aggregated business outcomes from connected systems", query: z.object({ days: z.coerce.number().int().min(1).max(90).default(30) }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const s = c.get("deps").services;
+    const stripe = await s.integrations.findByType(scope, "stripe");
+    if (!stripe) return c.json({ windowDays: query.days, payments: { connected: false, available: false, provider: null }, balance: null, revenue: null });
+    try {
+      const { secret } = await s.integrations.resolveSecret(scope, stripe.id);
+      const client = new StripeClient(secret);
+      const [balance, revenue] = await Promise.all([client.balance(), client.revenueSummary(Math.floor(Date.now() / 1000) - query.days * 86_400)]);
+      return c.json({ windowDays: query.days, payments: { connected: true, available: true, provider: "stripe" }, balance, revenue });
+    } catch {
+      // The Studio must remain usable when an external metrics provider is degraded.
+      return c.json({ windowDays: query.days, payments: { connected: true, available: false, provider: "stripe" }, balance: null, revenue: null });
+    }
   });
 
   // ---- events ----

@@ -283,6 +283,16 @@ describe("providers", () => {
     expect((await api.json("GET", `/providers/types`)).status).toBe(200);
   });
 
+  d("business pulse is safe before payment integrations are connected", async () => {
+    const { api, orgId } = await register();
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Pulse Labs", autonomyLevel: 1, profile: { description: "x", stage: "idea" } });
+    const pulse = await api.json<{ payments: { connected: boolean; available: boolean; provider: string | null }; revenue: unknown }>("GET", `/companies/${co.body.company.id}/business/pulse?days=30`);
+    expect(pulse.status).toBe(200);
+    expect(pulse.body.payments).toEqual({ connected: false, available: false, provider: null });
+    expect(pulse.body.revenue).toBeNull();
+    expect(JSON.stringify(pulse.body)).not.toMatch(/secret|token|credential/i);
+  });
+
   d("routing policies are per company and round-trip", async () => {
     const { api, orgId } = await register();
     const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Routed", autonomyLevel: 1, profile: { description: "x", stage: "idea" } });

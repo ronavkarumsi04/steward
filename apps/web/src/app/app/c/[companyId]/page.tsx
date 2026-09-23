@@ -31,7 +31,13 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const openTasks = (taskCounts.todo ?? 0) + (taskCounts.in_progress ?? 0) + (taskCounts.blocked ?? 0) + (taskCounts.waiting_approval ?? 0) + (taskCounts.review ?? 0);
   const aiBudget = budgets.find((b) => b.category === "ai") ?? budgets.find((b) => b.category === "total");
   const connectedIntegrations = integrations.integrations.filter((i) => i.status === "connected");
-  const stripeConnected = connectedIntegrations.some((i) => i.type === "stripe");
+  const connectedTypes = new Set(connectedIntegrations.map((i) => i.type));
+  const stripeConnected = connectedTypes.has("stripe");
+  const deploymentConnected = connectedTypes.has("vercel") || connectedTypes.has("render");
+  const growthConnected = ["resend", "postmark", "sendgrid", "smtp", "x", "linkedin", "google", "slack"].some((type) => connectedTypes.has(type));
+  const liveProduct = [...artifacts.artifacts]
+    .filter((a) => (a.kind === "deployment" || a.kind === "deployment_project") && a.url)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   const base = `/app/c/${companyId}`;
 
   return (
@@ -78,6 +84,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
           documents: documents.documents.length,
           connectedIntegrations: connectedIntegrations.length,
           stripeConnected,
+          deploymentConnected,
+          growthConnected,
+          liveProductUrl: liveProduct?.url ?? null,
           activeGoals: goals.filter((g) => g.status === "active").length,
           pendingApprovals: overview.pendingApprovals,
           recentRuns: runs.runs.length,
