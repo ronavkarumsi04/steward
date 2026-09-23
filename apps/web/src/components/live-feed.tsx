@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useLiveEvents } from "@/lib/use-events";
 import type { StewardEvent } from "@/lib/types";
+import { actorLabel, summarizeEvent } from "@/lib/event-format";
 import { Empty, Ago } from "./ui";
 
 export function LiveFeed({ companyId, initial, compact = false }: { companyId: string; initial: StewardEvent[]; compact?: boolean }) {
@@ -28,7 +29,7 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
                   <span className="mono text-xs font-medium text-accent">{e.type}</span>
                   <span className="text-xs text-muted">{actorLabel(e.actor)}</span>
                 </div>
-                <div className="truncate text-fg-2">{summarize(e)}</div>
+                <div className="truncate text-fg-2">{summarizeEvent(e)}</div>
                 {!compact && e.correlation.runId && (
                   <Link className="text-xs text-accent hover:underline" href={`/app/c/${companyId}/runs/${e.correlation.runId}`}>view run</Link>
                 )}
@@ -41,24 +42,3 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
   );
 }
 
-function actorLabel(actor: Record<string, unknown>): string {
-  const type = String(actor.type ?? "");
-  if (type === "user") return "you";
-  if (type === "agent") return `agent ${String(actor.agentName ?? actor.agentId ?? "")}`.trim();
-  if (type === "system") return "system";
-  return type;
-}
-
-function summarize(e: StewardEvent): string {
-  const p = e.payload;
-  const first = ["title", "toolName", "instruction", "status", "message", "error", "action", "name", "reason"].find((k) => typeof p[k] === "string" && (p[k] as string).length);
-  if (first) return `${first}: ${String(p[first]).slice(0, 160)}`;
-  const keys = Object.keys(p);
-  return keys.length ? keys.slice(0, 5).map((k) => `${k}=${short(p[k])}`).join("  ") : "";
-}
-
-function short(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "object") return JSON.stringify(v).slice(0, 40);
-  return String(v).slice(0, 40);
-}

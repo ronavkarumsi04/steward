@@ -60,6 +60,12 @@ export const Icon = {
       <path d="M5 12h3l2-5 4 10 2-5h3" />
     </Base>
   ),
+  Activity: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M3 12h4l2.2-5 4.1 10 2.2-5H21" />
+      <path d="M4 5.5h3M17 18.5h3" opacity=".45" />
+    </Base>
+  ),
   Approvals: (p: IconProps) => (
     <Base {...p}>
       <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" />

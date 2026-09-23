@@ -6,6 +6,7 @@ import { Icon } from "./icons";
 
 const ITEMS = [
   ["", "Studio", Icon.Overview],
+  ["/activity", "Activity", Icon.Activity],
   ["/projects", "Projects", Icon.Company],
   ["/signals", "Signals", Icon.Signals],
   ["/chat", "Chat", Icon.Chat],

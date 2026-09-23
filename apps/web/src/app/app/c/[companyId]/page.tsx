@@ -108,7 +108,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
       <QuickStart companyId={companyId} agents={agents} />
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>}>
+        <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/activity`}>All activity <Icon.ChevronRight size={14} /></Link>}>
           <LiveFeed companyId={companyId} initial={events.events} />
         </Card>
         <div className="min-w-0 space-y-4">
