@@ -60,7 +60,7 @@ describe("durable delegation", () => {
     const registry = buildToolRegistry();
     const tool = registry.get("delegate.run");
     expect(tool).toBeDefined();
-    const taskCreate = vi.fn(async (input: { title: string; labels: string[] }) => ({ id: "task-child", title: input.title, status: "todo", labels: input.labels }));
+    const taskCreate = vi.fn(async (_scope: TenantScope, input: { title: string; labels: string[] }) => ({ id: "task-child", title: input.title, status: "todo", labels: input.labels }));
     const runCreate = vi.fn(async (_scope: TenantScope, input: { agentId: string; taskId: string; trigger: Record<string, unknown> }) => ({ id: "run-child", agentId: input.agentId, taskId: input.taskId, trigger: input.trigger }));
     const attachWorkflow = vi.fn(async () => undefined);
     const start = vi.fn(async () => ({ workflowId: "run-run-child", workflowRunId: "temporal-child" }));
@@ -76,7 +76,7 @@ describe("durable delegation", () => {
       scope: steward.scope, agentId: "agent-chief", runId: "run-parent", taskId: "task-parent", services: { steward }, signal: undefined, log: () => undefined,
     });
     expect(result.ok).toBe(true);
-    expect(taskCreate).toHaveBeenCalledWith(expect.objectContaining({ assigneeAgentId: "agent-eng", parentTaskId: "task-parent", labels: expect.arrayContaining(["delegated", "delegated-from:run-parent"]) }));
+    expect(taskCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ assigneeAgentId: "agent-eng", parentTaskId: "task-parent", labels: expect.arrayContaining(["delegated", "delegated-from:run-parent"]) }));
     expect(runCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ agentId: "agent-eng", taskId: "task-child", trigger: expect.objectContaining({ kind: "delegation", parentRunId: "run-parent", parentAgentId: "agent-chief" }) }));
     expect(start).toHaveBeenCalledWith({ runId: "run-child", scope: { organizationId: "org-1", companyId: "company-1" } });
     expect(attachWorkflow).toHaveBeenCalledWith(steward.scope, "run-child", "run-run-child", "temporal-child");
