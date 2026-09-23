@@ -43,6 +43,13 @@
       "when": 1790199189000,
       "tag": "0005_business_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790201191167,
+      "tag": "0006_reactive_autopilot",
+      "breakpoints": true
     }
   ]
 }

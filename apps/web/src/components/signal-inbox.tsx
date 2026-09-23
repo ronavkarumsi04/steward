@@ -10,9 +10,10 @@ import { Icon } from "./icons";
 
 const severityTone = (severity: BusinessSignal["severity"]) => severity === "critical" ? "danger" : severity === "warning" ? "warn" : severity === "positive" ? "ok" : "neutral";
 
-export function SignalInbox({ companyId, initial, projects }: { companyId: string; initial: BusinessSignal[]; projects: Project[] }) {
+export function SignalInbox({ companyId, initial, projects, autoReviewImportant, canManageAutoReview }: { companyId: string; initial: BusinessSignal[]; projects: Project[]; autoReviewImportant: boolean; canManageAutoReview: boolean }) {
   const router = useRouter();
   const [signals, setSignals] = useState(initial);
+  const [autoReview, setAutoReview] = useState(autoReviewImportant);
   const [filter, setFilter] = useState<"all" | SignalState>("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +44,32 @@ export function SignalInbox({ companyId, initial, projects }: { companyId: strin
     } finally { setBusy(null); }
   }
 
+  async function toggleAutoReview() {
+    if (!canManageAutoReview) return;
+    setBusy("auto-review"); setError(null);
+    try {
+      const res = await browserApi.patch<{ settings: { autoReviewImportant: boolean } }>(`/companies/${companyId}/signals/settings`, { autoReviewImportant: !autoReview });
+      setAutoReview(res.settings.autoReviewImportant);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update reactive Autopilot");
+    } finally { setBusy(null); }
+  }
+
   return (
     <div>
       <PageHeader eyebrow="Business evidence" title="Signal Inbox" description="Verified payments, delivery events, replies, failures, and other business events that can change Steward’s next move." action={<div className="flex gap-2"><Pill tone={unread ? "accent" : "neutral"}>{unread} unread</Pill><Pill tone={reviewing ? "warn" : "neutral"}>{reviewing} reviewing</Pill></div>} />
       {error && <p role="alert" className="mb-4 text-sm text-danger">{error}</p>}
+      <Card className="mb-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2"><span className="font-semibold">Reactive Autopilot</span><Pill tone={autoReview ? "ok" : "neutral"}>{autoReview ? "Important signals auto-reviewed" : "Manual review"}</Pill></div>
+            <p className="mt-1 text-sm leading-6 text-muted">When enabled, new payments, payment failures/refunds, subscription cancellations, bounces, spam complaints, and inbound email can wake the Chief of Staff. Opens, clicks, and deliveries stay inbox-only. External actions still use the normal budgets and approval gates.</p>
+          </div>
+          <button className="btn btn-sm" disabled={!canManageAutoReview || busy !== null} onClick={toggleAutoReview}>{busy === "auto-review" ? "Updating…" : autoReview ? "Turn off auto-review" : "Auto-review important signals"}</button>
+        </div>
+        {!canManageAutoReview && <p className="mt-2 text-xs text-faint">A company admin can change this automation setting.</p>}
+      </Card>
       <div className="mb-4 flex flex-wrap gap-2">
         {(["all", "unread", "reviewing", "reviewed", "dismissed"] as const).map((state) => <button key={state} className={`btn btn-sm ${filter === state ? "btn-primary" : ""}`} onClick={() => setFilter(state)}>{state === "all" ? "All" : state.replace(/_/g, " ")}</button>)}
       </div>

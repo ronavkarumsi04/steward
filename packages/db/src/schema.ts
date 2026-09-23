@@ -100,6 +100,7 @@ export const companies = pgTable("companies", {
   status: text("status").notNull().default("active"), // active|paused|archived
   autonomyLevel: integer("autonomy_level").notNull().default(2),
   outboundPaused: boolean("outbound_paused").notNull().default(false),
+  signalAutoReview: boolean("signal_auto_review").notNull().default(false),
   timezone: text("timezone").notNull().default("UTC"),
   quietHours: json<{ start: string; end: string } | null>("quiet_hours"),
   settings: json<Record<string, unknown>>("settings").notNull().default({}),

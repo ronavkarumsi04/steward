@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeResendSignal, normalizeStripeSignal } from "./routes/signals.js";
+import { normalizeResendSignal, normalizeStripeSignal, shouldAutoReviewSignal } from "./routes/signals.js";
 
 describe("business signal normalization", () => {
   it("normalizes a Stripe checkout without retaining raw payloads", () => {
@@ -29,5 +29,10 @@ describe("business signal normalization", () => {
   it("ignores unsupported provider events instead of creating inbox noise", () => {
     expect(normalizeStripeSignal({ id: "evt_x", type: "customer.created", data: { object: { id: "cus_x" } } })).toBeNull();
     expect(normalizeResendSignal({ type: "email.sent", data: { email_id: "em_x" } }, "msg_x")).toBeNull();
+  });
+
+  it("auto-reviews only action-worthy verified signals", () => {
+    for (const kind of ["payment.completed", "payment.failed", "payment.refunded", "subscription.cancelled", "email.bounced", "email.complained", "email.received"]) expect(shouldAutoReviewSignal(kind)).toBe(true);
+    for (const kind of ["email.delivered", "email.opened", "email.clicked", "subscription.updated"]) expect(shouldAutoReviewSignal(kind)).toBe(false);
   });
 });

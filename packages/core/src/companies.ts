@@ -57,7 +57,7 @@ export class CompanyService {
     });
   }
 
-  async update(scope: TenantScope, patch: Partial<{ name: string; status: string; autonomyLevel: AutonomyLevel; outboundPaused: boolean; timezone: string; quietHours: { start: string; end: string } | null; settings: Record<string, unknown> }>) {
+  async update(scope: TenantScope, patch: Partial<{ name: string; status: string; autonomyLevel: AutonomyLevel; outboundPaused: boolean; signalAutoReview: boolean; timezone: string; quietHours: { start: string; end: string } | null; settings: Record<string, unknown> }>) {
     return this.db.transaction(async (tx) => {
       const [c] = await tx.update(companies).set({ ...patch, updatedAt: new Date() }).where(scoped(scope, { organizationId: companies.organizationId, companyId: companies.id })).returning();
       if (!c) return null;
