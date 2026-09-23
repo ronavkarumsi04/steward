@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VercelProvider } from "./deploy.js";
+import { VercelProvider } from "./providers/deploy.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
