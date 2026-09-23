@@ -92,6 +92,48 @@ export interface CompanyOverview {
   role: Membership["role"];
 }
 
+export type ProjectStatus = "active" | "blocked" | "complete" | "cancelled";
+export interface Project {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  name: string;
+  description: string;
+  objective: string;
+  status: ProjectStatus;
+  successSignal: string;
+  nextStep: string;
+  repoIntegrationId: string | null;
+  repoFullName: string | null;
+  defaultBranch: string;
+  deployIntegrationId: string | null;
+  deployProjectId: string | null;
+  productionUrl: string | null;
+  sandboxImage: string | null;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProjectCampaign {
+  id: string;
+  projectId: string | null;
+  name: string;
+  channel: string;
+  status: string;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProjectSnapshot {
+  project: Project;
+  tasks: Task[];
+  runs: Run[];
+  artifacts: Artifact[];
+  decisions: Decision[];
+  conversations: Conversation[];
+  campaigns: ProjectCampaign[];
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -100,6 +142,7 @@ export interface Task {
   priority: "low" | "medium" | "high" | "urgent";
   assigneeAgentId: string | null;
   goalId: string | null;
+  projectId: string | null;
   result: Record<string, unknown> | null;
   labels: string[];
   createdAt: string;
@@ -112,6 +155,7 @@ export interface Run {
   id: string;
   agentId: string;
   taskId: string | null;
+  projectId: string | null;
   conversationId: string | null;
   trigger: Record<string, unknown>;
   status: RunStatus;
@@ -156,6 +200,7 @@ export interface Artifact {
   id: string;
   runId: string | null;
   taskId: string | null;
+  projectId: string | null;
   kind: string;
   title: string;
   url: string | null;
@@ -196,6 +241,7 @@ export interface RunDetail {
 export interface Conversation {
   id: string;
   title: string;
+  projectId: string | null;
   agentId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -237,6 +283,7 @@ export interface Decision {
   rationale: string;
   decidedBy: Record<string, unknown>;
   runId: string | null;
+  projectId: string | null;
   status: string;
   createdAt: string;
 }
@@ -368,6 +415,7 @@ export interface Campaign {
   id: string;
   organizationId: string;
   companyId: string;
+  projectId: string | null;
   name: string;
   channel: CampaignChannel;
   status: CampaignStatus;

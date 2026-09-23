@@ -305,6 +305,42 @@ describe("providers", () => {
   });
 });
 
+describe("project workspace", () => {
+  d("keeps multi-thread work together and rejects cross-company project links", async () => {
+    const a = await register("ProjectA");
+    const first = await a.api.json<{ company: { id: string } }>("POST", `/orgs/${a.orgId}/companies`, { name: "Project Co", autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const companyId = first.body.company.id;
+    const created = await a.api.json<{ project: { id: string; status: string; objective: string } }>("POST", `/companies/${companyId}/projects`, { name: "Launch pilot", objective: "Put a verified pilot in front of real design partners", successSignal: "Three partners complete onboarding", nextStep: "Prepare the first pilot build" });
+    expect(created.status).toBe(201);
+    expect(created.body.project).toMatchObject({ status: "active", objective: "Put a verified pilot in front of real design partners" });
+    const projectId = created.body.project.id;
+
+    const task = await a.api.json<{ task: { id: string; projectId: string | null } }>("POST", `/companies/${companyId}/tasks`, { title: "Build onboarding pilot", description: "Smallest verified pilot", projectId, start: false });
+    expect(task.status).toBe(201);
+    expect(task.body.task.projectId).toBe(projectId);
+    const conversation = await a.api.json<{ conversation: { id: string; projectId: string | null } }>("POST", `/companies/${companyId}/conversations`, { title: "Pilot thread", projectId });
+    expect(conversation.body.conversation.projectId).toBe(projectId);
+    const campaign = await a.api.json<{ campaign: { id: string; projectId: string | null } }>("POST", `/companies/${companyId}/campaigns`, { name: "Pilot outreach", channel: "email", objective: "Reach qualified design partners", projectId });
+    expect(campaign.body.campaign.projectId).toBe(projectId);
+
+    const snapshot = await a.api.json<{ project: { id: string; nextStep: string }; tasks: Array<{ id: string }>; conversations: Array<{ id: string }>; campaigns: Array<{ id: string }> }>("GET", `/companies/${companyId}/projects/${projectId}`);
+    expect(snapshot.body.project.id).toBe(projectId);
+    expect(snapshot.body.tasks.map((x) => x.id)).toContain(task.body.task.id);
+    expect(snapshot.body.conversations.map((x) => x.id)).toContain(conversation.body.conversation.id);
+    expect(snapshot.body.campaigns.map((x) => x.id)).toContain(campaign.body.campaign.id);
+
+    const updated = await a.api.json<{ project: { status: string; nextStep: string } }>("PATCH", `/companies/${companyId}/projects/${projectId}`, { status: "blocked", nextStep: "Get founder approval for pilot scope" });
+    expect(updated.body.project).toMatchObject({ status: "blocked", nextStep: "Get founder approval for pilot scope" });
+
+    const second = await a.api.json<{ company: { id: string } }>("POST", `/orgs/${a.orgId}/companies`, { name: "Other Co", autonomyLevel: 1, profile: { description: "y", stage: "idea" } });
+    const otherCompanyId = second.body.company.id;
+    expect((await a.api.json("POST", `/companies/${otherCompanyId}/tasks`, { title: "Illegal cross-link", projectId, start: false })).status).toBe(404);
+    expect((await a.api.json("POST", `/companies/${otherCompanyId}/conversations`, { title: "Illegal thread", projectId })).status).toBe(404);
+    expect((await a.api.json("POST", `/companies/${otherCompanyId}/campaigns`, { name: "Illegal campaign", channel: "email", projectId })).status).toBe(404);
+    expect((await a.api.json("GET", `/companies/${otherCompanyId}/projects/${projectId}`)).status).toBe(404);
+  });
+});
+
 describe("growth pipeline", () => {
   d("persists real leads, updates stages, and preserves tenant isolation", async () => {
     const a = await register("GrowthA");
@@ -341,8 +377,12 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });
     const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Smoke Labs", autonomyLevel: 2, profile: { description: "CSV tidying CLI", stage: "idea" } });
     const companyId = co.body.company.id;
-    const conv = await api.json<{ conversation: { id: string } }>("POST", `/companies/${companyId}/conversations`, {});
-    const msg = await api.json<{ run: { id: string; status: string; workflowId: string | null } }>("POST", `/companies/${companyId}/conversations/${conv.body.conversation.id}/messages`, { content: "Write positioning and record a decision." });
+    const project = await api.json<{ project: { id: string } }>("POST", `/companies/${companyId}/projects`, { name: "Runtime project", objective: "Produce a verified positioning output across durable work sessions", successSignal: "A reviewable positioning document and decision exist", nextStep: "Write the first positioning draft" });
+    const projectId = project.body.project.id;
+    const conv = await api.json<{ conversation: { id: string; projectId: string | null } }>("POST", `/companies/${companyId}/conversations`, { projectId });
+    expect(conv.body.conversation.projectId).toBe(projectId);
+    const msg = await api.json<{ run: { id: string; status: string; workflowId: string | null; projectId: string | null } }>("POST", `/companies/${companyId}/conversations/${conv.body.conversation.id}/messages`, { content: "Write positioning and record a decision." });
+    expect(msg.body.run.projectId).toBe(projectId);
     expect(msg.status).toBe(201);
     expect(msg.body.run.status).toBe("queued");
     const runId = msg.body.run.id;
@@ -353,6 +393,8 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     await services.runs.setStatus(scope, runId, "building_context");
     const ctx = await rt.buildContext(runId);
     expect(ctx.toolNames).toContain("document.write");
+    expect(ctx.systemPrompt).toContain("Active project: Runtime project");
+    expect(ctx.systemPrompt).toContain("Write the first positioning draft");
     const plan = await rt.plan(runId, ctx);
     expect(plan.steps.length).toBe(2);
     let final = "";
@@ -385,6 +427,10 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     expect(docs.body.documents.map((x) => x.title)).toContain("Positioning");
     const decisions = await api.json<{ decisions: Array<{ title: string }> }>("GET", `/companies/${companyId}/decisions`);
     expect(decisions.body.decisions.some((x) => x.title.startsWith("Target customer"))).toBe(true);
+    const projectSnapshot = await api.json<{ runs: Array<{ id: string }>; artifacts: Array<{ kind: string }>; decisions: Array<{ title: string }> }>("GET", `/companies/${companyId}/projects/${projectId}`);
+    expect(projectSnapshot.body.runs.map((x) => x.id)).toContain(runId);
+    expect(projectSnapshot.body.artifacts.some((x) => x.kind === "document")).toBe(true);
+    expect(projectSnapshot.body.decisions.some((x) => x.title.startsWith("Target customer"))).toBe(true);
     const usage = await api.json<{ usage: Array<{ provider: string; calls: number; inputTokens: number }> }>("GET", `/orgs/${orgId}/providers/usage?companyId=${companyId}`);
     expect(usage.body.usage.reduce((n, u) => n + u.calls, 0)).toBeGreaterThanOrEqual(5);
     expect(usage.body.usage[0]!.inputTokens).toBeGreaterThan(0);

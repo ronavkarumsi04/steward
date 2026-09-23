@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Agent, BusinessPulse, Run } from "@/lib/types";
+import type { Agent, BusinessPulse, Project, Run } from "@/lib/types";
 import { Icon } from "./icons";
 import { Pill, StatusPill, ago, usd } from "./ui";
 
@@ -51,7 +51,7 @@ const LANES = [
     kicker: "Make it real",
     description: "Turn the current idea into the smallest useful product surface a customer can actually use or react to.",
     prompt:
-      "BUILD mission: inspect the company profile, goals, documents, artifacts, code/deploy integrations, and recent customer evidence. Decide the highest-leverage product improvement, implement as much as the connected tools safely allow, verify it, and leave a reviewable artifact plus the next concrete build step.",
+      "BUILD mission: own this project as Chief of Staff. Inspect company goals, project context, recent evidence, code/deploy state, and open product gaps. Delegate the bounded implementation to Engineering with delegate.run rather than doing Engineering work yourself. Keep the project next step and success signal current, and leave the work reviewable.",
   },
   {
     id: "grow",
@@ -59,7 +59,7 @@ const LANES = [
     kicker: "Reach real people",
     description: "Create a bounded acquisition move: positioning, launch content, outreach, follow-up, or a measurable distribution test.",
     prompt:
-      "GROW mission: inspect the target customer, offer, existing channels, integrations, prior outreach, and evidence. Choose one bounded growth experiment with a named audience and measurable response. Create or update a campaign record first, pass its campaign id into any email/social sends, record evidence-backed prospects in the lead pipeline, and record what should be measured next. Never manufacture traction or prospect data.",
+      "GROW mission: own this project as Chief of Staff. Inspect the target customer, offer, channels, prior outreach, and evidence. Choose one bounded experiment with a named audience and measurable response, then delegate execution to Growth/Marketing with delegate.run. Require campaign-linked evidence for sends and keep the project next step current. Never manufacture traction or prospect data.",
   },
   {
     id: "earn",
@@ -67,7 +67,7 @@ const LANES = [
     kicker: "Create a money path",
     description: "Tighten the offer, pricing, checkout path, and follow-up so real demand can turn into a payment signal.",
     prompt:
-      "EARN mission: inspect the product, target customer, business model, pricing context, payment integrations, and recent evidence. Create the clearest realistic paid offer and payment path, execute allowed setup work, and leave a measurable next revenue experiment. Do not fabricate orders, revenue, or customer demand.",
+      "EARN mission: own this project as Chief of Staff. Inspect product, target customer, pricing, payment state, and real demand evidence. Delegate payment/offer analysis to Finance and any product changes to Engineering with delegate.run. Keep the project success signal and next step current. Do not fabricate orders, revenue, or customer demand.",
   },
 ] as const;
 
@@ -137,16 +137,37 @@ export function FounderStudio({
     return () => { active = false; };
   }, [companyId, stats.stripeConnected]);
 
-  async function launch(text: string, key = "operator", preferredKind?: string) {
+  async function launch(
+    text: string,
+    key = "operator",
+    preferredKind?: string,
+    projectSeed?: false | { name: string; successSignal?: string; nextStep?: string },
+  ) {
     const agent = (preferredKind ? agentByKind.get(preferredKind) : undefined) ?? operator;
-    if (!agent || !text.trim()) return;
+    const objective = text.trim();
+    if (!agent || !objective) return;
+    if (projectSeed !== false && objective.length < 5) { setError("Describe the outcome in at least 5 characters."); return; }
     setBusy(key);
     setError(null);
+    let project: Project | null = null;
     try {
-      const { run } = await browserApi.post<{ run: Run }>(`/companies/${companyId}/runs`, { agentId: agent.id, instruction: text.trim() });
+      if (projectSeed !== false) {
+        const created = await browserApi.post<{ project: Project }>(`/companies/${companyId}/projects`, {
+          name: projectSeed?.name ?? objective.slice(0, 96),
+          objective,
+          successSignal: projectSeed?.successSignal ?? "",
+          nextStep: projectSeed?.nextStep ?? "Steward will determine the next verified step.",
+        });
+        project = created.project;
+      }
+      const { run } = await browserApi.post<{ run: Run }>(`/companies/${companyId}/runs`, { agentId: agent.id, projectId: project?.id, instruction: objective });
       setInstruction("");
       router.push(`/app/c/${companyId}/runs/${run.id}`);
     } catch (err) {
+      if (project) {
+        const message = err instanceof ApiError ? err.message : "Run could not start";
+        await browserApi.patch(`/companies/${companyId}/projects/${project.id}`, { status: "blocked", nextStep: `Resolve launch error: ${message}` }).catch(() => undefined);
+      }
       setError(err instanceof ApiError ? err.message : "Steward could not start the work");
     } finally {
       setBusy(null);
@@ -165,7 +186,7 @@ export function FounderStudio({
     const instruction = verifying
       ? `CUSTOM DOMAIN verification: Vercel project ${stats.deploymentProjectId} already has ${normalized} pending. Use deploy.verify_domain for exactly this project/domain. If it is still unverified, report the exact remaining DNS challenge and do not claim it is live.`
       : `CUSTOM DOMAIN launch: attach ${normalized} to Vercel project ${stats.deploymentProjectId}. Use deploy.add_domain for exactly this project/domain. If Vercel requires DNS verification, preserve and report the exact challenge and do not claim the domain is live until verified.`;
-    await launch(instruction, "domain", "engineering");
+    await launch(instruction, "domain", "engineering", false);
   }
 
   async function toggleAutopilot() {
@@ -250,7 +271,16 @@ export function FounderStudio({
                 <span className="tnum text-xs text-muted">{signal}</span>
               </div>
               <p className="mt-2 min-h-12 text-sm leading-6 text-muted">{lane.description}</p>
-              <button className="btn mt-4 w-full justify-between" onClick={() => launch(lane.prompt, lane.id, lane.id === "build" ? "engineering" : lane.id === "grow" ? "marketing" : "finance")} disabled={busy !== null || !operator}>
+              <button className="btn mt-4 w-full justify-between" onClick={() => launch(
+                  lane.prompt,
+                  lane.id,
+                  undefined,
+                  lane.id === "build"
+                    ? { name: "Build next product milestone", successSignal: "A verified product improvement is shipped or review-ready with a concrete next build step.", nextStep: "Inspect product evidence and ship the highest-leverage bounded improvement." }
+                    : lane.id === "grow"
+                      ? { name: "Run next growth experiment", successSignal: "A bounded acquisition experiment reaches a real audience and leaves a measurable response signal.", nextStep: "Choose the audience, create the campaign record, and execute one measurable distribution test." }
+                      : { name: "Improve revenue path", successSignal: "A real customer can move from offer to a working payment path, with a measurable next revenue experiment.", nextStep: "Inspect offer, pricing, checkout state, and real demand signals; remove the clearest conversion gap." },
+                )} disabled={busy !== null || !operator}>
                 <span>{busy === lane.id ? "Starting…" : `Work on ${lane.title}`}</span>
                 {busy === lane.id ? <span className="spinner" aria-hidden="true" /> : <Icon.ArrowRight size={15} />}
               </button>

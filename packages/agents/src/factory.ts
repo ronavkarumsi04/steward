@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, RunService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
@@ -18,6 +18,7 @@ export interface AgentServiceFactoryOptions {
 /** Builds the tenant-scoped service bundle a run needs. Shared services are constructed once; scope-bound ones per call. */
 export class AgentServiceFactory {
   readonly companies: CompanyService;
+  readonly projects: ProjectService;
   readonly tasks: TaskService;
   readonly agents: AgentService;
   readonly runs: RunService;
@@ -36,6 +37,7 @@ export class AgentServiceFactory {
     const { db, crypto, config } = o.core;
     this.env = o.env ?? process.env;
     this.companies = new CompanyService(db);
+    this.projects = new ProjectService(db);
     this.tasks = new TaskService(db);
     this.agents = new AgentService(db);
     this.runs = new RunService(db);
@@ -59,6 +61,7 @@ export class AgentServiceFactory {
       gateway,
       memory,
       companies: this.companies,
+      projects: this.projects,
       tasks: this.tasks,
       agents: this.agents,
       runs: this.runs,

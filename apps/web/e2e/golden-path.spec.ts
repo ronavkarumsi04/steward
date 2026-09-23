@@ -58,6 +58,19 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByRole("heading", { name: "What exists outside Steward" })).toBeVisible();
   await expect(page.getByText("Not live yet")).toBeVisible();
 
+  // Projects: founder outcomes persist independently of model/provider availability.
+  await page.goto(`${companyUrl}/projects`);
+  await expect(page.getByRole("heading", { name: "Outcomes that survive every thread" })).toBeVisible();
+  await page.getByLabel("Project name").fill("E2E launch project");
+  await page.getByLabel("Project objective").fill("Launch a durable pilot across multiple specialist work sessions");
+  await page.getByLabel("Project success signal").fill("A real design partner completes the pilot");
+  await page.getByLabel("Project next step").fill("Prepare the first onboarding workflow");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("heading", { name: "E2E launch project" })).toBeVisible();
+  await expect(page.getByText("Launch a durable pilot across multiple specialist work sessions")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "E2E launch project" })).toBeVisible();
+
   // Tasks: create one without starting a run (no model provider is configured in E2E).
   await page.goto(`${companyUrl}/tasks`);
   await page.getByLabel("Task title").fill("Draft positioning statement");

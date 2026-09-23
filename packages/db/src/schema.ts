@@ -168,11 +168,52 @@ export const agentSchedules = pgTable("agent_schedules", {
   updatedAt: updatedAt(),
 }, (t) => [index("schedules_company_idx").on(t.companyId)]);
 
+export const projects = pgTable("projects", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  objective: text("objective").notNull().default(""),
+  status: text("status").notNull().default("active"),
+  successSignal: text("success_signal").notNull().default(""),
+  nextStep: text("next_step").notNull().default(""),
+  createdBy: json<Record<string, unknown>>("created_by").notNull().default({}),
+  repoIntegrationId: text("repo_integration_id"),
+  repoFullName: text("repo_full_name"),
+  defaultBranch: text("default_branch").notNull().default("main"),
+  deployIntegrationId: text("deploy_integration_id"),
+  deployProjectId: text("deploy_project_id"),
+  productionUrl: text("production_url"),
+  sandboxImage: text("sandbox_image"),
+  config: json<Record<string, unknown>>("config").notNull().default({}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("projects_company_idx").on(t.companyId)]);
+
+export const deployments = pgTable("deployments", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  externalId: text("external_id"),
+  environment: text("environment").notNull().default("preview"),
+  status: text("status").notNull(),
+  url: text("url"),
+  gitRef: text("git_ref"),
+  runId: text("run_id"),
+  logsUrl: text("logs_url"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("deployments_project_idx").on(t.projectId, t.createdAt)]);
+
 export const tasks = pgTable("tasks", {
   id: id(),
   organizationId: text("organization_id").notNull(),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   goalId: text("goal_id").references(() => goals.id, { onDelete: "set null" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   parentTaskId: text("parent_task_id"),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
@@ -188,7 +229,7 @@ export const tasks = pgTable("tasks", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   completedAt: ts("completed_at"),
-}, (t) => [index("tasks_company_status_idx").on(t.companyId, t.status), index("tasks_company_created_idx").on(t.companyId, t.createdAt)]);
+}, (t) => [index("tasks_company_status_idx").on(t.companyId, t.status), index("tasks_company_created_idx").on(t.companyId, t.createdAt), index("tasks_project_idx").on(t.projectId, t.createdAt)]);
 
 export const taskDependencies = pgTable("task_dependencies", {
   taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
@@ -201,6 +242,7 @@ export const agentRuns = pgTable("agent_runs", {
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   conversationId: text("conversation_id"),
   trigger: json<Record<string, unknown>>("trigger").notNull(),
   status: text("status").notNull().default("queued"),
@@ -218,7 +260,7 @@ export const agentRuns = pgTable("agent_runs", {
   finishedAt: ts("finished_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (t) => [index("runs_company_created_idx").on(t.companyId, t.createdAt), index("runs_task_idx").on(t.taskId), uniqueIndex("runs_workflow_idx").on(t.workflowId)]);
+}, (t) => [index("runs_company_created_idx").on(t.companyId, t.createdAt), index("runs_task_idx").on(t.taskId), index("runs_project_idx").on(t.projectId, t.createdAt), uniqueIndex("runs_workflow_idx").on(t.workflowId)]);
 
 export const agentRunSteps = pgTable("agent_run_steps", {
   id: id(),
@@ -375,9 +417,10 @@ export const decisions = pgTable("decisions", {
   decidedBy: json<Record<string, unknown>>("decided_by").notNull(),
   runId: text("run_id"),
   taskId: text("task_id"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   status: text("status").notNull().default("active"),
   createdAt: createdAt(),
-}, (t) => [index("decisions_company_idx").on(t.companyId, t.createdAt)]);
+}, (t) => [index("decisions_company_idx").on(t.companyId, t.createdAt), index("decisions_project_idx").on(t.projectId, t.createdAt)]);
 
 export const entities = pgTable("entities", {
   id: id(),
@@ -396,11 +439,12 @@ export const conversations = pgTable("conversations", {
   organizationId: text("organization_id").notNull(),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("New conversation"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   agentId: text("agent_id"),
   createdBy: text("created_by").notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (t) => [index("conversations_company_idx").on(t.companyId, t.updatedAt)]);
+}, (t) => [index("conversations_company_idx").on(t.companyId, t.updatedAt), index("conversations_project_idx").on(t.projectId, t.updatedAt)]);
 
 export const messages = pgTable("messages", {
   id: id(),
@@ -571,40 +615,6 @@ export const auditLog = pgTable("audit_log", {
 }, (t) => [index("audit_org_idx").on(t.organizationId, t.createdAt)]);
 
 // ---------- Engineering ----------
-export const projects = pgTable("projects", {
-  id: id(),
-  organizationId: text("organization_id").notNull(),
-  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  description: text("description").notNull().default(""),
-  repoIntegrationId: text("repo_integration_id"),
-  repoFullName: text("repo_full_name"),
-  defaultBranch: text("default_branch").notNull().default("main"),
-  deployIntegrationId: text("deploy_integration_id"),
-  deployProjectId: text("deploy_project_id"),
-  productionUrl: text("production_url"),
-  sandboxImage: text("sandbox_image"),
-  config: json<Record<string, unknown>>("config").notNull().default({}),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (t) => [index("projects_company_idx").on(t.companyId)]);
-
-export const deployments = pgTable("deployments", {
-  id: id(),
-  organizationId: text("organization_id").notNull(),
-  companyId: text("company_id").notNull(),
-  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
-  provider: text("provider").notNull(),
-  externalId: text("external_id"),
-  environment: text("environment").notNull().default("preview"),
-  status: text("status").notNull(),
-  url: text("url"),
-  gitRef: text("git_ref"),
-  runId: text("run_id"),
-  logsUrl: text("logs_url"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (t) => [index("deployments_project_idx").on(t.projectId, t.createdAt)]);
 
 export const artifacts = pgTable("artifacts", {
   id: id(),
@@ -612,6 +622,7 @@ export const artifacts = pgTable("artifacts", {
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   runId: text("run_id"),
   taskId: text("task_id"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   kind: text("kind").notNull(), // document|file|link|pr|deployment|report
   title: text("title").notNull(),
   mimeType: text("mime_type"),
@@ -621,7 +632,7 @@ export const artifacts = pgTable("artifacts", {
   sizeBytes: integer("size_bytes"),
   metadata: json<Record<string, unknown>>("metadata").notNull().default({}),
   createdAt: createdAt(),
-}, (t) => [index("artifacts_company_idx").on(t.companyId, t.createdAt)]);
+}, (t) => [index("artifacts_company_idx").on(t.companyId, t.createdAt), index("artifacts_project_idx").on(t.projectId, t.createdAt)]);
 
 // ---------- Business ----------
 export const contacts = pgTable("contacts", {
@@ -667,6 +678,7 @@ export const campaigns = pgTable("campaigns", {
   id: id(),
   organizationId: text("organization_id").notNull(),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   channel: text("channel").notNull(), // email|social|ads
   status: text("status").notNull().default("draft"),
@@ -674,7 +686,7 @@ export const campaigns = pgTable("campaigns", {
   stats: json<Record<string, number>>("stats").notNull().default({}),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (t) => [index("campaigns_project_idx").on(t.projectId, t.updatedAt)]);
 
 export const outboundMessages = pgTable("outbound_messages", {
   id: id(),

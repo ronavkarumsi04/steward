@@ -96,6 +96,29 @@ const decisionRecord = defineTool({
   },
 });
 
+
+async function currentProjectId(s: AgentServices, runId?: string) {
+  if (!runId) return undefined;
+  return (await s.runs.get(s.scope, runId))?.projectId ?? undefined;
+}
+
+const ProjectStatus = z.enum(["active", "blocked", "complete", "cancelled"]);
+const projectList = defineTool({
+  name: "project.list", description: "List founder-level projects and their objective, status, success signal, and next step.",
+  input: z.object({ status: ProjectStatus.optional(), limit: z.number().int().min(1).max(100).default(30) }), risk: "LOW", idempotent: true,
+  execute: async ({ status, limit }, ctx) => { const s = svc(ctx); const rows = await s.projects.list(s.scope, { status, limit }); return { ok: true, content: rows.length ? rows.map((p) => `- [${p.status}] ${p.name} — ${p.objective || p.description || "no objective"} (id ${p.id})${p.nextStep ? `; next: ${p.nextStep}` : ""}`).join("\n") : "No projects.", data: rows }; },
+});
+const projectCreate = defineTool({
+  name: "project.create", description: "Create a durable founder project that can contain multiple tasks, worker runs, conversations, outputs, decisions, and campaigns.",
+  input: z.object({ name: z.string().min(3).max(200), objective: z.string().min(5).max(5000), description: z.string().max(5000).default(""), successSignal: z.string().max(2000).default(""), nextStep: z.string().max(2000).default("") }), risk: "LOW", sideEffects: "internal",
+  execute: async (input, ctx) => { const s = svc(ctx); const row = await s.projects.create(s.scope, input); return { ok: true, content: `Created project ${row.name} (id ${row.id}).`, data: row }; },
+});
+const projectUpdate = defineTool({
+  name: "project.update", description: "Update a project's objective, status, success signal, or concrete next step as evidence changes.",
+  input: z.object({ id: z.string().min(1), name: z.string().min(3).max(200).optional(), objective: z.string().max(5000).optional(), description: z.string().max(5000).optional(), status: ProjectStatus.optional(), successSignal: z.string().max(2000).optional(), nextStep: z.string().max(2000).optional() }), risk: "LOW", sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => { const s = svc(ctx); const row = await s.projects.update(s.scope, id, patch); if (!row) return fail("Project not found."); return { ok: true, content: `Updated project ${row.name} → ${row.status}${row.nextStep ? `; next: ${row.nextStep}` : ""}.`, data: row }; },
+});
+
 // ---------- Work management ----------
 
 const taskList = defineTool({
@@ -121,7 +144,8 @@ const taskCreate = defineTool({
   execute: async (input, ctx) => {
     const s = svc(ctx);
     const assignee = input.assigneeKind ? await s.agents.byKind(s.scope, input.assigneeKind) : null;
-    const t = await s.tasks.create(s.scope, { title: input.title, description: input.description, priority: input.priority, assigneeAgentId: assignee?.id ?? null, goalId: input.goalId ?? null, parentTaskId: ctx.taskId ?? null, dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null });
+    const projectId = await currentProjectId(s, ctx.runId);
+    const t = await s.tasks.create(s.scope, { title: input.title, description: input.description, priority: input.priority, assigneeAgentId: assignee?.id ?? null, goalId: input.goalId ?? null, parentTaskId: ctx.taskId ?? null, projectId, dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null });
     return { ok: true, content: `Created task ${t.id} "${t.title}"${assignee ? ` assigned to ${assignee.name}` : ""}.`, data: { id: t.id } };
   },
 });
@@ -164,6 +188,8 @@ const delegateRun = defineTool({
     if (!assignee) return fail(`No enabled ${input.assigneeKind} agent exists for this company.`);
     if (assignee.id === ctx.agentId) return fail("A run cannot delegate back to itself.");
 
+    const parent = await s.runs.get(s.scope, ctx.runId);
+    const projectId = parent?.projectId ?? undefined;
     const parentLabel = `delegated-from:${ctx.runId}`;
     const tasks = await s.tasks.list(s.scope, { limit: 200 });
     const activeDelegations = tasks.filter((t) => Array.isArray(t.labels) && t.labels.includes(parentLabel) && t.status !== "cancelled").length;
@@ -176,12 +202,14 @@ const delegateRun = defineTool({
       assigneeAgentId: assignee.id,
       goalId: input.goalId ?? null,
       parentTaskId: ctx.taskId ?? null,
+      projectId,
       dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null,
       labels: ["delegated", parentLabel, `specialist:${input.assigneeKind}`],
     });
     const run = await s.runs.create(s.scope, {
       agentId: assignee.id,
       taskId: task.id,
+      projectId,
       trigger: { kind: "delegation", instruction: input.instruction, parentRunId: ctx.runId, parentAgentId: ctx.agentId },
     });
     try {
@@ -391,7 +419,8 @@ const campaignCreate = defineTool({
   sideEffects: "internal",
   execute: async (input, ctx) => {
     const s = svc(ctx);
-    const row = await s.growth.createCampaign(s.scope, input);
+    const projectId = await currentProjectId(s, ctx.runId);
+    const row = await s.growth.createCampaign(s.scope, { ...input, projectId });
     return { ok: true, content: `Created ${row.channel} campaign ${row.name} in draft. Use its id ${row.id} when sending campaign-linked messages.`, data: row };
   },
 });
@@ -876,14 +905,14 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
 
 /** Default tool allowlists per agent kind; company operators can override per agent. */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
+  orchestrator: ["memory.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
   research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*"],
   engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "github.*", "sandbox.*", "deploy.*"],
   marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "social.publish", "email.send"],

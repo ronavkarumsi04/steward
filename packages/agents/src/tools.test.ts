@@ -31,6 +31,8 @@ describe("operator capability surface", () => {
       sideEffects: "internal",
       costCategory: "ai",
     });
+    expect(registry.get("project.create")?.manifest).toMatchObject({ risk: "LOW", sideEffects: "internal" });
+    expect(registry.get("project.update")?.manifest).toMatchObject({ risk: "LOW", sideEffects: "internal" });
   });
 
   it("keeps launch/payment mutations inside specialist default tool boundaries", () => {
@@ -43,8 +45,10 @@ describe("operator capability surface", () => {
     expect(finance).toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("deploy.create_project");
-    expect(orchestrator).toEqual(expect.arrayContaining(["lead.list", "campaign.list", "delegate.run"]));
+    expect(orchestrator).toEqual(expect.arrayContaining(["lead.list", "campaign.list", "delegate.run", "project.list", "project.create", "project.update"]));
     expect(engineering).not.toContain("delegate.run");
+    expect(engineering).not.toContain("project.create");
+    expect(finance).not.toContain("project.update");
     expect(finance).not.toContain("delegate.run");
     const marketing = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.marketing ?? [] }).map((t) => t.manifest.name);
     const sales = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.sales ?? [] }).map((t) => t.manifest.name);
@@ -69,15 +73,15 @@ describe("durable delegation", () => {
       scope,
       agents: { byKind: vi.fn(async () => ({ id: "agent-eng", kind: "engineering", name: "Engineer", budgetUsdPerRun: "2.5000" })) },
       tasks: { list: vi.fn(async () => []), create: taskCreate, update: vi.fn(async () => undefined) },
-      runs: { create: runCreate, attachWorkflow, setStatus: vi.fn(async () => undefined) },
+      runs: { get: vi.fn(async () => ({ id: "run-parent", projectId: "project-1" })), create: runCreate, attachWorkflow, setStatus: vi.fn(async () => undefined) },
       runWorkflowLauncher: { start },
     };
     const result = await tool!.execute({ assigneeKind: "engineering", title: "Ship onboarding", instruction: "Implement and verify the onboarding flow end to end.", priority: "high" }, {
       scope: steward.scope, agentId: "agent-chief", runId: "run-parent", taskId: "task-parent", services: { steward }, signal: undefined, log: () => undefined,
     });
     expect(result.ok).toBe(true);
-    expect(taskCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ assigneeAgentId: "agent-eng", parentTaskId: "task-parent", labels: expect.arrayContaining(["delegated", "delegated-from:run-parent"]) }));
-    expect(runCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ agentId: "agent-eng", taskId: "task-child", trigger: expect.objectContaining({ kind: "delegation", parentRunId: "run-parent", parentAgentId: "agent-chief" }) }));
+    expect(taskCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ assigneeAgentId: "agent-eng", parentTaskId: "task-parent", projectId: "project-1", labels: expect.arrayContaining(["delegated", "delegated-from:run-parent"]) }));
+    expect(runCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ agentId: "agent-eng", taskId: "task-child", projectId: "project-1", trigger: expect.objectContaining({ kind: "delegation", parentRunId: "run-parent", parentAgentId: "agent-chief" }) }));
     expect(start).toHaveBeenCalledWith({ runId: "run-child", scope: { organizationId: "org-1", companyId: "company-1" } });
     expect(attachWorkflow).toHaveBeenCalledWith(steward.scope, "run-child", "run-run-child", "temporal-child");
   });

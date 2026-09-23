@@ -1,15 +1,71 @@
 import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
-import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, conversations, decisions, documents, emitEvent, messages, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
+import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, campaigns, conversations, decisions, documents, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import type { AgentKind, RunStatus, StepKind, TaskStatus, TenantScope } from "@steward/schema";
+
+export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+async function assertScopedProject(db: DbOrTx, scope: TenantScope, projectId?: string | null) {
+  if (!projectId) return;
+  const [project] = await db.select({ id: projects.id }).from(projects).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, eq(projects.id, projectId))).limit(1);
+  if (!project) throw new Error("Project not found in this company");
+}
+
+export class ProjectService {
+  constructor(private readonly db: Db) {}
+
+  list(scope: TenantScope, filter: { status?: ProjectStatus; limit?: number } = {}) {
+    return this.db.select().from(projects).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, filter.status ? eq(projects.status, filter.status) : undefined)).orderBy(desc(projects.updatedAt)).limit(filter.limit ?? 100);
+  }
+
+  async get(scope: TenantScope, id: string) {
+    const [project] = await this.db.select().from(projects).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, eq(projects.id, id))).limit(1);
+    return project ?? null;
+  }
+
+  async create(scope: TenantScope, input: { name: string; description?: string; objective?: string; successSignal?: string; nextStep?: string; repoIntegrationId?: string | null; repoFullName?: string | null; defaultBranch?: string; deployIntegrationId?: string | null; deployProjectId?: string | null; productionUrl?: string | null; sandboxImage?: string | null; config?: Record<string, unknown> }) {
+    return this.db.transaction(async (tx) => {
+      const [project] = await tx.insert(projects).values({
+        organizationId: scope.organizationId, companyId: scope.companyId!, name: input.name.trim(), description: input.description ?? "", objective: input.objective ?? "", successSignal: input.successSignal ?? "", nextStep: input.nextStep ?? "", createdBy: scope.actor as Record<string, unknown>,
+        repoIntegrationId: input.repoIntegrationId ?? null, repoFullName: input.repoFullName ?? null, defaultBranch: input.defaultBranch ?? "main", deployIntegrationId: input.deployIntegrationId ?? null, deployProjectId: input.deployProjectId ?? null, productionUrl: input.productionUrl ?? null, sandboxImage: input.sandboxImage ?? null, config: input.config ?? {},
+      }).returning();
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "project.created", actor: scope.actor, payload: { projectId: project!.id, name: project!.name, objective: project!.objective }, correlation: { projectId: project!.id } });
+      return project!;
+    });
+  }
+
+  async update(scope: TenantScope, id: string, patch: Partial<{ name: string; description: string; objective: string; status: ProjectStatus; successSignal: string; nextStep: string; repoIntegrationId: string | null; repoFullName: string | null; defaultBranch: string; deployIntegrationId: string | null; deployProjectId: string | null; productionUrl: string | null; sandboxImage: string | null; config: Record<string, unknown> }>) {
+    return this.db.transaction(async (tx) => {
+      const [project] = await tx.update(projects).set({ ...patch, updatedAt: new Date() }).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, eq(projects.id, id))).returning();
+      if (!project) return null;
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "project.updated", actor: scope.actor, payload: { projectId: id, fields: Object.keys(patch), status: project.status }, correlation: { projectId: id } });
+      return project;
+    });
+  }
+
+  async snapshot(scope: TenantScope, id: string) {
+    const project = await this.get(scope, id);
+    if (!project) return null;
+    const [projectTasks, projectRuns, projectArtifacts, projectDecisions, projectConversations, projectCampaigns] = await Promise.all([
+      this.db.select().from(tasks).where(scoped(scope, { organizationId: tasks.organizationId, companyId: tasks.companyId }, eq(tasks.projectId, id))).orderBy(desc(tasks.updatedAt)).limit(100),
+      this.db.select().from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.projectId, id))).orderBy(desc(agentRuns.createdAt)).limit(100),
+      this.db.select().from(artifacts).where(scoped(scope, { organizationId: artifacts.organizationId, companyId: artifacts.companyId }, eq(artifacts.projectId, id))).orderBy(desc(artifacts.createdAt)).limit(100),
+      this.db.select().from(decisions).where(scoped(scope, { organizationId: decisions.organizationId, companyId: decisions.companyId }, eq(decisions.projectId, id))).orderBy(desc(decisions.createdAt)).limit(50),
+      this.db.select().from(conversations).where(scoped(scope, { organizationId: conversations.organizationId, companyId: conversations.companyId }, eq(conversations.projectId, id))).orderBy(desc(conversations.updatedAt)).limit(50),
+      this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId }, eq(campaigns.projectId, id))).orderBy(desc(campaigns.updatedAt)).limit(50),
+    ]);
+    return { project, tasks: projectTasks, runs: projectRuns, artifacts: projectArtifacts, decisions: projectDecisions, conversations: projectConversations, campaigns: projectCampaigns };
+  }
+}
 
 export class TaskService {
   constructor(private readonly db: Db) {}
 
-  list(scope: TenantScope, filter: { status?: TaskStatus[]; assigneeAgentId?: string; goalId?: string; limit?: number } = {}) {
+  list(scope: TenantScope, filter: { status?: TaskStatus[]; assigneeAgentId?: string; goalId?: string; projectId?: string; limit?: number } = {}) {
     return this.db
       .select()
       .from(tasks)
-      .where(scoped(scope, { organizationId: tasks.organizationId, companyId: tasks.companyId }, filter.status?.length ? inArray(tasks.status, filter.status) : undefined, filter.assigneeAgentId ? eq(tasks.assigneeAgentId, filter.assigneeAgentId) : undefined, filter.goalId ? eq(tasks.goalId, filter.goalId) : undefined))
+      .where(scoped(scope, { organizationId: tasks.organizationId, companyId: tasks.companyId }, filter.status?.length ? inArray(tasks.status, filter.status) : undefined, filter.assigneeAgentId ? eq(tasks.assigneeAgentId, filter.assigneeAgentId) : undefined, filter.goalId ? eq(tasks.goalId, filter.goalId) : undefined, filter.projectId ? eq(tasks.projectId, filter.projectId) : undefined))
       .orderBy(asc(tasks.position), desc(tasks.createdAt))
       .limit(filter.limit ?? 200);
   }
@@ -19,10 +75,11 @@ export class TaskService {
     return t ?? null;
   }
 
-  async create(scope: TenantScope, input: { title: string; description?: string; status?: TaskStatus; priority?: string; assigneeAgentId?: string | null; goalId?: string | null; parentTaskId?: string | null; dueAt?: Date | null; labels?: string[] }) {
+  async create(scope: TenantScope, input: { title: string; description?: string; status?: TaskStatus; priority?: string; assigneeAgentId?: string | null; goalId?: string | null; parentTaskId?: string | null; projectId?: string | null; dueAt?: Date | null; labels?: string[] }) {
     return this.db.transaction(async (tx) => {
-      const [t] = await tx.insert(tasks).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title.trim(), description: input.description ?? "", status: input.status ?? "todo", priority: input.priority ?? "medium", assigneeAgentId: input.assigneeAgentId ?? null, goalId: input.goalId ?? null, parentTaskId: input.parentTaskId ?? null, dueAt: input.dueAt ?? null, labels: input.labels ?? [], createdBy: scope.actor as Record<string, unknown> }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "task.created", actor: scope.actor, payload: { taskId: t!.id, title: t!.title, assigneeAgentId: t!.assigneeAgentId }, correlation: { taskId: t!.id } });
+      await assertScopedProject(tx, scope, input.projectId);
+      const [t] = await tx.insert(tasks).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title.trim(), description: input.description ?? "", status: input.status ?? "todo", priority: input.priority ?? "medium", assigneeAgentId: input.assigneeAgentId ?? null, goalId: input.goalId ?? null, projectId: input.projectId ?? null, parentTaskId: input.parentTaskId ?? null, dueAt: input.dueAt ?? null, labels: input.labels ?? [], createdBy: scope.actor as Record<string, unknown> }).returning();
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "task.created", actor: scope.actor, payload: { taskId: t!.id, title: t!.title, assigneeAgentId: t!.assigneeAgentId, projectId: t!.projectId }, correlation: { taskId: t!.id, ...(t!.projectId ? { projectId: t!.projectId } : {}) } });
       return t!;
     });
   }
@@ -104,11 +161,11 @@ export interface RunTrigger {
 export class RunService {
   constructor(private readonly db: Db) {}
 
-  list(scope: TenantScope, filter: { status?: RunStatus[]; agentId?: string; taskId?: string; limit?: number } = {}) {
+  list(scope: TenantScope, filter: { status?: RunStatus[]; agentId?: string; taskId?: string; projectId?: string; limit?: number } = {}) {
     return this.db
       .select()
       .from(agentRuns)
-      .where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, filter.status?.length ? inArray(agentRuns.status, filter.status) : undefined, filter.agentId ? eq(agentRuns.agentId, filter.agentId) : undefined, filter.taskId ? eq(agentRuns.taskId, filter.taskId) : undefined))
+      .where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, filter.status?.length ? inArray(agentRuns.status, filter.status) : undefined, filter.agentId ? eq(agentRuns.agentId, filter.agentId) : undefined, filter.taskId ? eq(agentRuns.taskId, filter.taskId) : undefined, filter.projectId ? eq(agentRuns.projectId, filter.projectId) : undefined))
       .orderBy(desc(agentRuns.createdAt))
       .limit(filter.limit ?? 50);
   }
@@ -118,10 +175,11 @@ export class RunService {
     return r ?? null;
   }
 
-  async create(scope: TenantScope, input: { agentId: string; taskId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
+  async create(scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
     return this.db.transaction(async (tx) => {
-      const [r] = await tx.insert(agentRuns).values({ organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}) } });
+      await assertScopedProject(tx, scope, input.projectId);
+      const [r] = await tx.insert(agentRuns).values({ organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}) } });
       return r!;
     });
   }
@@ -193,23 +251,40 @@ export class RunService {
     return this.db.select().from(agentRuns).where(and(inArray(agentRuns.status, ["building_context", "planning", "executing", "verifying"]), lt(agentRuns.updatedAt, olderThan)));
   }
 
-  async addArtifact(scope: TenantScope, input: { runId?: string; taskId?: string; kind: string; title: string; content?: string; url?: string; mimeType?: string; metadata?: Record<string, unknown> }) {
-    const [a] = await this.db.insert(artifacts).values({ organizationId: scope.organizationId, companyId: scope.companyId!, runId: input.runId, taskId: input.taskId, kind: input.kind, title: input.title, content: input.content, url: input.url, mimeType: input.mimeType, sizeBytes: input.content ? Buffer.byteLength(input.content) : null, metadata: input.metadata ?? {} }).returning();
-    return a!;
-  }
-  listArtifacts(scope: TenantScope, filter: { runId?: string; taskId?: string; limit?: number } = {}) {
-    return this.db.select().from(artifacts).where(scoped(scope, { organizationId: artifacts.organizationId, companyId: artifacts.companyId }, filter.runId ? eq(artifacts.runId, filter.runId) : undefined, filter.taskId ? eq(artifacts.taskId, filter.taskId) : undefined)).orderBy(desc(artifacts.createdAt)).limit(filter.limit ?? 100);
+  private async resolveProjectId(scope: TenantScope, input: { projectId?: string | null; runId?: string; taskId?: string }) {
+    if (input.projectId) return input.projectId;
+    if (input.runId) {
+      const [run] = await this.db.select({ projectId: agentRuns.projectId }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, input.runId))).limit(1);
+      if (run?.projectId) return run.projectId;
+    }
+    if (input.taskId) {
+      const [task] = await this.db.select({ projectId: tasks.projectId }).from(tasks).where(scoped(scope, { organizationId: tasks.organizationId, companyId: tasks.companyId }, eq(tasks.id, input.taskId))).limit(1);
+      if (task?.projectId) return task.projectId;
+    }
+    return null;
   }
 
-  async recordDecision(scope: TenantScope, input: { title: string; rationale: string; runId?: string; taskId?: string }) {
+  async addArtifact(scope: TenantScope, input: { runId?: string; taskId?: string; projectId?: string | null; kind: string; title: string; content?: string; url?: string; mimeType?: string; metadata?: Record<string, unknown> }) {
+    const projectId = await this.resolveProjectId(scope, input);
+    await assertScopedProject(this.db, scope, projectId);
+    const [a] = await this.db.insert(artifacts).values({ organizationId: scope.organizationId, companyId: scope.companyId!, runId: input.runId, taskId: input.taskId, projectId, kind: input.kind, title: input.title, content: input.content, url: input.url, mimeType: input.mimeType, sizeBytes: input.content ? Buffer.byteLength(input.content) : null, metadata: input.metadata ?? {} }).returning();
+    return a!;
+  }
+  listArtifacts(scope: TenantScope, filter: { runId?: string; taskId?: string; projectId?: string; limit?: number } = {}) {
+    return this.db.select().from(artifacts).where(scoped(scope, { organizationId: artifacts.organizationId, companyId: artifacts.companyId }, filter.runId ? eq(artifacts.runId, filter.runId) : undefined, filter.taskId ? eq(artifacts.taskId, filter.taskId) : undefined, filter.projectId ? eq(artifacts.projectId, filter.projectId) : undefined)).orderBy(desc(artifacts.createdAt)).limit(filter.limit ?? 100);
+  }
+
+  async recordDecision(scope: TenantScope, input: { title: string; rationale: string; runId?: string; taskId?: string; projectId?: string | null }) {
     return this.db.transaction(async (tx) => {
-      const [d] = await tx.insert(decisions).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title, rationale: input.rationale, decidedBy: scope.actor as Record<string, unknown>, runId: input.runId, taskId: input.taskId }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "decision.recorded", actor: scope.actor, payload: { decisionId: d!.id, title: input.title }, correlation: { runId: input.runId ?? "" } });
+      const projectId = await this.resolveProjectId(scope, input);
+      await assertScopedProject(tx, scope, projectId);
+      const [d] = await tx.insert(decisions).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title, rationale: input.rationale, decidedBy: scope.actor as Record<string, unknown>, runId: input.runId, taskId: input.taskId, projectId }).returning();
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "decision.recorded", actor: scope.actor, payload: { decisionId: d!.id, title: input.title, projectId }, correlation: { runId: input.runId ?? "", ...(projectId ? { projectId } : {}) } });
       return d!;
     });
   }
-  listDecisions(scope: TenantScope, limit = 50) {
-    return this.db.select().from(decisions).where(scoped(scope, { organizationId: decisions.organizationId, companyId: decisions.companyId })).orderBy(desc(decisions.createdAt)).limit(limit);
+  listDecisions(scope: TenantScope, limit = 50, projectId?: string) {
+    return this.db.select().from(decisions).where(scoped(scope, { organizationId: decisions.organizationId, companyId: decisions.companyId }, projectId ? eq(decisions.projectId, projectId) : undefined)).orderBy(desc(decisions.createdAt)).limit(limit);
   }
 }
 
@@ -248,15 +323,16 @@ export class DocumentService {
 
 export class ConversationService {
   constructor(private readonly db: Db) {}
-  list(scope: TenantScope, limit = 50) {
-    return this.db.select().from(conversations).where(scoped(scope, { organizationId: conversations.organizationId, companyId: conversations.companyId })).orderBy(desc(conversations.updatedAt)).limit(limit);
+  list(scope: TenantScope, limit = 50, projectId?: string) {
+    return this.db.select().from(conversations).where(scoped(scope, { organizationId: conversations.organizationId, companyId: conversations.companyId }, projectId ? eq(conversations.projectId, projectId) : undefined)).orderBy(desc(conversations.updatedAt)).limit(limit);
   }
   async get(scope: TenantScope, id: string) {
     const [c] = await this.db.select().from(conversations).where(scoped(scope, { organizationId: conversations.organizationId, companyId: conversations.companyId }, eq(conversations.id, id))).limit(1);
     return c ?? null;
   }
-  async create(scope: TenantScope, input: { title?: string; agentId?: string | null }) {
-    const [c] = await this.db.insert(conversations).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title ?? "New conversation", agentId: input.agentId ?? null, createdBy: scope.actor.type === "user" ? scope.actor.userId : "system" }).returning();
+  async create(scope: TenantScope, input: { title?: string; agentId?: string | null; projectId?: string | null }) {
+    await assertScopedProject(this.db, scope, input.projectId);
+    const [c] = await this.db.insert(conversations).values({ organizationId: scope.organizationId, companyId: scope.companyId!, title: input.title ?? "New conversation", projectId: input.projectId ?? null, agentId: input.agentId ?? null, createdBy: scope.actor.type === "user" ? scope.actor.userId : "system" }).returning();
     return c!;
   }
   async delete(scope: TenantScope, id: string) {

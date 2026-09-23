@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BudgetService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, RunService, TaskService, EventService } from "@steward/core";
+import type { AgentService, ApprovalService, BudgetService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, TaskService, EventService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -17,6 +17,7 @@ export interface AgentServices {
   gateway: AIGateway;
   memory: MemoryService;
   companies: CompanyService;
+  projects: ProjectService;
   tasks: TaskService;
   agents: AgentService;
   runs: RunService;

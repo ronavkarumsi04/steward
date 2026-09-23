@@ -1,5 +1,5 @@
 import { desc, eq, sql } from "drizzle-orm";
-import { auditLog, campaigns, contacts, leads, outboundMessages, scoped, type Db } from "@steward/db";
+import { auditLog, campaigns, contacts, leads, outboundMessages, projects, scoped, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 
 export const LEAD_STAGES = ["new", "qualified", "contacted", "interested", "won", "lost"] as const;
@@ -115,8 +115,8 @@ export class GrowthService {
     return row ?? null;
   }
 
-  async listCampaigns(scope: TenantScope) {
-    const rows = await this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId })).orderBy(desc(campaigns.updatedAt));
+  async listCampaigns(scope: TenantScope, projectId?: string) {
+    const rows = await this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId }, projectId ? eq(campaigns.projectId, projectId) : undefined)).orderBy(desc(campaigns.updatedAt));
     const deliveries = await this.db
       .select({ campaignId: outboundMessages.campaignId, status: outboundMessages.status, count: sql<number>`count(*)::int` })
       .from(outboundMessages)
@@ -132,11 +132,16 @@ export class GrowthService {
     return rows.map((row) => ({ ...row, delivery: byCampaign.get(row.id) ?? {} }));
   }
 
-  async createCampaign(scope: TenantScope, input: { name: string; channel: CampaignChannel; objective?: string; audience?: string; budgetUsd?: number }) {
+  async createCampaign(scope: TenantScope, input: { name: string; channel: CampaignChannel; objective?: string; audience?: string; budgetUsd?: number; projectId?: string | null }) {
     return this.db.transaction(async (tx) => {
+      if (input.projectId) {
+        const [project] = await tx.select({ id: projects.id }).from(projects).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, eq(projects.id, input.projectId))).limit(1);
+        if (!project) throw new Error("Project not found in this company");
+      }
       const [campaign] = await tx.insert(campaigns).values({
         organizationId: scope.organizationId,
         companyId: scope.companyId!,
+        projectId: input.projectId ?? null,
         name: input.name.trim(),
         channel: input.channel,
         status: "draft",
