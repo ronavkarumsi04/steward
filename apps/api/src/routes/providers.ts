@@ -164,7 +164,7 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     }
     if (!deliveryId) deliveryId = `${provider}:${Buffer.from(raw).toString("base64url").slice(0, 120)}`;
     const target = await resolveWebhookTenant(c, provider, body);
-    const fresh = await deps.services.integrations.recordInboundDelivery(provider, deliveryId, { event: eventName, body: redact(body) }, target?.organizationId);
+    const fresh = await deps.services.integrations.recordInboundDelivery(provider, "legacy-env", deliveryId, { event: eventName, body: redact(body) }, target?.organizationId);
     if (fresh && target) await emitEvent(deps.core.db, { organizationId: target.organizationId, companyId: target.companyId ?? undefined, type: "integration.webhook", actor: { type: "system", component: `webhook:${provider}` }, payload: { provider, event: eventName, deliveryId, body: redact(body) } });
     return c.json({ ok: true, duplicate: !fresh, routed: Boolean(target) });
   });

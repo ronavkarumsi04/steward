@@ -246,6 +246,8 @@ export const EventType = z.enum([
   "company.profile.updated",
   "project.created",
   "project.updated",
+  "signal.received",
+  "signal.updated",
   "task.created",
   "task.updated",
   "task.completed",

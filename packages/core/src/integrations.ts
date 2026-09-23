@@ -22,6 +22,7 @@ export interface IntegrationView {
   lastCheckedAt: Date | null;
   companyId: string | null;
   createdAt: Date;
+  webhookUrl: string | null;
   definition: ReturnType<typeof publicIntegration>;
 }
 
@@ -47,7 +48,7 @@ export class IntegrationService {
   private view(r: typeof integrations.$inferSelect): IntegrationView {
     const def = integrationMap.get(r.type);
     const cfg = { ...r.config };
-    return { id: r.id, type: r.type, label: r.label, status: r.status as IntegrationStatus, authKind: r.authKind, externalAccountId: r.externalAccountId, scopes: r.scopes, config: cfg, lastError: r.lastError, lastCheckedAt: r.lastCheckedAt, companyId: r.companyId, createdAt: r.createdAt, definition: def ? publicIntegration(def) : { id: r.type, name: r.type, category: "generic", authKind: r.authKind as IntegrationDefinition["authKind"], oauth: false, fields: [], docsUrl: "", actions: [], status: "planned" } };
+    return { id: r.id, type: r.type, label: r.label, status: r.status as IntegrationStatus, authKind: r.authKind, externalAccountId: r.externalAccountId, scopes: r.scopes, config: cfg, lastError: r.lastError, lastCheckedAt: r.lastCheckedAt, companyId: r.companyId, createdAt: r.createdAt, webhookUrl: def?.webhook && (def.id === "stripe" || def.id === "resend") ? `${this.opts.apiUrl.replace(/\/$/, "")}/webhooks/${def.id}/${r.id}` : null, definition: def ? publicIntegration(def) : { id: r.type, name: r.type, category: "generic", authKind: r.authKind as IntegrationDefinition["authKind"], oauth: false, fields: [], docsUrl: "", actions: [], status: "planned" } };
   }
 
   async list(scope: TenantScope) {
@@ -193,9 +194,19 @@ export class IntegrationService {
     return { organizationId: pick[0]!.organizationId, companyId: companies.size === 1 ? pick[0]!.companyId : null };
   }
 
+  /** Resolves an integration-specific inbound webhook without relying on ambiguous account-wide matching. */
+  async resolveInboundWebhook(integrationId: string, expectedType: string) {
+    const [row] = await this.db.select().from(integrations).where(and(eq(integrations.id, integrationId), eq(integrations.type, expectedType), eq(integrations.status, "connected"))).limit(1);
+    if (!row) throw new Error("Webhook integration not found");
+    const [cred] = await this.db.select().from(integrationCredentials).where(eq(integrationCredentials.integrationId, row.id)).orderBy(desc(integrationCredentials.updatedAt)).limit(1);
+    if (!cred) throw new Error("Webhook integration has no credentials");
+    const secret = JSON.parse(await this.crypto.decrypt(cred.secret as unknown as Envelope, this.aad(row.organizationId, row.id))) as IntegrationSecret;
+    return { integration: this.view(row), secret, scope: { organizationId: row.organizationId, companyId: row.companyId ?? undefined, actor: { type: "system" as const, component: `webhook:${expectedType}` } } };
+  }
+
   /** Replay-safe inbound webhook registration. Returns false when this delivery id was already processed. */
-  async recordInboundDelivery(provider: string, externalId: string, payload: unknown, organizationId?: string) {
-    const rows = await this.db.insert(webhookDeliveries).values({ organizationId: organizationId ?? null, direction: "inbound", provider, externalId, status: "received", attempts: 1, payload }).onConflictDoNothing({ target: [webhookDeliveries.provider, webhookDeliveries.externalId] }).returning({ id: webhookDeliveries.id });
+  async recordInboundDelivery(provider: string, integrationId: string, externalId: string, payload: unknown, organizationId?: string) {
+    const rows = await this.db.insert(webhookDeliveries).values({ organizationId: organizationId ?? null, direction: "inbound", provider, externalId, webhookId: integrationId, status: "received", attempts: 1, payload }).onConflictDoNothing({ target: [webhookDeliveries.provider, webhookDeliveries.externalId] }).returning({ id: webhookDeliveries.id });
     return rows.length > 0;
   }
 }

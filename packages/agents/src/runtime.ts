@@ -111,7 +111,8 @@ export class AgentRuntime {
         const recentTasks = projectSnapshot.tasks.slice(0, 8).map((x) => `- [${x.status}] ${x.title}`).join("\n");
         const outputs = projectSnapshot.artifacts.slice(0, 8).map((x) => `- ${x.kind}: ${x.title}${x.url ? ` → ${x.url}` : ""}`).join("\n");
         const projectDecisions = projectSnapshot.decisions.slice(0, 6).map((x) => `- ${x.title}`).join("\n");
-        sections.push(`Active project: ${p.name} [${p.status}]\nObjective: ${p.objective || p.description || "(not set)"}\nSuccess signal: ${p.successSignal || "(not set)"}\nNext step: ${p.nextStep || "(not set)"}${recentTasks ? `\nRecent project tasks:\n${recentTasks}` : ""}${outputs ? `\nProject outputs:\n${outputs}` : ""}${projectDecisions ? `\nProject decisions:\n${projectDecisions}` : ""}`);
+        const recentSignals = projectSnapshot.signals.slice(0, 8).map((x) => `- [${x.state}/${x.severity}] ${x.title}${x.summary ? ` — ${x.summary}` : ""}`).join("\n");
+        sections.push(`Active project: ${p.name} [${p.status}]\nObjective: ${p.objective || p.description || "(not set)"}\nSuccess signal: ${p.successSignal || "(not set)"}\nNext step: ${p.nextStep || "(not set)"}${recentTasks ? `\nRecent project tasks:\n${recentTasks}` : ""}${outputs ? `\nProject outputs:\n${outputs}` : ""}${projectDecisions ? `\nProject decisions:\n${projectDecisions}` : ""}${recentSignals ? `\nRecent business signals:\n${recentSignals}` : ""}`);
       }
       sections.push(`Autonomy level: ${company.autonomyLevel} (0 read-only … 4 high autonomy). Outbound ${company.outboundPaused ? "PAUSED" : "enabled"}. Timezone ${company.timezone}.`);
       if (goals.length) sections.push(`Goals:\n${goals.filter((g) => g.status === "active").map((g) => `- ${g.title}${g.metric ? ` (${g.metric} → ${g.target ?? "?"})` : ""}${g.horizon ? ` by ${g.horizon}` : ""}`).join("\n")}`);

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
-import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, campaigns, conversations, decisions, documents, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
+import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import type { AgentKind, RunStatus, StepKind, TaskStatus, TenantScope } from "@steward/schema";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
@@ -20,6 +20,12 @@ export class ProjectService {
 
   async get(scope: TenantScope, id: string) {
     const [project] = await this.db.select().from(projects).where(scoped(scope, { organizationId: projects.organizationId, companyId: projects.companyId }, eq(projects.id, id))).limit(1);
+    return project ?? null;
+  }
+
+  /** Organization-bounded lookup for resolving shared integration metadata before a company scope is known. */
+  async findInOrganization(scope: TenantScope, id: string) {
+    const [project] = await this.db.select().from(projects).where(and(eq(projects.organizationId, scope.organizationId), eq(projects.id, id))).limit(1);
     return project ?? null;
   }
 
@@ -46,15 +52,16 @@ export class ProjectService {
   async snapshot(scope: TenantScope, id: string) {
     const project = await this.get(scope, id);
     if (!project) return null;
-    const [projectTasks, projectRuns, projectArtifacts, projectDecisions, projectConversations, projectCampaigns] = await Promise.all([
+    const [projectTasks, projectRuns, projectArtifacts, projectDecisions, projectConversations, projectCampaigns, projectSignals] = await Promise.all([
       this.db.select().from(tasks).where(scoped(scope, { organizationId: tasks.organizationId, companyId: tasks.companyId }, eq(tasks.projectId, id))).orderBy(desc(tasks.updatedAt)).limit(100),
       this.db.select().from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.projectId, id))).orderBy(desc(agentRuns.createdAt)).limit(100),
       this.db.select().from(artifacts).where(scoped(scope, { organizationId: artifacts.organizationId, companyId: artifacts.companyId }, eq(artifacts.projectId, id))).orderBy(desc(artifacts.createdAt)).limit(100),
       this.db.select().from(decisions).where(scoped(scope, { organizationId: decisions.organizationId, companyId: decisions.companyId }, eq(decisions.projectId, id))).orderBy(desc(decisions.createdAt)).limit(50),
       this.db.select().from(conversations).where(scoped(scope, { organizationId: conversations.organizationId, companyId: conversations.companyId }, eq(conversations.projectId, id))).orderBy(desc(conversations.updatedAt)).limit(50),
       this.db.select().from(campaigns).where(scoped(scope, { organizationId: campaigns.organizationId, companyId: campaigns.companyId }, eq(campaigns.projectId, id))).orderBy(desc(campaigns.updatedAt)).limit(50),
+      this.db.select().from(businessSignals).where(scoped(scope, { organizationId: businessSignals.organizationId, companyId: businessSignals.companyId }, eq(businessSignals.projectId, id))).orderBy(desc(businessSignals.occurredAt)).limit(50),
     ]);
-    return { project, tasks: projectTasks, runs: projectRuns, artifacts: projectArtifacts, decisions: projectDecisions, conversations: projectConversations, campaigns: projectCampaigns };
+    return { project, tasks: projectTasks, runs: projectRuns, artifacts: projectArtifacts, decisions: projectDecisions, conversations: projectConversations, campaigns: projectCampaigns, signals: projectSignals };
   }
 }
 
@@ -156,6 +163,7 @@ export interface RunTrigger {
   conversationId?: string;
   messageId?: string;
   sourceEventSeq?: number;
+  sourceSignalId?: string;
 }
 
 export class RunService {
@@ -179,7 +187,7 @@ export class RunService {
     return this.db.transaction(async (tx) => {
       await assertScopedProject(tx, scope, input.projectId);
       const [r] = await tx.insert(agentRuns).values({ organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}) } });
+      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null, sourceSignalId: input.trigger.sourceSignalId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}), ...(input.trigger.sourceSignalId ? { signalId: input.trigger.sourceSignalId } : {}) } });
       return r!;
     });
   }
@@ -196,6 +204,12 @@ export class RunService {
       const [r] = await tx.update(agentRuns).set(set).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, id))).returning();
       if (!r) return null;
       const terminal = ["succeeded", "failed", "cancelled"].includes(status);
+      const trigger = r.trigger as { sourceSignalId?: string };
+      if (terminal && trigger.sourceSignalId) {
+        const reviewSucceeded = status === "succeeded";
+        const [signal] = await tx.update(businessSignals).set({ state: reviewSucceeded ? "reviewed" : "unread", reviewRunId: reviewSucceeded ? id : null, updatedAt: new Date() }).where(scoped(scope, { organizationId: businessSignals.organizationId, companyId: businessSignals.companyId }, eq(businessSignals.id, trigger.sourceSignalId))).returning();
+        if (signal) await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "signal.updated", actor: scope.actor, payload: { signalId: signal.id, state: signal.state, reviewRunId: signal.reviewRunId }, correlation: { signalId: signal.id, runId: id, ...(signal.projectId ? { projectId: signal.projectId } : {}) } });
+      }
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: terminal ? "run.completed" : "run.status", actor: scope.actor, payload: { runId: id, status, agentId: r.agentId, taskId: r.taskId, error: extra.error ?? undefined, costUsd: Number(r.costUsd) }, correlation: { runId: id, taskId: r.taskId ?? "" } });
       return r;
     });

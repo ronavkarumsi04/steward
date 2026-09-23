@@ -323,11 +323,13 @@ const emailSend = defineTool({
     const from = input.from ?? (integ.config.fromAddress as string | undefined) ?? secret.fields?.fromAddress ?? s.emailFrom;
     if (!from) return fail("No sender address configured for the email integration.");
     const key = idempotencyKey("email", ctx.runId, input.campaignId, input.to, input.subject);
+    const currentRun = ctx.runId ? await s.runs.get(s.scope, ctx.runId) : null;
+    const messageTags: Record<string, string> = { ...(input.campaignId ? { campaign: input.campaignId } : {}), ...(currentRun?.projectId ? { steward_project_id: currentRun.projectId } : {}), ...(ctx.runId ? { steward_run_id: ctx.runId } : {}), ...(ctx.taskId ? { steward_task_id: ctx.taskId } : {}) };
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Email already sent (id ${existing.externalId}).` };
     const provider = emailProviderFor(integ.type, secret);
     try {
-      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" } });
+      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" }, tags: messageTags });
       await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
       return { ok: true, content: `Email sent to ${input.to} via ${integ.type} (id ${res.id}).`, data: res };
     } catch (e) {
@@ -873,6 +875,8 @@ const stripeCreateOffer = defineTool({
     const client = new StripeClient(secret);
     const unitAmountMinor = Math.round(amountUsd * 100);
     const baseKey = idempotencyKey("stripe-offer", ctx.runId, name, unitAmountMinor, currency.toLowerCase(), interval);
+    const currentRun = ctx.runId ? await s.runs.get(s.scope, ctx.runId) : null;
+    const metadata: Record<string, string> = { ...(currentRun?.projectId ? { steward_project_id: currentRun.projectId } : {}), ...(ctx.runId ? { steward_run_id: ctx.runId } : {}), ...(ctx.taskId ? { steward_task_id: ctx.taskId } : {}) };
     const product = await client.createProduct({ name, description, unitAmountMinor, currency: currency.toLowerCase(), interval }, `${baseKey}-product`);
     const checkout = await client.createCheckoutSession({
       priceId: product.default_price,
@@ -880,6 +884,7 @@ const stripeCreateOffer = defineTool({
       cancelUrl,
       mode: interval ? "subscription" : "payment",
       quantity,
+      metadata,
     }, `${baseKey}-checkout`);
     await s.runs.addArtifact(s.scope, {
       runId: ctx.runId,

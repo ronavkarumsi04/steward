@@ -574,6 +574,31 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex("webhook_replay_idx").on(t.provider, t.externalId)]);
 
+export const businessSignals = pgTable("business_signals", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  integrationId: text("integration_id").references(() => integrations.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  externalId: text("external_id").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull().default(""),
+  severity: text("severity").notNull().default("info"), // info|positive|warning|critical
+  state: text("state").notNull().default("unread"), // unread|reviewing|reviewed|dismissed
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  customerRef: text("customer_ref"),
+  data: json<Record<string, unknown>>("data").notNull().default({}),
+  reviewRunId: text("review_run_id").references(() => agentRuns.id, { onDelete: "set null" }),
+  occurredAt: ts("occurred_at").notNull().defaultNow(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("business_signals_provider_external_idx").on(t.provider, t.externalId),
+  index("business_signals_company_state_idx").on(t.companyId, t.state, t.occurredAt),
+  index("business_signals_project_idx").on(t.projectId, t.occurredAt),
+]);
+
 // ---------- Companion devices ----------
 export const companionDevices = pgTable("companion_devices", {
   id: id(),

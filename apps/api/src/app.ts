@@ -10,6 +10,7 @@ import { registerCompanyRoutes } from "./routes/companies.js";
 import { registerCompanionRoutes } from "./routes/companion.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerWorkRoutes } from "./routes/work.js";
+import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/signals.js";
 
 export const API_VERSION = "0.1.0";
 
@@ -48,6 +49,9 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     return c.json({ ok: db === "ok", version: API_VERSION, db, temporal: deps.workflows ? "connected" : "disabled" }, db === "ok" ? 200 : 503);
   });
 
+  app.use("/webhooks/*", rateLimit({ capacity: 180, refillPerSec: 3 }));
+  registerSignalWebhookRoutes(app);
+
   v1.use("*", session);
   v1.use("*", csrf);
   v1.use("*", rateLimit({ capacity: 600, refillPerSec: 10 }));
@@ -55,6 +59,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerAuthRoutes(v1, registry);
   registerCompanyRoutes(v1, registry);
   registerWorkRoutes(v1, registry, bus);
+  registerSignalRoutes(v1, registry);
   registerProviderRoutes(v1, registry);
   registerCompanionRoutes(v1, registry);
 

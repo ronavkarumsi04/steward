@@ -67,6 +67,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin }: { o
                 <div>
                   <div className="flex items-center gap-2"><span className="font-medium">{i.label}</span><span className="pill text-muted">{i.definition.name}</span><StatusPill status={i.status} />{i.companyId && <span className="pill text-muted">company-scoped</span>}</div>
                   <div className="text-xs text-muted">{i.authKind}{i.externalAccountId ? ` · ${i.externalAccountId}` : ""}{i.scopes.length ? ` · ${i.scopes.join(" ")}` : ""} · connected <Ago iso={i.createdAt} />{i.lastError && <span className="text-danger"> · {i.lastError}</span>}</div>
+                  {i.webhookUrl && <div className="mt-2 flex max-w-2xl items-center gap-2"><code className="min-w-0 flex-1 truncate rounded-md border border-line bg-panel-2 px-2 py-1 text-[11px] text-muted" title={i.webhookUrl}>{i.webhookUrl}</code><button type="button" className="btn btn-sm" onClick={() => void navigator.clipboard.writeText(i.webhookUrl!)}>Copy webhook</button></div>}
                 </div>
                 <div className="flex gap-1">
                   {i.status === "needs_reauth" && i.definition.oauth && <button className="btn" disabled={!isAdmin} onClick={() => startOAuth(i.definition)}>Re-authorize</button>}

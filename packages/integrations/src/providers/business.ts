@@ -50,8 +50,13 @@ export class StripeClient {
     if (input.interval) form["default_price_data[recurring][interval]"] = input.interval;
     return this.req<{ id: string; default_price: string }>("/products", { form, idempotencyKey });
   }
-  createCheckoutSession(input: { priceId: string; successUrl: string; cancelUrl: string; mode: "payment" | "subscription"; quantity?: number }, idempotencyKey: string) {
-    return this.req<{ id: string; url: string }>("/checkout/sessions", { form: { mode: input.mode, success_url: input.successUrl, cancel_url: input.cancelUrl, "line_items[0][price]": input.priceId, "line_items[0][quantity]": String(input.quantity ?? 1) }, idempotencyKey });
+  createCheckoutSession(input: { priceId: string; successUrl: string; cancelUrl: string; mode: "payment" | "subscription"; quantity?: number; metadata?: Record<string, string> }, idempotencyKey: string) {
+    const form: Record<string, string> = { mode: input.mode, success_url: input.successUrl, cancel_url: input.cancelUrl, "line_items[0][price]": input.priceId, "line_items[0][quantity]": String(input.quantity ?? 1) };
+    for (const [key, value] of Object.entries(input.metadata ?? {})) {
+      form[`metadata[${key}]`] = value;
+      form[`${input.mode === "subscription" ? "subscription_data" : "payment_intent_data"}[metadata][${key}]`] = value;
+    }
+    return this.req<{ id: string; url: string }>("/checkout/sessions", { form, idempotencyKey });
   }
   async verify() {
     const acct = await this.req<{ id: string; business_profile?: { name?: string }; livemode?: boolean }>("/account");

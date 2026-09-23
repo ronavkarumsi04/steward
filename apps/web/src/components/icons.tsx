@@ -49,6 +49,12 @@ export const Icon = {
       <path d="M10 6h10M10 12h10M10 18h10" />
     </Base>
   ),
+  Signals: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M3 12h4l2.2-5 4.2 10 2.2-5H21" />
+      <circle cx="12" cy="12" r="9" opacity=".25" />
+    </Base>
+  ),
   Runs: (p: IconProps) => (
     <Base {...p}>
       <path d="M5 12h3l2-5 4 10 2-5h3" />

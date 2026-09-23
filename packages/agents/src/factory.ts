@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, SignalService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
@@ -30,6 +30,7 @@ export class AgentServiceFactory {
   readonly growth: GrowthService;
   readonly providers: ProviderCredentialService;
   readonly events: EventService;
+  readonly signals: SignalService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -49,6 +50,7 @@ export class AgentServiceFactory {
     this.growth = new GrowthService(db);
     this.providers = new ProviderCredentialService(db, crypto);
     this.events = new EventService(db);
+    this.signals = new SignalService(db);
     this.companion = new CompanionService(db);
   }
 

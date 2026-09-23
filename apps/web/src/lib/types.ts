@@ -132,6 +132,30 @@ export interface ProjectSnapshot {
   decisions: Decision[];
   conversations: Conversation[];
   campaigns: ProjectCampaign[];
+  signals: BusinessSignal[];
+}
+
+export type SignalState = "unread" | "reviewing" | "reviewed" | "dismissed";
+export type SignalSeverity = "info" | "positive" | "warning" | "critical";
+export interface BusinessSignal {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  integrationId: string | null;
+  provider: string;
+  externalId: string;
+  kind: string;
+  title: string;
+  summary: string;
+  severity: SignalSeverity;
+  state: SignalState;
+  projectId: string | null;
+  customerRef: string | null;
+  data: Record<string, unknown>;
+  reviewRunId: string | null;
+  occurredAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Task {
@@ -365,6 +389,7 @@ export interface Integration {
   lastError: string | null;
   lastCheckedAt: string | null;
   createdAt: string;
+  webhookUrl: string | null;
   definition: IntegrationCatalogEntry;
 }
 export interface UsageRow {

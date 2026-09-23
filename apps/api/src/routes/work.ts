@@ -17,14 +17,14 @@ async function requireProject(services: AgentServiceFactory, scope: TenantScope,
 }
 
 /** Creates a run row, binds it to its Temporal workflow id, and starts the workflow. Exposed for chat + task routes. */
-export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" }) {
+export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event"; sourceSignalId?: string }) {
   if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
   const company = await services.companies.get(scope);
   if (!company || company.status !== "active") throw new HttpError(409, "company_inactive", "Company is paused or archived");
   const agent = await services.agents.get(scope, input.agentId);
   if (!agent || !agent.enabled) throw new HttpError(404, "not_found", "Agent not found or disabled");
   await requireProject(services, scope, input.projectId);
-  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined } });
+  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined, sourceSignalId: input.sourceSignalId } });
   const wf = await workflows.startRun({ runId: run.id, scope: { organizationId: scope.organizationId, companyId: scope.companyId! } });
   await services.runs.attachWorkflow(scope, run.id, wf.workflowId, wf.workflowRunId);
   return { ...run, workflowId: wf.workflowId, workflowRunId: wf.workflowRunId };
