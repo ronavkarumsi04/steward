@@ -1,5 +1,14 @@
 import { apiJson, type IntegrationDefinition, type IntegrationSecret } from "../framework.js";
 
+export interface ProjectDomain {
+  name: string;
+  projectId: string;
+  verified: boolean;
+  apexName?: string;
+  redirect?: string | null;
+  verification?: Array<{ type: string; domain: string; value: string; reason?: string }>;
+}
+
 export interface DeployProvider {
   id: string;
   listProjects(): Promise<Array<{ id: string; name: string; url?: string; framework?: string }>>;
@@ -8,6 +17,9 @@ export interface DeployProvider {
   deploy(projectId: string, input: { branch?: string; production: boolean; ref?: string }): Promise<{ id: string; url?: string; status: string }>;
   getDeployment(id: string): Promise<{ id: string; status: "queued" | "building" | "ready" | "error" | "canceled"; url?: string; error?: string }>;
   getLogs?(id: string, limit?: number): Promise<string>;
+  listDomains?(projectId: string): Promise<ProjectDomain[]>;
+  addDomain?(projectId: string, domain: string): Promise<ProjectDomain>;
+  verifyDomain?(projectId: string, domain: string): Promise<ProjectDomain>;
 }
 
 export const vercelDefinition: IntegrationDefinition = {
@@ -26,6 +38,9 @@ export const vercelDefinition: IntegrationDefinition = {
     { name: "deploy_preview", description: "Create a preview deployment", risk: "MEDIUM", dimension: "code_deploy", externallyVisible: true },
     { name: "deploy_production", description: "Create a production deployment", risk: "HIGH", dimension: "prod_deploy", externallyVisible: true },
     { name: "set_env", description: "Set environment variables", risk: "MEDIUM", dimension: "external_write", externallyVisible: false },
+    { name: "list_domains", description: "List custom domains and verification state", risk: "LOW", externallyVisible: false },
+    { name: "add_domain", description: "Attach a custom domain to a production project", risk: "HIGH", dimension: "prod_deploy", externallyVisible: true },
+    { name: "verify_domain", description: "Verify DNS and activate a custom project domain", risk: "HIGH", dimension: "prod_deploy", externallyVisible: true },
   ],
   webhook: { signatureHeader: "x-vercel-signature", scheme: "hmac_sha256_hex" },
   status: "implemented",
@@ -78,6 +93,16 @@ export class VercelProvider implements DeployProvider {
   async getLogs(id: string, limit = 200) {
     const events = await this.req<Array<{ type: string; payload?: { text?: string } }>>(`/v3/deployments/${id}/events`, {}, { limit: String(limit) });
     return events.map((e) => e.payload?.text ?? "").filter(Boolean).join("\n");
+  }
+  async listDomains(projectId: string) {
+    const result = await this.req<{ domains: ProjectDomain[] }>(`/v9/projects/${encodeURIComponent(projectId)}/domains`, {}, { limit: "100" });
+    return result.domains;
+  }
+  async addDomain(projectId: string, domain: string) {
+    return this.req<ProjectDomain>(`/v10/projects/${encodeURIComponent(projectId)}/domains`, { method: "POST", body: JSON.stringify({ name: domain }) });
+  }
+  async verifyDomain(projectId: string, domain: string) {
+    return this.req<ProjectDomain>(`/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}/verify`, { method: "POST" });
   }
 }
 

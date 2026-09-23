@@ -17,7 +17,7 @@ Integrations are connected per organization under **Integrations** and enabled p
 | Stripe | business | restricted API key | implemented | `read_metrics`, `create_product`, `create_checkout_session` (money-moving actions require approval) |
 | Neon | database | API key | implemented | `list_projects`, `create_project` |
 | Supabase | database | API key | framework | — |
-| Vercel | deploy | token | implemented | `list_projects`, `create_project`, `deploy_preview`, `deploy_production`, `set_env` |
+| Vercel | deploy | token | implemented | `list_projects`, `create_project`, `deploy_preview`, `deploy_production`, `set_env`, `list_domains`, `add_domain`, `verify_domain` |
 | Render | deploy | API key | implemented | `list_services`, `create_service`, `deploy` |
 | Google | productivity | OAuth 2 | implemented | `list_messages`, `send_email` (Gmail), `create_event` (Calendar) |
 | HubSpot | CRM | OAuth 2 | framework | `search_contacts`, `upsert_contact` (defined, unverified) |

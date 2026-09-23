@@ -35,9 +35,17 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const stripeConnected = connectedTypes.has("stripe");
   const deploymentConnected = connectedTypes.has("vercel") || connectedTypes.has("render");
   const growthConnected = ["resend", "postmark", "sendgrid", "smtp", "x", "linkedin", "google", "slack"].some((type) => connectedTypes.has(type));
-  const liveProduct = [...artifacts.artifacts]
-    .filter((a) => (a.kind === "deployment" || a.kind === "deployment_project") && a.url)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  const newest = (items: Artifact[]) => [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  const verifiedDomain = newest(artifacts.artifacts.filter((a) => a.kind === "domain" && a.url));
+  const deploymentArtifact = newest(artifacts.artifacts.filter((a) => (a.kind === "deployment" || a.kind === "deployment_project") && a.url));
+  const liveProduct = verifiedDomain ?? deploymentArtifact;
+  const deploymentTarget = newest(artifacts.artifacts.filter((a) =>
+    (a.kind === "deployment" || a.kind === "deployment_project") && typeof a.metadata?.projectId === "string",
+  ));
+  const latestPendingDomain = newest(artifacts.artifacts.filter((a) => a.kind === "domain_pending" && typeof a.metadata?.domain === "string"));
+  const pendingDomain = latestPendingDomain && latestPendingDomain.metadata.domain !== verifiedDomain?.metadata?.domain
+    ? String(latestPendingDomain.metadata.domain)
+    : null;
   const base = `/app/c/${companyId}`;
 
   return (
@@ -87,6 +95,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
           deploymentConnected,
           growthConnected,
           liveProductUrl: liveProduct?.url ?? null,
+          deploymentProjectId: typeof deploymentTarget?.metadata?.projectId === "string" ? deploymentTarget.metadata.projectId : null,
+          deploymentProvider: typeof deploymentTarget?.metadata?.provider === "string" ? deploymentTarget.metadata.provider : null,
+          pendingDomain,
           activeGoals: goals.filter((g) => g.status === "active").length,
           pendingApprovals: overview.pendingApprovals,
           recentRuns: runs.runs.length,

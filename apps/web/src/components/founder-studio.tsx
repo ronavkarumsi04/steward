@@ -28,6 +28,9 @@ interface StudioStats {
   deploymentConnected: boolean;
   growthConnected: boolean;
   liveProductUrl: string | null;
+  deploymentProjectId: string | null;
+  deploymentProvider: string | null;
+  pendingDomain: string | null;
   activeGoals: number;
   pendingApprovals: number;
   recentRuns: number;
@@ -106,6 +109,7 @@ export function FounderStudio({
   const autopilotSchedules = schedules.filter((s) => s.name.startsWith(AUTOPILOT_PREFIX));
   const autopilotEnabled = autopilotSchedules.some((s) => s.enabled);
   const [instruction, setInstruction] = useState("");
+  const [domain, setDomain] = useState(stats.pendingDomain ?? "");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [businessPulse, setBusinessPulse] = useState<BusinessPulse>({
@@ -145,6 +149,16 @@ export function FounderStudio({
   async function submit(e: FormEvent) {
     e.preventDefault();
     await launch(instruction);
+  }
+
+  async function handleDomain() {
+    const normalized = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!normalized || !stats.deploymentProjectId) return;
+    const verifying = stats.pendingDomain === normalized;
+    const instruction = verifying
+      ? `CUSTOM DOMAIN verification: Vercel project ${stats.deploymentProjectId} already has ${normalized} pending. Use deploy.verify_domain for exactly this project/domain. If it is still unverified, report the exact remaining DNS challenge and do not claim it is live.`
+      : `CUSTOM DOMAIN launch: attach ${normalized} to Vercel project ${stats.deploymentProjectId}. Use deploy.add_domain for exactly this project/domain. If Vercel requires DNS verification, preserve and report the exact challenge and do not claim the domain is live until verified.`;
+    await launch(instruction, "domain", "engineering");
   }
 
   async function toggleAutopilot() {
@@ -233,6 +247,25 @@ export function FounderStudio({
                 <span>{busy === lane.id ? "Starting…" : `Work on ${lane.title}`}</span>
                 {busy === lane.id ? <span className="spinner" aria-hidden="true" /> : <Icon.ArrowRight size={15} />}
               </button>
+              {lane.id === "build" && stats.deploymentProvider === "vercel" && stats.deploymentProjectId && (
+                <div className="mt-3 rounded-xl border border-line bg-panel-2/60 p-3">
+                  <div className="text-xs font-semibold">Custom domain</div>
+                  <p className="mt-0.5 text-[11px] leading-4 text-muted">{stats.pendingDomain ? `DNS verification is pending for ${stats.pendingDomain}.` : "Attach a domain you already own to the live Vercel project."}</p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      className="input h-9 min-w-0 flex-1 py-1.5 text-xs"
+                      aria-label="Custom domain"
+                      placeholder="example.com"
+                      value={domain}
+                      onChange={(e) => setDomain(e.target.value)}
+                    />
+                    <button className="btn btn-sm" type="button" disabled={busy !== null || !domain.trim()} onClick={handleDomain}>
+                      {busy === "domain" ? <span className="spinner" aria-hidden="true" /> : null}
+                      {stats.pendingDomain === domain.trim().toLowerCase() ? "Verify DNS" : "Attach"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {lane.id === "earn" && !stats.stripeConnected && (
                 <Link className="mt-2 block text-center text-xs font-medium text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>
                   Connect payments and business tools

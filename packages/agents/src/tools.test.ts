@@ -9,6 +9,16 @@ describe("operator capability surface", () => {
       dimension: "infra_spend",
       sideEffects: "external",
     });
+    expect(registry.get("deploy.add_domain")?.manifest).toMatchObject({
+      risk: "HIGH",
+      dimension: "prod_deploy",
+      sideEffects: "external",
+    });
+    expect(registry.get("deploy.verify_domain")?.manifest).toMatchObject({
+      risk: "HIGH",
+      dimension: "prod_deploy",
+      sideEffects: "external",
+    });
     expect(registry.get("stripe.create_offer")?.manifest).toMatchObject({
       risk: "HIGH",
       dimension: "payments",
@@ -22,7 +32,7 @@ describe("operator capability surface", () => {
     const finance = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.finance ?? [] }).map((t) => t.manifest.name);
     const orchestrator = registry.list({ allow: DEFAULT_TOOL_ALLOWLIST.orchestrator ?? [] }).map((t) => t.manifest.name);
 
-    expect(engineering).toContain("deploy.create_project");
+    expect(engineering).toEqual(expect.arrayContaining(["deploy.create_project", "deploy.list_domains", "deploy.add_domain", "deploy.verify_domain"]));
     expect(finance).toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("stripe.create_offer");
     expect(orchestrator).not.toContain("deploy.create_project");

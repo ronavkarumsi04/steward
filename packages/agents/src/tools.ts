@@ -568,6 +568,75 @@ const deployCreate = defineTool({
   },
 });
 
+const DomainName = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, "Use a hostname such as example.com or app.example.com");
+
+const deployListDomains = defineTool({
+  name: "deploy.list_domains",
+  description: "List custom domains attached to a Vercel deployment project and their DNS verification state.",
+  input: z.object({ projectId: z.string().min(1) }),
+  risk: "LOW",
+  idempotent: true,
+  execute: async ({ projectId }, ctx) => {
+    const d = await deployProvider(svc(ctx));
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.listDomains) return fail(`${d.type} does not expose custom-domain management through Steward.`);
+    const domains = await d.provider.listDomains(projectId);
+    return { ok: true, content: domains.length ? JSON.stringify(domains, null, 2) : "No custom domains attached.", data: domains };
+  },
+});
+
+const deployAddDomain = defineTool({
+  name: "deploy.add_domain",
+  description: "Attach a custom domain to a Vercel project. If DNS verification is required, returns the exact verification challenge instead of claiming the domain is live.",
+  input: z.object({ projectId: z.string().min(1), domain: DomainName }),
+  risk: "HIGH",
+  dimension: "prod_deploy",
+  sideEffects: "external",
+  preflight: async ({ projectId, domain }) => ({
+    summary: `Attach ${domain} to production project ${projectId}`,
+    affectedSystem: "public domain / deployment",
+    risk: "HIGH",
+    alternatives: ["Keep the provider-assigned deployment URL", "Attach the domain manually in the hosting dashboard"],
+  }),
+  execute: async ({ projectId, domain }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.addDomain) return fail(`${d.type} custom-domain automation is not implemented. Connect Vercel or configure the domain manually.`);
+    const result = await d.provider.addDomain(projectId, domain);
+    const challenges = result.verification?.map((v) => `${v.type} ${v.domain} = ${v.value}${v.reason ? ` (${v.reason})` : ""}`).join("\n") ?? "";
+    if (result.verified) {
+      await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain", title: domain, url: `https://${domain}`, metadata: { provider: d.type, projectId, domain, verified: true } });
+      return { ok: true, content: `${domain} is verified and attached to the production project.`, data: result };
+    }
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain_pending", title: `${domain} DNS verification`, metadata: { provider: d.type, projectId, domain, verified: false, verification: result.verification ?? [] } });
+    return { ok: true, content: `${domain} was attached but is not live yet.${challenges ? `\nComplete DNS verification:\n${challenges}\nThen use deploy.verify_domain.` : " Check the Vercel project Domains screen for the required DNS configuration, then use deploy.verify_domain."}`, data: result };
+  },
+});
+
+const deployVerifyDomain = defineTool({
+  name: "deploy.verify_domain",
+  description: "Ask Vercel to re-check a custom domain after the required DNS records have been added.",
+  input: z.object({ projectId: z.string().min(1), domain: DomainName }),
+  risk: "HIGH",
+  dimension: "prod_deploy",
+  sideEffects: "external",
+  preflight: async ({ projectId, domain }) => ({ summary: `Verify and activate ${domain} on production project ${projectId}`, affectedSystem: "public domain / deployment", risk: "HIGH", alternatives: ["Verify the domain manually in Vercel"] }),
+  execute: async ({ projectId, domain }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.verifyDomain) return fail(`${d.type} custom-domain verification is not implemented through Steward.`);
+    const result = await d.provider.verifyDomain(projectId, domain);
+    if (!result.verified) {
+      const challenges = result.verification?.map((v) => `${v.type} ${v.domain} = ${v.value}`).join("\n") ?? "DNS is not correct yet.";
+      return { ok: false, content: `${domain} is still unverified.\n${challenges}`, data: result };
+    }
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain", title: domain, url: `https://${domain}`, metadata: { provider: d.type, projectId, domain, verified: true } });
+    return { ok: true, content: `${domain} is verified and live on the project.`, data: result };
+  },
+});
+
 const deployStatus = defineTool({
   name: "deploy.status",
   description: "Get deployment status (queued/building/ready/error) and recent logs.",
@@ -665,7 +734,7 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
