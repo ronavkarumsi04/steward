@@ -164,6 +164,16 @@ export class ProviderCredentialService {
         retries: rec.retries,
         routingReason: rec.routingReason,
       });
+      if (rec.context?.runId) {
+        await emitEvent(this.db, {
+          organizationId: scope.organizationId,
+          companyId: scope.companyId ?? null,
+          type: "ai.call.recorded",
+          actor: { type: "system", component: "ai-gateway" },
+          payload: { provider: rec.provider, model: rec.model, purpose: rec.purpose, status: rec.status, inputTokens: rec.usage.inputTokens, outputTokens: rec.usage.outputTokens, cachedTokens: rec.usage.cachedTokens ?? 0, reasoningTokens: rec.usage.reasoningTokens ?? 0, latencyMs: rec.latencyMs, costUsd: rec.costUsd, costEstimated: rec.costEstimated, retries: rec.retries, routingReason: rec.routingReason, errorCode: rec.errorCode ?? null },
+          correlation: { runId: rec.context.runId, ...(rec.context.stepId ? { stepId: rec.context.stepId } : {}) },
+        }).catch(() => undefined);
+      }
       if (rec.context?.runId && rec.status === "ok") {
         await this.db
           .update(agentRuns)
@@ -196,6 +206,14 @@ export class ProviderCredentialService {
       .insert(modelPreferences)
       .values({ organizationId: scope.organizationId, companyId: scope.companyId!, purpose, routingPolicy: parsed })
       .onConflictDoUpdate({ target: [modelPreferences.companyId, modelPreferences.purpose], set: { routingPolicy: parsed, updatedAt: new Date() } });
+  }
+
+  callsForRun(scope: TenantScope, runId: string) {
+    return this.db
+      .select()
+      .from(aiCalls)
+      .where(and(eq(aiCalls.organizationId, scope.organizationId), scope.companyId ? eq(aiCalls.companyId, scope.companyId) : undefined, eq(aiCalls.runId, runId)))
+      .orderBy(aiCalls.createdAt);
   }
 
   async usageSummary(scope: TenantScope, since: Date) {

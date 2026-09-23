@@ -13,7 +13,7 @@ export function actorLabel(actor: Record<string, unknown>): string {
 
 export function summarizeEvent(e: StewardEvent): string {
   const p = e.payload;
-  const first = ["title", "toolName", "instruction", "status", "message", "error", "action", "name", "reason"].find((k) => typeof p[k] === "string" && (p[k] as string).length);
+  const first = ["title", "toolName", "model", "instruction", "status", "message", "error", "action", "name", "reason"].find((k) => typeof p[k] === "string" && (p[k] as string).length);
   if (first) return `${first}: ${String(p[first]).slice(0, 240)}`;
   const keys = Object.keys(p);
   return keys.length ? keys.slice(0, 6).map((k) => `${k}=${short(p[k])}`).join("  ") : "No additional event payload.";
@@ -22,7 +22,7 @@ export function summarizeEvent(e: StewardEvent): string {
 export function eventCategory(e: StewardEvent): EventCategory {
   const type = e.type.toLowerCase();
   if (type.includes("tool") || type.startsWith("sandbox.")) return "tools";
-  if (type.startsWith("run.") || type.startsWith("schedule.") || type.startsWith("task.")) return "runs";
+  if (type.startsWith("run.") || type.startsWith("schedule.") || type.startsWith("task.") || type.startsWith("ai.")) return "runs";
   if (["signal.", "integration.", "provider.", "deployment.", "campaign.", "lead.", "message.", "project.", "document."].some((prefix) => type.startsWith(prefix))) return "business";
   if (["approval.", "budget.", "policy.", "company.", "agent.", "audit."].some((prefix) => type.startsWith(prefix))) return "governance";
   return "other";

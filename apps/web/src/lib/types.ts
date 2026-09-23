@@ -209,13 +209,35 @@ export interface RunStep {
   finishedAt: string | null;
   durationMs: number | null;
 }
+export interface AICall {
+  id: string;
+  runId: string | null;
+  stepId: string | null;
+  provider: string;
+  model: string;
+  purpose: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  latencyMs: number;
+  costUsd: string;
+  costEstimated: boolean;
+  status: "ok" | "error";
+  errorCode: string | null;
+  retries: number;
+  routingReason: string;
+  createdAt: string;
+}
 export interface ToolCall {
   id: string;
+  stepId: string | null;
   toolName: string;
   input: unknown;
   output: unknown;
   status: string;
   risk: RiskLevel;
+  policyDecision: Record<string, unknown> | null;
   approvalId: string | null;
   durationMs: number | null;
   createdAt: string;
@@ -256,6 +278,7 @@ export interface Approval {
 export interface RunDetail {
   run: Run;
   steps: RunStep[];
+  aiCalls: AICall[];
   toolCalls: ToolCall[];
   artifacts: Artifact[];
   approvals: Approval[];

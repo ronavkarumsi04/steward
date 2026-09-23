@@ -104,19 +104,20 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const deps = c.get("deps");
     return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { ...body, kind: "user" }) }, 201);
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, AI/model calls, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const deps = c.get("deps");
     const run = await deps.services.runs.get(scope, param(c, "id"));
     if (!run) throw new HttpError(404, "not_found");
-    const [steps, toolCalls, artifacts, approvals, workflow] = await Promise.all([
+    const [steps, aiCalls, toolCalls, artifacts, approvals, workflow] = await Promise.all([
       deps.services.runs.steps(scope, run.id),
+      deps.services.providers.callsForRun(scope, run.id),
       deps.services.runs.toolCallsFor(scope, run.id),
       deps.services.runs.listArtifacts(scope, { runId: run.id }),
       deps.services.approvals.list(scope).then((a) => a.filter((x) => x.runId === run.id)),
       deps.workflows ? deps.workflows.runStatus(run.id).catch(() => null) : Promise.resolve(null),
     ]);
-    return c.json({ run, steps, toolCalls, artifacts, approvals, workflow });
+    return c.json({ run, steps, aiCalls, toolCalls, artifacts, approvals, workflow });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs/:id/cancel", tag: "runs", summary: "Request cancellation of a run", body: z.object({ reason: z.string().max(500).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
