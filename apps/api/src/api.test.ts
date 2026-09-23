@@ -406,9 +406,15 @@ describe("local companion", () => {
         }
       }
     })();
-    await new Promise((r) => setTimeout(r, 50));
-    const listed = await api.json<{ devices: Array<{ id: string; online: boolean }> }>("GET", `/orgs/${orgId}/companion/devices`);
-    expect(listed.body.devices.find((x) => x.id === paired.body.device.id)?.online).toBe(true);
+    // The poll request authenticates and touches Postgres before it reaches the in-process hub.
+    // Avoid a fixed sleep here: loaded CI runners can legitimately take >50ms to cross that boundary.
+    let online = false;
+    for (let attempt = 0; attempt < 40 && !online; attempt++) {
+      const listed = await api.json<{ devices: Array<{ id: string; online: boolean }> }>("GET", `/orgs/${orgId}/companion/devices`);
+      online = listed.body.devices.find((x) => x.id === paired.body.device.id)?.online ?? false;
+      if (!online) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(online).toBe(true);
     const ping = await api.json<{ ok: boolean; status: { loggedIn: boolean } }>("POST", `/orgs/${orgId}/companion/devices/${paired.body.device.id}/ping`);
     expect(ping.body.ok).toBe(true);
     expect(ping.body.status.loggedIn).toBe(true);

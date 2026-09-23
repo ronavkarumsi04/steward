@@ -50,6 +50,10 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
   await expect(page.getByText("A weekly analytics digest for small online stores.")).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Earn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Turn on Autopilot/i })).toBeVisible();
 
   // Tasks: create one without starting a run (no model provider is configured in E2E).
   await page.goto(`${companyUrl}/tasks`);

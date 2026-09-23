@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
 
 const ITEMS = [
-  ["", "Overview", Icon.Overview],
+  ["", "Studio", Icon.Overview],
   ["/chat", "Chat", Icon.Chat],
   ["/tasks", "Tasks", Icon.Tasks],
   ["/runs", "Runs", Icon.Runs],

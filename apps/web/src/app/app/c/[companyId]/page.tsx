@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AUTONOMY_LABELS } from "@steward/schema";
 import { serverApi, tryApi } from "@/lib/server";
-import type { Approval, CompanyOverview, Run, StewardEvent, UsageRow } from "@/lib/types";
+import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, UsageRow } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
+import { FounderStudio, type StudioSchedule } from "@/components/founder-studio";
 import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
 
 export default async function CompanyOverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
@@ -13,11 +14,15 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const api = await serverApi();
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
-  const [events, runs, approvals, usage] = await Promise.all([
+  const [events, runs, approvals, usage, schedules, artifacts, documents, integrations] = await Promise.all([
     api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=50`),
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=8`),
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
     api.get<{ usage: UsageRow[] }>(`/orgs/${overview.company.organizationId}/providers/usage?companyId=${companyId}&days=30`),
+    api.get<{ schedules: StudioSchedule[] }>(`/companies/${companyId}/schedules`),
+    api.get<{ artifacts: Artifact[] }>(`/companies/${companyId}/artifacts?limit=100`),
+    api.get<{ documents: Document[] }>(`/companies/${companyId}/documents`),
+    api.get<{ integrations: Integration[] }>(`/orgs/${overview.company.organizationId}/integrations`),
   ]);
   const { company, goals, agents, taskCounts, budgets } = overview;
   const profile = overview.profile?.profile ?? null;
@@ -25,13 +30,15 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const calls30 = usage.usage.reduce((n, r) => n + r.calls, 0);
   const openTasks = (taskCounts.todo ?? 0) + (taskCounts.in_progress ?? 0) + (taskCounts.blocked ?? 0) + (taskCounts.waiting_approval ?? 0) + (taskCounts.review ?? 0);
   const aiBudget = budgets.find((b) => b.category === "ai") ?? budgets.find((b) => b.category === "total");
+  const connectedIntegrations = integrations.integrations.filter((i) => i.status === "connected");
+  const stripeConnected = connectedIntegrations.some((i) => i.type === "stripe");
   const base = `/app/c/${companyId}`;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="eyebrow mb-1">Overview</div>
+          <div className="eyebrow mb-1">Studio</div>
           <h1 className="text-[28px] font-semibold leading-tight tracking-tight">{company.name}</h1>
           <p className="mt-1.5 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || "No profile yet — add one in Settings."}</p>
         </div>
@@ -58,6 +65,24 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         <Stat label="AI spend · 30d" value={usd(spend30)} hint={aiBudget ? `${calls30} calls · limit ${usd(aiBudget.limitUsd)}/${aiBudget.period}` : `${calls30} calls`} />
         <Stat label="Active goals" value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? "No goals yet"} href={`${base}/settings#goals`} />
       </div>
+
+      <FounderStudio
+        companyId={companyId}
+        organizationId={company.organizationId}
+        companyName={company.name}
+        timezone={company.timezone}
+        agents={agents}
+        schedules={schedules.schedules}
+        stats={{
+          artifacts: artifacts.artifacts.length,
+          documents: documents.documents.length,
+          connectedIntegrations: connectedIntegrations.length,
+          stripeConnected,
+          activeGoals: goals.filter((g) => g.status === "active").length,
+          pendingApprovals: overview.pendingApprovals,
+          recentRuns: runs.runs.length,
+        }}
+      />
 
       <QuickStart companyId={companyId} agents={agents} />
 
