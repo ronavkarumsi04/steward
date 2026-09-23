@@ -149,7 +149,7 @@ const delegateRun = defineTool({
     const assignee = await s.agents.byKind(s.scope, assigneeKind);
     const budget = assignee?.budgetUsdPerRun === null || assignee?.budgetUsdPerRun === undefined ? undefined : Number(assignee.budgetUsdPerRun);
     return {
-      summary: `Delegate \"${title}\" to ${assignee?.name ?? assigneeKind}`,
+      summary: `Delegate "${title}" to ${assignee?.name ?? assigneeKind}`,
       affectedSystem: "Steward specialist runtime",
       estimatedCostUsd: Number.isFinite(budget) && budget! > 0 ? budget : undefined,
       risk: "MEDIUM",
@@ -189,7 +189,7 @@ const delegateRun = defineTool({
       await s.runs.attachWorkflow(s.scope, run.id, wf.workflowId, wf.workflowRunId);
       return {
         ok: true,
-        content: `Delegated \"${task.title}\" to ${assignee.name}. Specialist run ${run.id} is queued independently.`,
+        content: `Delegated "${task.title}" to ${assignee.name}. Specialist run ${run.id} is queued independently.`,
         data: { taskId: task.id, runId: run.id, agentId: assignee.id, agentKind: assignee.kind, workflowId: wf.workflowId },
       };
     } catch (e) {
