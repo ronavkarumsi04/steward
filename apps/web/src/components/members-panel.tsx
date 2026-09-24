@@ -44,9 +44,9 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Card title="Members">
+      <Card title="Members" className="nb-left-blue">
         <ul className="divide-y divide-line text-sm">
           {members.map((m) => (
             <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -62,14 +62,14 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
         </ul>
       </Card>
 
-      <Card title="Invitations">
+      <Card title="Invitations" className="nb-left-purple">
         <form onSubmit={invite} className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_auto]">
           <input name="email" type="email" className="input" placeholder="colleague@example.com" required disabled={!isAdmin} />
           <select name="role" className="input" defaultValue="member" disabled={!isAdmin}>{ROLES.filter((r) => r !== "owner" || isOwner).map((r) => <option key={r}>{r}</option>)}</select>
           <button className="btn btn-primary" disabled={!isAdmin}>Invite</button>
         </form>
         {invited && (
-          <p role="status" className="mb-3 rounded-lg border border-line bg-panel-2 p-2 text-xs">
+          <p role="status" className="nb-panel-flat nb-left-green mb-3 p-2 text-xs">
             {invited.emailed ? `Invitation emailed to ${invited.email}. ` : `Email delivery failed for ${invited.email} — share this link instead. `}
             <span className="text-muted">One-time link (also works if the email doesn&apos;t arrive):</span> <span className="mono break-all">{invited.acceptUrl}</span>
           </p>

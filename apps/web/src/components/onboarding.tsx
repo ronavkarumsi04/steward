@@ -54,7 +54,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
   }
 
   return (
-    <div className="card rise-in w-full max-w-2xl p-6 shadow-e2 sm:p-8">
+    <div className="card nb-left-purple rise-in w-full max-w-2xl p-6 sm:p-8">
       <ol className="mb-8 flex gap-3" aria-label="Progress">
         {STEPS.map((t, i) => {
           const n = i + 1;
@@ -62,7 +62,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
           return (
             <li key={t} className="flex flex-1 flex-col gap-2" aria-current={state === "current" ? "step" : undefined}>
               <span
-                className={`h-1 rounded-full transition-colors duration-200 ${state === "todo" ? "bg-panel-3" : "bg-accent"}`}
+                className={`h-1 border border-line transition-colors duration-200 ${state === "todo" ? "bg-panel-3" : "bg-accent"}`}
                 aria-hidden="true"
               />
               <span className={`flex items-center gap-1.5 text-xs ${state === "todo" ? "text-faint" : "text-fg"}`}>
@@ -134,7 +134,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
               return (
                 <label
                   key={lvl}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-[border-color,background-color,box-shadow] duration-150 has-[:focus-visible]:shadow-[0_0_0_3px_var(--focus)] ${selected ? "border-accent bg-accent-soft/60" : "border-line hover:border-line-strong hover:bg-panel-2/50"}`}
+                  className={`nb-panel-flat flex cursor-pointer items-start gap-3 p-3 transition-[border-color,background-color] duration-150 ${selected ? "border-accent bg-accent-soft/60" : "border-line hover:border-line-strong hover:bg-panel-2/50"}`}
                 >
                   <input type="radio" name="autonomy" className="mt-1 accent-accent" checked={selected} onChange={() => setAutonomy(lvl)} />
                   <span className="min-w-0">
@@ -169,7 +169,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
             <h1 className="text-2xl font-semibold tracking-tight">Review &amp; launch</h1>
             <p className="mt-1 text-sm text-muted">Nothing runs until you start a task or send a message.</p>
           </div>
-          <dl className="card-inset grid gap-x-6 gap-y-3 text-sm md:grid-cols-[9rem_1fr]">
+          <dl className="card-inset nb-left-blue grid gap-x-6 gap-y-3 text-sm md:grid-cols-[9rem_1fr]">
             <dt className="text-muted">Company</dt><dd className="font-medium">{name}</dd>
             <dt className="text-muted">Idea</dt><dd className="whitespace-pre-wrap">{idea}</dd>
             <dt className="text-muted">Stage</dt><dd className="capitalize">{stage}</dd>
@@ -177,7 +177,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
             <dt className="text-muted">Customers</dt><dd>{split(customers).join(", ") || "—"}</dd>
             <dt className="text-muted">Constraints</dt><dd>{split(constraints).join(", ") || "—"}</dd>
           </dl>
-          <div className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-sm ${providers.length ? "border-ok/30 bg-ok-soft text-ok" : "border-warn/30 bg-warn-soft text-warn"}`}>
+          <div className={`nb-panel-flat flex items-start gap-2.5 px-3 py-2.5 text-sm ${providers.length ? "nb-left-green text-ok" : "nb-left-yellow text-warn"}`}>
             {providers.length ? <Icon.Check size={16} className="mt-0.5 shrink-0" /> : <Icon.Providers size={16} className="mt-0.5 shrink-0" />}
             <span>
               {providers.length
@@ -186,7 +186,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
             </span>
           </div>
           <p className="hint">Creating a company seeds a Chief of Staff orchestrator plus research, engineering, marketing, sales, support and finance agents, default per-dimension policies and a conservative monthly budget. Nothing runs until you start a task or send a message.</p>
-          {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+          {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
           <div className="flex justify-between pt-2">
             <button className="btn" onClick={() => setStep(2)} disabled={busy}>Back</button>
             <button className="btn btn-primary" onClick={create} disabled={busy}>

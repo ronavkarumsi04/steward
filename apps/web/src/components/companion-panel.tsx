@@ -59,7 +59,7 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
   }
 
   return (
-    <Card title="Local Companions (ChatGPT / Codex subscription)">
+    <Card title="Local Companions (ChatGPT / Codex subscription)" className="nb-left-blue">
       <p className="mb-3 text-sm text-muted">
         A companion is a small daemon on your own machine that runs the official Codex CLI with <em>your</em> login. Your credentials never reach this server — Steward only stores a hashed device key you can revoke here. Pair one, then add a provider of type <span className="mono">codex_companion</span> bound to it.
       </p>
@@ -88,9 +88,9 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
       )}
 
       {pairing ? (
-        <div className="mt-3 rounded border border-line bg-panel p-3 text-sm">
+        <div className="nb-panel-flat nb-left-purple mt-3 p-3 text-sm">
           <p>Pairing code for <strong>{pairing.name}</strong> (valid until {new Date(pairing.expiresAt).toLocaleTimeString()}). Run on that machine:</p>
-          <pre className="mono mt-2 overflow-auto rounded bg-black/40 p-2 text-xs">{`npm i -g @openai/codex @steward/companion\ncodex login\nsteward-companion pair --server ${serverUrl} --code ${pairing.code}\nsteward-companion run`}</pre>
+          <pre className="mono mt-2 overflow-auto border-2 border-line bg-black p-3 text-xs">{`npm i -g @openai/codex @steward/companion\ncodex login\nsteward-companion pair --server ${serverUrl} --code ${pairing.code}\nsteward-companion run`}</pre>
           <p className="mt-2 text-xs text-muted">The code works once. The device key is printed to that machine only and saved with owner-only permissions.</p>
           <button className="btn mt-2" onClick={() => setPairing(null)}>Done</button>
         </div>

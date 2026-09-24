@@ -74,10 +74,10 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
   const totalCalls = usage.reduce((s, u) => s + u.calls, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
-      <Card title="Configured providers">
+      <Card title="Configured providers" className="nb-left-green">
         {providers.length === 0 ? <Empty>No AI providers yet. Add at least one below — agents cannot run without a model.</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {providers.map((p) => (
@@ -101,7 +101,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
 
-      <form onSubmit={add} className="card space-y-3">
+      <form onSubmit={add} className="card nb-left-purple space-y-3">
         <h2 className="font-semibold">Add a provider</h2>
         <p className="text-sm text-muted">Bring your own key. Secrets are encrypted at rest with the server&rsquo;s master key and never returned to the browser. Local servers (Ollama, LM Studio, vLLM) need no key.</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -141,7 +141,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         <div className="flex justify-end"><button className="btn btn-primary" disabled={busy === "add" || !isAdmin}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button></div>
       </form>
 
-      <Card title={`Available models (${models.length})`}>
+      <Card title={`Available models (${models.length})`} className="nb-left-blue">
         {models.length === 0 ? <Empty>No models discovered yet. Add a provider and run Test.</Empty> : (
           <div className="max-h-72 overflow-auto">
             <table className="w-full text-xs">
@@ -161,7 +161,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
 
-      <Card title={`Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`}>
+      <Card title={`Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`} className="nb-left-orange">
         {usage.length === 0 ? <Empty>No AI calls recorded yet.</Empty> : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">Provider</th><th>Model</th><th>Calls</th><th>Errors</th><th>Tokens in / out</th><th>Cost</th></tr></thead>

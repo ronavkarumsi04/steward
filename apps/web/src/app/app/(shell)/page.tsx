@@ -18,12 +18,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   return (
     <main className="mx-auto max-w-6xl px-3 py-6 sm:px-5 md:py-10">
       {sp.integrationError && (
-        <p role="alert" className="mb-4 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
+        <p role="alert" className="nb-panel-flat nb-left-red mb-4 px-3 py-2 text-sm text-danger">
           Integration connection failed: {sp.integrationError}
         </p>
       )}
       {sp.connected && (
-        <p role="status" className="mb-4 rounded-lg border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok">
+        <p role="status" className="nb-panel-flat nb-left-green mb-4 px-3 py-2 text-sm text-ok">
           Connected {sp.connected}.
         </p>
       )}
@@ -50,10 +50,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                 <Link
                   key={c.id}
                   href={`/app/c/${c.id}`}
-                  className="card group flex flex-col gap-3 transition-[box-shadow,transform,border-color] duration-150 hover:border-line-strong hover:shadow-e2 active:scale-[0.99]"
+                  className="card nb-left-blue group flex flex-col gap-3 transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                    <span className="nb-panel-flat flex h-10 w-10 shrink-0 items-center justify-center p-0 text-accent">
                       <Icon.Company size={18} />
                     </span>
                     <StatusPill status={c.status} />

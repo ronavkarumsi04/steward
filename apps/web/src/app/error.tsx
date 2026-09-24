@@ -10,9 +10,9 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
   }, [error]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(900px_500px_at_50%_-10%,var(--bg-tint),transparent_70%)] p-4 sm:p-6">
-      <section aria-labelledby="err-title" className="card rise-in w-full max-w-md p-6 text-center shadow-e2 sm:p-7">
-        <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
+    <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
+      <section aria-labelledby="err-title" className="card nb-left-red rise-in w-full max-w-md p-6 text-center sm:p-7">
+        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
         <h1 id="err-title" className="mt-4 text-xl font-semibold tracking-tight">Something went wrong</h1>
