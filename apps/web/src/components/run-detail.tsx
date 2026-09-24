@@ -53,7 +53,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
   const callsForStep = (stepId: string) => aiCalls.filter((call) => call.stepId === stepId);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-muted"><Link href={`/app/c/${companyId}/runs`} className="hover:text-fg">Runs</Link> / <span className="mono">{run.id.slice(0, 8)}</span></div>
@@ -72,23 +72,23 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
         {!TERMINAL.has(run.status) && <button className="btn btn-danger" onClick={cancel} disabled={busy}>Cancel run</button>}
       </header>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {run.error && <div className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
+      {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
       {pending.length > 0 && (
-        <Card title="Waiting for your approval">
+        <Card title="Waiting for your approval" className="nb-left-yellow">
           <div className="space-y-3">{pending.map((a) => <ApprovalCard key={a.id} companyId={companyId} approval={a} onDecided={() => browserApi.get<RunDetail>(`/companies/${companyId}/runs/${run.id}`).then(setDetail)} />)}</div>
         </Card>
       )}
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <Card title={`Steps (${steps.length})`}>
+        <Card title={`Steps (${steps.length})`} className="nb-left-blue">
           {steps.length === 0 ? <Empty>No steps recorded yet.</Empty> : (
             <ol className="space-y-2">
               {steps.map((s) => {
                 const stepCalls = callsForStep(s.id);
                 const stepCost = stepCalls.reduce((sum, call) => sum + Number(call.costUsd || 0), 0);
                 return (
-                <li id={`step-${s.id}`} key={s.id} className="rounded-lg border border-line p-3 scroll-mt-24" data-step-kind={s.kind}>
+                <li id={`step-${s.id}`} key={s.id} className="nb-panel-flat p-3 scroll-mt-24" data-step-kind={s.kind}>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                     <span><span className="mono mr-2 text-xs text-muted">#{s.stepIndex}</span><span className="pill mr-2 text-accent">{s.kind}</span>{s.title}</span>
                     <span className="flex flex-wrap items-center gap-2 text-xs text-muted"><StatusPill status={s.status} />{stepCalls.length > 0 && <span>{stepCalls.length} model {stepCalls.length === 1 ? "call" : "calls"} · {usd(stepCost)}</span>}{s.durationMs != null && <span>{s.durationMs}ms</span>}</span>
@@ -108,19 +108,19 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
           )}
         </Card>
         <div className="space-y-4">
-          <Card title={`Model calls (${aiCalls.length})`}>
+          <Card title={`Model calls (${aiCalls.length})`} className="nb-left-purple">
             {aiCalls.length === 0 ? <Empty>No model calls recorded.</Empty> : (
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted"><span>{aiCalls.filter((call) => call.status === "ok").length} succeeded</span><span>· {modelErrors} errors</span><span>· {usd(modelCostUsd)} ledger cost</span></div>
                 <ol className="space-y-2">
                   {aiCalls.map((call, index) => (
-                    <li key={call.id} className={`rounded-lg border p-2.5 text-sm ${call.status === "error" ? "border-danger/30 bg-danger-soft" : "border-line"}`}>
+                    <li key={call.id} className={`nb-panel-flat p-2.5 text-sm ${call.status === "error" ? "nb-left-red" : "nb-left-purple"}`}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="mono text-xs font-semibold text-accent">{call.provider}</span><span className="mono max-w-[22rem] truncate text-xs" title={call.model}>{call.model}</span><span className="pill text-muted">{call.purpose}</span></div><div className="mt-1 text-xs text-muted">attempt {index + 1} · {call.latencyMs}ms · {call.costEstimated ? "estimated " : ""}{usd(call.costUsd)}{call.retries ? ` · ${call.retries} retr${call.retries === 1 ? "y" : "ies"}` : ""}</div></div>
                         <StatusPill status={call.status} />
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-muted sm:grid-cols-4"><span>in {call.inputTokens.toLocaleString()}</span><span>out {call.outputTokens.toLocaleString()}</span><span>cached {call.cachedTokens.toLocaleString()}</span><span>reasoning {call.reasoningTokens.toLocaleString()}</span></div>
-                      <div className="mt-2 rounded-md border border-line bg-bg/60 px-2 py-1.5 text-xs"><span className="font-medium text-muted">Routing:</span> <span className="text-fg-2">{call.routingReason || "No routing reason recorded."}</span></div>
+                      <div className="nb-panel-flat mt-2 px-2 py-1.5 text-xs"><span className="font-medium text-muted">Routing:</span> <span className="text-fg-2">{call.routingReason || "No routing reason recorded."}</span></div>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">{call.stepId && <a className="text-accent hover:underline" href={`#step-${call.stepId}`}>View step</a>}{call.errorCode && <span className="text-danger">{call.errorCode}</span>}</div>
                     </li>
                   ))}
@@ -128,11 +128,11 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
               </div>
             )}
           </Card>
-          <Card title={`Tool calls (${toolCalls.length})`}>
+          <Card title={`Tool calls (${toolCalls.length})`} className="nb-left-orange">
             {toolCalls.length === 0 ? <Empty>No tools called.</Empty> : (
               <ul className="space-y-2">
                 {toolCalls.map((t) => (
-                  <li key={t.id} className="rounded-lg border border-line p-2 text-sm">
+                  <li key={t.id} className="nb-panel-flat p-2 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="mono text-xs">{t.toolName}</span>
                       <span className="flex items-center gap-1"><RiskPill risk={t.risk} /><StatusPill status={t.status} /></span>
@@ -145,11 +145,11 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
               </ul>
             )}
           </Card>
-          <Card title={`Artifacts (${artifacts.length})`}>
+          <Card title={`Artifacts (${artifacts.length})`} className="nb-left-green">
             {artifacts.length === 0 ? <Empty>No artifacts.</Empty> : (
               <ul className="space-y-2 text-sm">
                 {artifacts.map((a) => (
-                  <li key={a.id} className="rounded-lg border border-line p-2">
+                  <li key={a.id} className="nb-panel-flat p-2">
                     <div className="flex items-center justify-between"><span>{a.title}</span><span className="pill text-muted">{a.kind}</span></div>
                     {a.url && <a className="text-xs text-accent hover:underline" href={a.url} target="_blank" rel="noreferrer">{a.url}</a>}
                     {a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}
@@ -158,10 +158,10 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
               </ul>
             )}
           </Card>
-          {run.plan && <Card title="Plan"><Json value={run.plan} /></Card>}
-          {run.result && <Card title="Result"><Json value={run.result} /></Card>}
+          {run.plan && <Card title="Plan" className="nb-left-blue"><Json value={run.plan} /></Card>}
+          {run.result && <Card title="Result" className="nb-left-green"><Json value={run.result} /></Card>}
           {approvals.filter((a) => a.status !== "pending").length > 0 && (
-            <Card title="Approval history">
+            <Card title="Approval history" className="nb-left-yellow">
               <ul className="space-y-1 text-sm">
                 {approvals.filter((a) => a.status !== "pending").map((a) => (
                   <li key={a.id} className="flex items-center justify-between gap-2"><span className="truncate">{a.action}</span><StatusPill status={a.status} /></li>

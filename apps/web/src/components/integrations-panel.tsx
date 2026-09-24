@@ -69,9 +69,9 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
   const categories = [...new Set(catalog.map((c) => c.category))];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Card title="Connected">
+      <Card title="Connected" className="nb-left-green">
         {integrations.length === 0 ? <Empty>Nothing connected. Agents can only touch systems you connect here, and every action is still gated by your policies.</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {integrations.map((i) => {
@@ -83,7 +83,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
                   <div>
                     <div className="flex items-center gap-2"><span className="font-medium">{i.label}</span><span className="pill text-muted">{i.definition.name}</span><StatusPill status={i.status} />{i.companyId && <span className="pill text-muted">company-scoped</span>}{inherited && <span className="pill text-muted">Managed at organization level</span>}</div>
                     <div className="text-xs text-muted">{i.authKind}{i.externalAccountId ? ` · ${i.externalAccountId}` : ""}{i.scopes.length ? ` · ${i.scopes.join(" ")}` : ""} · connected <Ago iso={i.createdAt} />{i.lastError && <span className="text-danger"> · {i.lastError}</span>}</div>
-                    {showWebhook && <div className="mt-2 flex max-w-2xl items-center gap-2"><code className="min-w-0 flex-1 truncate rounded-md border border-line bg-panel-2 px-2 py-1 text-[11px] text-muted" title={i.webhookUrl ?? undefined}>{i.webhookUrl}</code><button type="button" className="btn btn-sm" onClick={() => void navigator.clipboard.writeText(i.webhookUrl!)}>Copy webhook</button></div>}
+                    {showWebhook && <div className="mt-2 flex max-w-2xl items-center gap-2"><code className="nb-panel-flat min-w-0 flex-1 truncate px-2 py-1 text-[11px] text-muted" title={i.webhookUrl ?? undefined}>{i.webhookUrl}</code><button type="button" className="btn btn-sm" onClick={() => void navigator.clipboard.writeText(i.webhookUrl!)}>Copy webhook</button></div>}
                   </div>
                   {manageable && (
                     <div className="flex gap-1">
@@ -99,7 +99,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
       </Card>
 
       {open && (
-        <form onSubmit={connectFields} className="card space-y-3 border-accent/40 shadow-e2">
+        <form onSubmit={connectFields} className="card nb-left-blue space-y-3">
           <h3 className="font-semibold">Connect {open.name}</h3>
           <div><label className="label">Label</label><input name="label" className="input" placeholder={open.name} /></div>
           {open.fields.map((f) => (
@@ -115,12 +115,12 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
       )}
 
       {categories.map((cat) => (
-        <Card key={cat} title={cat.replace(/_/g, " ")}>
+        <Card key={cat} title={cat.replace(/_/g, " ")} className="nb-left-orange">
           <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {catalog.filter((c) => c.category === cat).map((c) => {
               const connected = integrations.filter((i) => i.type === c.id).length;
               return (
-                <li key={c.id} className="flex flex-col justify-between rounded-lg border border-line p-3 text-sm" data-catalog-id={c.id}>
+                <li key={c.id} className="nb-panel-flat flex flex-col justify-between p-3 text-sm" data-catalog-id={c.id}>
                   <div>
                     <div className="flex items-center justify-between gap-2"><span className="font-medium">{c.name}</span><span className={`pill ${c.status === "implemented" ? "text-ok" : "text-muted"}`}>{c.status}</span></div>
                     <p className="mt-1 text-xs text-muted">{c.actions.length} actions · {c.authKind}{connected ? ` · ${connected} connected` : ""}</p>

@@ -142,11 +142,11 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
   ];
 
   const versionHistory = open?.id && historyFor === open.id && history ? (
-    <div className="mt-3 rounded-xl border border-line bg-bg/60 p-3">
+    <div className="nb-panel-flat nb-left-blue mt-3 p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Version history</div>
       <div className="space-y-2">
         {history.map((v) => (
-          <details key={v.id} className="rounded-lg border border-line bg-panel px-3 py-2 text-sm">
+          <details key={v.id} className="nb-panel-flat px-3 py-2 text-sm">
             <summary className="cursor-pointer select-none">
               <span className="font-medium">v{v.version}</span> <span className="text-muted">· <Ago iso={v.createdAt} /></span>{open.version === v.version && <span className="ml-2 pill text-muted">current</span>}
             </summary>
@@ -159,7 +159,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
   ) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap gap-1">
         {tabs.map(([t, label, n]) => (
           <button key={t} className={`btn ${tab === t ? "border-accent text-accent" : ""}`} onClick={() => { setTab(t); setOpen(null); setHistory(null); }}>{label} <span className="text-muted">{n}</span></button>
@@ -168,13 +168,13 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {tab === "playbooks" && (
-        <Card title="Company playbooks" action={canManagePlaybooks ? <button className="btn btn-primary" onClick={() => beginNew("playbook")}>New playbook</button> : undefined}>
-          <div className="mb-4 rounded-xl border border-line bg-bg/60 p-3 text-sm leading-6 text-muted">
+        <Card className="nb-left-purple" title="Company playbooks" action={canManagePlaybooks ? <button className="btn btn-primary" onClick={() => beginNew("playbook")}>New playbook</button> : undefined}>
+          <div className="nb-panel-flat nb-left-purple mb-4 p-3 text-sm leading-6 text-muted">
             Playbooks are admin-managed operating instructions. Company-wide playbooks apply to every matching agent; project playbooks apply only while an agent is working inside that project. Agents can read them automatically but cannot rewrite them through <span className="mono">document.write</span>.
           </div>
           {!canManagePlaybooks && <p className="mb-4 text-xs text-faint">Admins and owners can edit Playbooks. Everyone can read them and see their version history.</p>}
           {open?.kind === "playbook" && (
-            <form key={`${open.id}:${open.version}:playbook`} onSubmit={saveDoc} className="mb-4 space-y-3 card-inset">
+            <form key={`${open.id}:${open.version}:playbook`} onSubmit={saveDoc} className="mb-4 space-y-3 card-inset nb-left-purple">
               <input name="title" className="input" placeholder="Playbook title (e.g. Engineering shipping rules)" defaultValue={open.title} required disabled={!canManagePlaybooks} />
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-sm"><span className="mb-1 block text-muted">Scope</span><select name="projectId" className="input" defaultValue={open.projectId ?? ""} disabled={!canManagePlaybooks}><option value="">Company-wide</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.status}</option>)}</select></label>
@@ -194,9 +194,9 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
       )}
 
       {tab === "documents" && (
-        <Card title="Documents" action={<button className="btn btn-primary" onClick={() => beginNew("document")}>New document</button>}>
+        <Card className="nb-left-blue" title="Documents" action={<button className="btn btn-primary" onClick={() => beginNew("document")}>New document</button>}>
           {open?.kind === "document" && (
-            <form key={`${open.id}:${open.version}:document`} onSubmit={saveDoc} className="mb-4 space-y-2 card-inset">
+            <form key={`${open.id}:${open.version}:document`} onSubmit={saveDoc} className="mb-4 space-y-2 card-inset nb-left-blue">
               <div className="grid gap-2 md:grid-cols-[2fr_1fr]"><input name="title" className="input" placeholder="Title" defaultValue={open.title} required /><input name="folder" className="input" placeholder="/folder" defaultValue={open.folder} /></div>
               <textarea name="content" className="input mono min-h-64" defaultValue={open.content ?? ""} placeholder="Markdown…" />
               <div className="flex flex-wrap justify-end gap-2">{open.id && <button type="button" className="btn" disabled={busy !== null} onClick={() => loadHistory(open.id)}>{busy === `history:${open.id}` ? "Loading…" : "Version history"}</button>}<button type="button" className="btn" onClick={() => { setOpen(null); setHistory(null); }}>Cancel</button><button className="btn btn-primary" disabled={busy !== null}>{busy === "save" ? "Saving…" : "Save"}</button></div>
@@ -210,15 +210,15 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
       )}
 
       {tab === "decisions" && (
-        <Card title="Decision log">{decisions.length === 0 ? <Empty>No decisions recorded. Agents log the “why” behind significant choices here.</Empty> : <ul className="space-y-3">{decisions.map((d) => <li key={d.id} className="rounded-lg border border-line p-3 text-sm"><div className="flex items-center justify-between gap-2"><span className="font-medium">{d.title}</span><span className="text-xs text-muted"><Ago iso={d.createdAt} /></span></div><p className="mt-1 whitespace-pre-wrap text-muted">{d.rationale}</p><div className="mt-1 text-xs text-muted">by {String(d.decidedBy.type ?? "")} {String(d.decidedBy.agentName ?? d.decidedBy.userId ?? "")}{d.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${d.runId}`}>run</Link></>}</div></li>)}</ul>}</Card>
+        <Card title="Decision log" className="nb-left-yellow">{decisions.length === 0 ? <Empty>No decisions recorded. Agents log the “why” behind significant choices here.</Empty> : <ul className="space-y-3">{decisions.map((d) => <li key={d.id} className="rounded-lg border border-line p-3 text-sm"><div className="flex items-center justify-between gap-2"><span className="font-medium">{d.title}</span><span className="text-xs text-muted"><Ago iso={d.createdAt} /></span></div><p className="mt-1 whitespace-pre-wrap text-muted">{d.rationale}</p><div className="mt-1 text-xs text-muted">by {String(d.decidedBy.type ?? "")} {String(d.decidedBy.agentName ?? d.decidedBy.userId ?? "")}{d.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${d.runId}`}>run</Link></>}</div></li>)}</ul>}</Card>
       )}
 
       {tab === "memory" && (
-        <Card title="Long-term memory"><form onSubmit={addMemory} className="mb-4 grid gap-2 md:grid-cols-[1fr_2fr_auto]"><input name="title" className="input" placeholder="Title (e.g. Pricing decision)" required /><input name="content" className="input" placeholder="Something every agent should remember" required /><button className="btn btn-primary">Remember</button></form>{memories.length === 0 ? <Empty>Nothing remembered yet. Memories are retrieved semantically into every agent&rsquo;s context.</Empty> : <ul className="divide-y divide-line text-sm">{memories.map((m) => <li key={m.id} className="flex items-start justify-between gap-2 py-2"><div className="min-w-0"><div className="flex items-center gap-2"><span className="pill text-muted">{m.kind}</span><span className="font-medium">{m.title}</span><span className="text-xs text-muted">importance {m.importance}</span></div><p className="mt-1 text-muted">{m.content}</p></div><button className="btn btn-danger px-2 py-0.5 text-xs" onClick={() => forget(m.id)}>Forget</button></li>)}</ul>}</Card>
+        <Card title="Long-term memory" className="nb-left-pink"><form onSubmit={addMemory} className="mb-4 grid gap-2 md:grid-cols-[1fr_2fr_auto]"><input name="title" className="input" placeholder="Title (e.g. Pricing decision)" required /><input name="content" className="input" placeholder="Something every agent should remember" required /><button className="btn btn-primary">Remember</button></form>{memories.length === 0 ? <Empty>Nothing remembered yet. Memories are retrieved semantically into every agent&rsquo;s context.</Empty> : <ul className="divide-y divide-line text-sm">{memories.map((m) => <li key={m.id} className="flex items-start justify-between gap-2 py-2"><div className="min-w-0"><div className="flex items-center gap-2"><span className="pill text-muted">{m.kind}</span><span className="font-medium">{m.title}</span><span className="text-xs text-muted">importance {m.importance}</span></div><p className="mt-1 text-muted">{m.content}</p></div><button className="btn btn-danger px-2 py-0.5 text-xs" onClick={() => forget(m.id)}>Forget</button></li>)}</ul>}</Card>
       )}
 
       {tab === "artifacts" && (
-        <Card title="Artifacts">{artifacts.length === 0 ? <Empty>No artifacts. Reports, PRs, deployments and files produced by runs appear here.</Empty> : <ul className="divide-y divide-line text-sm">{artifacts.map((a) => <li key={a.id} className="py-2"><div className="flex items-center justify-between gap-2"><span>{a.title}</span><span className="pill text-muted">{a.kind}</span></div><div className="text-xs text-muted"><Ago iso={a.createdAt} />{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>{a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}</li>)}</ul>}</Card>
+        <Card title="Artifacts" className="nb-left-green">{artifacts.length === 0 ? <Empty>No artifacts. Reports, PRs, deployments and files produced by runs appear here.</Empty> : <ul className="divide-y divide-line text-sm">{artifacts.map((a) => <li key={a.id} className="py-2"><div className="flex items-center justify-between gap-2"><span>{a.title}</span><span className="pill text-muted">{a.kind}</span></div><div className="text-xs text-muted"><Ago iso={a.createdAt} />{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>{a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}</li>)}</ul>}</Card>
       )}
     </div>
   );

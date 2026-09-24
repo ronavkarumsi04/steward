@@ -86,9 +86,9 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Card title="Agents">
+      <Card title="Agents" className="nb-left-purple">
         <ul className="divide-y divide-line">
           {agents.map((a) => (
             <li key={a.id} className="flex flex-wrap items-start justify-between gap-3 py-3" data-agent-kind={a.kind}>
@@ -108,7 +108,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
       </Card>
 
       {editing && (
-        <form onSubmit={save} className="card space-y-3 border-accent/40 shadow-e2">
+        <form onSubmit={save} className="card nb-left-blue space-y-3">
           <h3 className="font-semibold">Edit {editing.name}</h3>
           <div className="grid gap-3 md:grid-cols-2">
             <div><label className="label">Name</label><input name="name" className="input" defaultValue={editing.name} required /></div>
@@ -126,7 +126,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
         </form>
       )}
 
-      <Card title="Schedules">
+      <Card title="Schedules" className="nb-left-orange">
         <p className="mb-3 text-sm text-muted">Cron schedules are registered with Temporal and fire durable runs even when nobody is logged in. Quiet hours and the outbound pause still apply.</p>
         <form onSubmit={addSchedule} className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
           <select name="agentId" className="input" aria-label="Agent" defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
