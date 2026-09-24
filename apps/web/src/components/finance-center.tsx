@@ -33,7 +33,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
   const usage = [...aiUsage].sort((a, b) => b.costUsd - a.costUsd);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         eyebrow="Company"
         title="Finance"
@@ -42,10 +42,10 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
       />
 
       {attention.length > 0 && (
-        <Card title="Budget attention">
+        <Card title="Budget attention" className="nb-left-red">
           <div className="space-y-2">
             {attention.map((b) => (
-              <div key={`${b.category}:${b.period}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+              <div key={`${b.category}:${b.period}`} className="nb-panel-flat flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
                 <span><b>{LABELS[b.category]}</b> · {b.period}</span>
                 <span className={b.exhausted ? "text-danger" : "text-warn"}>
                   {b.exhausted ? "Exhausted" : `Above ${b.softThresholdPct}% threshold`} · {usd(b.remainingUsd)} remaining
@@ -63,7 +63,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
         <Stat label="AI cost · 30d" value={usd(aiCost)} hint={`${aiUsage.reduce((n, r) => n + r.calls, 0)} model calls`} />
       </div>
 
-      <Card title={`Budget health (${budgets.length})`} description="Daily budgets now count today’s charges from the monthly ledger while preserving active reservations.">
+      <Card className="nb-left-orange" title={`Budget health (${budgets.length})`} description="Daily budgets now count today’s charges from the monthly ledger while preserving active reservations.">
         {budgets.length === 0 ? <Empty>No budgets configured.</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
@@ -92,7 +92,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <Card title="Recent spend ledger" description="Charges, reservations and releases in reverse chronological order.">
+        <Card className="nb-left-blue" title="Recent spend ledger" description="Charges, reservations and releases in reverse chronological order.">
           {ledger.length === 0 ? <Empty>No spend has been recorded yet.</Empty> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-left text-sm">
@@ -117,11 +117,11 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
           )}
         </Card>
 
-        <Card title="AI model spend · 30 days" description="Gateway calls grouped by provider and model.">
+        <Card className="nb-left-purple" title="AI model spend · 30 days" description="Gateway calls grouped by provider and model.">
           {usage.length === 0 ? <Empty>No AI usage recorded in this window.</Empty> : (
             <div className="space-y-2">
               {usage.map((row) => (
-                <div key={`${row.provider}:${row.model}`} className="rounded-lg border border-line p-3 text-sm">
+                <div key={`${row.provider}:${row.model}`} className="nb-panel-flat p-3 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0"><div className="truncate font-medium">{row.model}</div><div className="text-xs text-muted">{row.provider}</div></div>
                     <div className="tnum font-medium">{usd(row.costUsd)}</div>

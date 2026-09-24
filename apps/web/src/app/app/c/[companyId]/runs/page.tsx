@@ -17,9 +17,9 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
   ]);
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? "agent";
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader eyebrow="History" title="Runs" description="Every run is a durable workflow with its plan, tool calls, cost and authorization recorded." action={<FilterLinks companyId={companyId} current={status} />} />
-      <Card className="p-0">
+      <Card className="p-0 nb-left-purple">
         {runs.length === 0 ? (
           <div className="p-4"><Empty icon={<Icon.Runs size={20} />}>No runs match.</Empty></div>
         ) : (

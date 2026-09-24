@@ -121,13 +121,13 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
       <PageHeader eyebrow="Growth" title="Customer pipeline" description="One place for prospects, pipeline value, and the outreach Steward has actually sent." />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="card p-4"><div className="eyebrow">Open leads</div><div className="tnum mt-2 text-2xl font-semibold">{summary.open}</div></div>
-        <div className="card p-4"><div className="eyebrow">Open pipeline</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.pipeline)}</div></div>
-        <div className="card p-4"><div className="eyebrow">Won value</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.won)}</div></div>
-        <div className="card p-4"><div className="eyebrow">Recent outreach</div><div className="tnum mt-2 text-2xl font-semibold">{summary.outbound}</div></div>
+        <div className="card nb-left-blue p-4"><div className="eyebrow">Open leads</div><div className="tnum mt-2 text-2xl font-semibold">{summary.open}</div></div>
+        <div className="card nb-left-pink p-4"><div className="eyebrow">Open pipeline</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.pipeline)}</div></div>
+        <div className="card nb-left-green p-4"><div className="eyebrow">Won value</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.won)}</div></div>
+        <div className="card nb-left-orange p-4"><div className="eyebrow">Recent outreach</div><div className="tnum mt-2 text-2xl font-semibold">{summary.outbound}</div></div>
       </div>
 
-      <section className="card overflow-hidden">
+      <section className="card nb-left-pink overflow-hidden">
         <div className="border-b border-line px-4 py-4 sm:px-5">
           <div className="eyebrow">Campaigns</div>
           <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
@@ -200,7 +200,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
                   <div className="mb-3 flex items-center justify-between gap-2"><Pill tone={stage.tone}>{stage.label}</Pill><span className="tnum text-xs text-muted">{leads.length}</span></div>
                   <div className="space-y-2">
                     {leads.map((lead) => (
-                      <article key={lead.id} className="card bg-panel p-3 shadow-e1">
+                      <article key={lead.id} className="card nb-left-blue bg-panel p-3">
                         <div className="text-sm font-semibold leading-5">{lead.title}</div>
                         {(lead.contactName || lead.contactCompany) && <div className="mt-1 text-xs text-muted">{[lead.contactName, lead.contactCompany].filter(Boolean).join(" · ")}</div>}
                         {lead.contactEmail && <div className="mt-1 truncate text-xs text-muted">{lead.contactEmail}</div>}

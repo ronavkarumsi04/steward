@@ -78,7 +78,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
 
   return (
     <div className="space-y-4">
-      <form onSubmit={create} className="card grid gap-2 shadow-e1 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
+      <form onSubmit={create} className="card nb-left-blue grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
         <input name="title" className="input" placeholder="New task title" required aria-label="Task title" />
         <select name="agentId" className="input" aria-label="Assignee" defaultValue={agents.find((a) => a.kind === "orchestrator")?.id ?? ""}>
           <option value="">Unassigned</option>
@@ -95,20 +95,20 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
         <button className="btn btn-primary"><Icon.Plus size={16} />Add</button>
         <textarea name="description" className="input md:col-span-6" placeholder="Description / acceptance criteria (optional)" rows={2} />
       </form>
-      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
       <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
         {columns.map((col) => (
-          <section key={col.status} className="card-inset w-[17rem] shrink-0 snap-start p-2 xl:w-auto" data-column={col.status}>
+          <section key={col.status} className="card-inset nb-left-purple w-[17rem] shrink-0 snap-start p-2 xl:w-auto" data-column={col.status}>
             <h3 className="mb-2 flex items-center justify-between px-1.5 pt-0.5 text-xs font-medium text-muted">
               <span className="eyebrow">{col.label}</span>
               <span className="tnum">{col.tasks.length}</span>
             </h3>
             {col.tasks.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-line px-2 py-6 text-center text-xs text-faint">Empty</div>
+              <div className="nb-panel-flat border-dashed px-2 py-6 text-center text-xs text-faint">Empty</div>
             ) : (
               <ul className="space-y-2">
                 {col.tasks.map((t) => (
-                  <li key={t.id} className="card p-2.5 text-sm shadow-e1 transition-[box-shadow,border-color] duration-150 hover:border-line-strong hover:shadow-e2" data-task-id={t.id}>
+                  <li key={t.id} className="card p-2.5 text-sm transition-transform duration-150 hover:-translate-y-0.5" data-task-id={t.id}>
                     <div className="font-medium leading-snug">{t.title}</div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                       <Pill tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{t.priority}</Pill>

@@ -60,7 +60,7 @@ export function SignalInbox({ companyId, initial, projects, autoReviewImportant,
     <div>
       <PageHeader eyebrow="Business evidence" title="Signal Inbox" description="Verified payments, delivery events, replies, failures, and other business events that can change Steward’s next move." action={<div className="flex gap-2"><Pill tone={unread ? "accent" : "neutral"}>{unread} unread</Pill><Pill tone={reviewing ? "warn" : "neutral"}>{reviewing} reviewing</Pill></div>} />
       {error && <p role="alert" className="mb-4 text-sm text-danger">{error}</p>}
-      <Card className="mb-4 p-4">
+      <Card className="mb-5 p-4 nb-left-orange">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2"><span className="font-semibold">Reactive Autopilot</span><Pill tone={autoReview ? "ok" : "neutral"}>{autoReview ? "Important signals auto-reviewed" : "Manual review"}</Pill></div>
@@ -73,7 +73,7 @@ export function SignalInbox({ companyId, initial, projects, autoReviewImportant,
       <div className="mb-4 flex flex-wrap gap-2">
         {(["all", "unread", "reviewing", "reviewed", "dismissed"] as const).map((state) => <button key={state} className={`btn btn-sm ${filter === state ? "btn-primary" : ""}`} onClick={() => setFilter(state)}>{state === "all" ? "All" : state.replace(/_/g, " ")}</button>)}
       </div>
-      <Card className="p-0">
+      <Card className="p-0 nb-left-red">
         {visible.length === 0 ? <div className="p-4"><Empty icon={<Icon.Signals size={20} />}>No signals match this view. Connect Stripe or Resend webhooks to turn real business activity into operator evidence.</Empty></div> : (
           <ul className="divide-y divide-line">
             {visible.map((signal) => {

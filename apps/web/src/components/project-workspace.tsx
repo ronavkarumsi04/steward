@@ -43,7 +43,7 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
 
   return <div className="space-y-5">
     <PageHeader eyebrow="Projects" title="Outcomes that survive every thread" description="Projects keep one founder objective, its specialist workers, outputs, decisions, campaigns, and next step together until the outcome is actually finished." />
-    <form onSubmit={createProject} className="card p-4 sm:p-5">
+    <form onSubmit={createProject} className="card nb-left-blue p-4 sm:p-5">
       <div className="grid gap-3 lg:grid-cols-2">
         <div><label className="label">Project</label><input className="input" name="name" aria-label="Project name" placeholder="Launch design partner pilot" required maxLength={200} /></div>
         <div><label className="label">Success signal</label><input className="input" name="successSignal" aria-label="Project success signal" placeholder="3 real design partners complete onboarding" maxLength={2000} /></div>
@@ -57,7 +57,7 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
     </form>
     {active.length === 0 ? <Empty>No active projects yet. Create one above, or start a mission from Studio and Steward will create one automatically.</Empty> : (
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Active projects">
-        {active.map((project) => <Link key={project.id} href={`/app/c/${companyId}/projects/${project.id}`} className="card group block p-5 transition hover:border-accent/40">
+        {active.map((project) => <Link key={project.id} href={`/app/c/${companyId}/projects/${project.id}`} className="card nb-left-green group block p-5 transition hover:-translate-y-0.5">
           <div className="flex items-center justify-between gap-3"><Pill tone={STATUS_TONE[project.status]}>{project.status}</Pill><span className="text-xs text-faint">{ago(project.updatedAt)}</span></div>
           <h2 className="mt-3 text-lg font-semibold tracking-tight group-hover:text-accent">{project.name}</h2>
           <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted">{project.objective || project.description}</p>
@@ -68,7 +68,7 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
         </Link>)}
       </section>
     )}
-    {history.length > 0 && <section className="card overflow-hidden">
+    {history.length > 0 && <section className="card nb-left-purple overflow-hidden">
       <div className="border-b border-line px-5 py-3"><div className="eyebrow">History</div></div>
       <div className="divide-y divide-line">{history.map((project) => <Link key={project.id} href={`/app/c/${companyId}/projects/${project.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60"><Pill tone={STATUS_TONE[project.status]}>{project.status}</Pill><span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span><span className="text-xs text-muted">{ago(project.updatedAt)}</span></Link>)}</div>
     </section>}

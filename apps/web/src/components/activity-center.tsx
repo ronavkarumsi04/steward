@@ -71,7 +71,7 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
         <Metric label="Latest sequence" value={events[0] ? `#${events[0].seq}` : "—"} hint={events[0] ? `Updated ${agoText(events[0].createdAt)}` : "No activity yet"} />
       </div>
 
-      <Card className="mb-4 p-3">
+      <Card className="mb-5 p-4 nb-left-purple">
         <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_200px]">
           <label className="sr-only" htmlFor="activity-search">Search activity</label>
           <input id="activity-search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search event type, message, tool, status…" />
@@ -85,7 +85,7 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
         </div>
       </Card>
 
-      <Card className="p-0">
+      <Card className="p-0 nb-left-blue">
         {visible.length === 0 ? <div className="p-4"><Empty icon={<Icon.Activity size={20} />}>No activity matches these filters.</Empty></div> : (
           <ol className="divide-y divide-line">
             {visible.map((event) => <EventRow key={event.seq} companyId={companyId} event={event} project={projects.find((project) => project.id === event.correlation.projectId)} />)}
@@ -128,11 +128,11 @@ function EventRow({ companyId, event, project }: { companyId: string; event: Ste
 }
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  return <div className="min-w-0 rounded-lg border border-line bg-bg/60 p-2"><div className="mb-1 font-semibold text-muted">{label}</div><Json value={value} /></div>;
+  return <div className="nb-panel-flat min-w-0 p-3"><div className="mb-1 font-semibold text-muted">{label}</div><Json value={value} /></div>;
 }
 
 function Metric({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "warn" }) {
-  return <div className={`rounded-xl border p-3 ${tone === "warn" ? "border-warn/30 bg-warn-soft" : "border-line bg-panel"}`}><div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div><div className="tnum mt-1 text-xl font-semibold">{value}</div><div className="mt-0.5 text-xs text-muted">{hint}</div></div>;
+  return <div className={`nb-panel-flat ${tone === "warn" ? "nb-left-red" : "nb-left-purple"}`}><div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div><div className="tnum mt-1 text-xl font-semibold">{value}</div><div className="mt-0.5 text-xs text-muted">{hint}</div></div>;
 }
 
 function agoText(iso: string) {
