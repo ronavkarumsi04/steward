@@ -67,6 +67,16 @@ export interface Budget {
   exhausted: boolean;
   overSoftThreshold: boolean;
 }
+export interface BudgetLedgerEntry {
+  id: string;
+  category: Budget["category"];
+  amountUsd: string;
+  kind: "reserve" | "settle" | "release" | "charge";
+  refType: string | null;
+  refId: string | null;
+  periodKey: string;
+  createdAt: string;
+}
 export interface Policy {
   id: string;
   dimension: string;

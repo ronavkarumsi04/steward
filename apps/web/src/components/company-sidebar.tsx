@@ -11,6 +11,7 @@ const ITEMS = [
   ["/signals", "Signals", Icon.Signals],
   ["/chat", "Chat", Icon.Chat],
   ["/growth", "Growth", Icon.Growth],
+  ["/finance", "Finance", Icon.Finance],
   ["/tasks", "Tasks", Icon.Tasks],
   ["/runs", "Runs", Icon.Runs],
   ["/approvals", "Approvals", Icon.Approvals],

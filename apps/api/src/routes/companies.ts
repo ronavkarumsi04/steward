@@ -7,7 +7,8 @@ import { DEFAULT_TOOL_ALLOWLIST } from "@steward/agents";
 import { HttpError, companyScope, orgScope, type AppEnv, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 
-const Budget = z.object({ category: z.enum(["ai", "infra", "ads", "messaging", "payments", "total"]), period: z.enum(["monthly", "daily"]).optional(), limitUsd: z.number().min(0).max(1_000_000), softThresholdPct: z.number().min(1).max(100).optional(), hardStop: z.boolean().optional() });
+const BudgetCategory = z.enum(["ai", "infra", "ads", "messaging", "payments", "total"]);
+const Budget = z.object({ category: BudgetCategory, period: z.enum(["monthly", "daily"]).optional(), limitUsd: z.number().min(0).max(1_000_000), softThresholdPct: z.number().min(1).max(100).optional(), hardStop: z.boolean().optional() });
 
 export function registerCompanyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/companies", tag: "companies", summary: "List companies in an organization" }, async (c) => {
@@ -60,6 +61,11 @@ export function registerCompanyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const s = c.get("deps").services;
     await s.budgets.set(scope, body);
     return c.json({ budgets: await s.budgets.list(scope) });
+  });
+
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/budget-ledger", tag: "budgets", summary: "Recent budget ledger entries", query: z.object({ category: BudgetCategory.optional(), limit: z.coerce.number().int().min(1).max(500).optional() }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ ledger: await c.get("deps").services.budgets.ledger(scope, query) });
   });
 
   // ---- goals ----

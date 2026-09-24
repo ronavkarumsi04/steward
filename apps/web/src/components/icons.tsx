@@ -43,6 +43,13 @@ export const Icon = {
       <path d="M16 7h3v3" />
     </Base>
   ),
+  Finance: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M15 14h3" />
+    </Base>
+  ),
   Tasks: (p: IconProps) => (
     <Base {...p}>
       <path d="M4 6h3M4 12h3M4 18h3" />
