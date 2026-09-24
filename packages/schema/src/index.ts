@@ -271,6 +271,7 @@ export const EventType = z.enum([
   "integration.webhook",
   "provider.connected",
   "provider.error",
+  "ai.call.recorded",
   "message.created",
   "deployment.status",
   "schedule.fired",
