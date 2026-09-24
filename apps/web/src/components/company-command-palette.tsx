@@ -136,28 +136,68 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
 
   return (
     <>
-      <button ref={triggerRef} type="button" className="mt-2 flex w-full items-center justify-between rounded-lg border border-line px-2.5 py-2 text-xs text-muted transition hover:border-line-strong hover:text-fg" onClick={openPalette} aria-haspopup="dialog">
-        <span>Jump to…</span><kbd className="mono rounded border border-line px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="nb-command-trigger mt-2 flex w-full items-center justify-between gap-3 border-2 border-black bg-panel px-3 py-2 text-left text-xs font-bold text-fg shadow-[3px_3px_0_0_#000] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_0_#000]"
+        onClick={openPalette}
+        aria-haspopup="dialog"
+      >
+        <span>Jump to…</span>
+        <kbd className="kbd mono shrink-0 border-2 border-black px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
       </button>
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/45 px-3 pt-[12vh] backdrop-blur-sm" onMouseDown={(e) => e.currentTarget === e.target && setOpen(false)}>
-          <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="command-palette-title" onKeyDown={onDialogKeyDown} className="glass w-full max-w-xl overflow-hidden rounded-2xl border border-line shadow-2xl">
+        <div
+          className="nb-command-overlay fixed inset-0 z-[100] flex items-start justify-center bg-black/60 px-3 pt-[12vh]"
+          onMouseDown={(e) => e.currentTarget === e.target && setOpen(false)}
+        >
+          <section
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="command-palette-title"
+            onKeyDown={onDialogKeyDown}
+            className="nb-dialog w-full max-w-xl overflow-hidden border-2 border-black"
+          >
             <h2 id="command-palette-title" className="sr-only">Company command palette</h2>
-            <div className="border-b border-line p-3">
-              <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onPaletteKeyDown} className="input w-full" placeholder="Search company pages…" aria-label="Search company pages" aria-controls="command-palette-results" aria-activedescendant={results[selected] ? `command-${selected}` : undefined} />
+            <div className="nb-command-header border-b-2 border-black p-3">
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onPaletteKeyDown}
+                className="nb-command-input w-full border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-black focus:ring-offset-2"
+                placeholder="Search company pages…"
+                aria-label="Search company pages"
+                aria-controls="command-palette-results"
+                aria-activedescendant={results[selected] ? `command-${selected}` : undefined}
+              />
             </div>
-            <div id="command-palette-results" role="listbox" className="max-h-[52vh] overflow-y-auto p-2">
+            <div id="command-palette-results" role="listbox" className="nb-command-results max-h-[52vh] overflow-y-auto p-2">
               {results.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-muted">No matching page.</p>
+                <p className="nb-command-empty px-3 py-8 text-center text-sm font-semibold text-muted">No matching page.</p>
               ) : results.map((c, i) => (
-                <button id={`command-${i}`} role="option" aria-selected={i === selected} key={c.suffix || "studio"} type="button" onMouseEnter={() => setSelected(i)} onClick={() => go(c.suffix)} className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${i === selected ? "bg-accent-soft text-fg" : "text-fg-2 hover:bg-panel-2"}`}>
-                  <span><span className="font-medium">{c.label}</span><span className="ml-2 text-xs text-muted">{c.keywords.split(" ").slice(0, 2).join(" · ")}</span></span>
-                  {"shortcut" in c && c.shortcut && <kbd className="mono shrink-0 text-[10px] text-muted">{c.shortcut}</kbd>}
+                <button
+                  id={`command-${i}`}
+                  role="option"
+                  aria-selected={i === selected}
+                  key={c.suffix || "studio"}
+                  type="button"
+                  onMouseEnter={() => setSelected(i)}
+                  onClick={() => go(c.suffix)}
+                  className={`nb-command-item flex w-full items-center justify-between gap-3 border-2 border-transparent px-3 py-2.5 text-left text-sm ${i === selected ? "nb-command-item-active" : "text-fg-2 hover:border-black hover:bg-panel-2"}`}
+                >
+                  <span>
+                    <span className="font-bold">{c.label}</span>
+                    <span className="ml-2 text-xs text-muted">{c.keywords.split(" ").slice(0, 2).join(" · ")}</span>
+                  </span>
+                  {"shortcut" in c && c.shortcut && <kbd className="kbd mono shrink-0 text-[10px]">{c.shortcut}</kbd>}
                 </button>
               ))}
             </div>
-            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2 text-[11px] text-muted">
-              <span>↑↓ navigate · Enter open · Esc close</span><span>G A Activity · G T Tasks</span>
+            <footer className="nb-command-footer flex flex-wrap items-center justify-between gap-2 border-t-2 border-black px-3 py-2 text-[11px] font-semibold text-muted">
+              <span>↑↓ navigate · Enter open · Esc close</span>
+              <span>G A Activity · G T Tasks</span>
             </footer>
           </section>
         </div>
