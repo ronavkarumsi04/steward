@@ -45,10 +45,10 @@ export class IntegrationService {
     return `integration:${orgId}:${integrationId}`;
   }
 
-  private view(r: typeof integrations.$inferSelect): IntegrationView {
+  private view(r: typeof integrations.$inferSelect, redactWebhookUrl = false): IntegrationView {
     const def = integrationMap.get(r.type);
     const cfg = { ...r.config };
-    return { id: r.id, type: r.type, label: r.label, status: r.status as IntegrationStatus, authKind: r.authKind, externalAccountId: r.externalAccountId, scopes: r.scopes, config: cfg, lastError: r.lastError, lastCheckedAt: r.lastCheckedAt, companyId: r.companyId, createdAt: r.createdAt, webhookUrl: def?.webhook && (def.id === "stripe" || def.id === "resend") ? `${this.opts.apiUrl.replace(/\/$/, "")}/webhooks/${def.id}/${r.id}` : null, definition: def ? publicIntegration(def) : { id: r.type, name: r.type, category: "generic", authKind: r.authKind as IntegrationDefinition["authKind"], oauth: false, fields: [], docsUrl: "", actions: [], status: "planned" } };
+    return { id: r.id, type: r.type, label: r.label, status: r.status as IntegrationStatus, authKind: r.authKind, externalAccountId: r.externalAccountId, scopes: r.scopes, config: cfg, lastError: r.lastError, lastCheckedAt: r.lastCheckedAt, companyId: r.companyId, createdAt: r.createdAt, webhookUrl: !redactWebhookUrl && def?.webhook && (def.id === "stripe" || def.id === "resend") ? `${this.opts.apiUrl.replace(/\/$/, "")}/webhooks/${def.id}/${r.id}` : null, definition: def ? publicIntegration(def) : { id: r.type, name: r.type, category: "generic", authKind: r.authKind as IntegrationDefinition["authKind"], oauth: false, fields: [], docsUrl: "", actions: [], status: "planned" } };
   }
 
   async list(scope: TenantScope) {
@@ -57,12 +57,19 @@ export class IntegrationService {
       .from(integrations)
       .where(and(eq(integrations.organizationId, scope.organizationId), scope.companyId ? or(isNull(integrations.companyId), eq(integrations.companyId, scope.companyId)) : undefined))
       .orderBy(desc(integrations.createdAt));
-    return rows.map((r) => this.view(r));
+    return rows.map((r) => this.view(r, this.redactWebhook(scope, r)));
+  }
+
+  private redactWebhook(scope: TenantScope, row: typeof integrations.$inferSelect) {
+    const canManage = scope.role === "admin" || scope.role === "owner";
+    if (!canManage) return true;
+    if (scope.companyId) return row.companyId === null;
+    return false;
   }
 
   async get(scope: TenantScope, id: string) {
-    const [r] = await this.db.select().from(integrations).where(and(eq(integrations.id, id), eq(integrations.organizationId, scope.organizationId))).limit(1);
-    return r ? this.view(r) : null;
+    const [r] = await this.db.select().from(integrations).where(and(eq(integrations.id, id), eq(integrations.organizationId, scope.organizationId), scope.companyId ? or(isNull(integrations.companyId), eq(integrations.companyId, scope.companyId)) : undefined)).limit(1);
+    return r ? this.view(r, this.redactWebhook(scope, r)) : null;
   }
 
   /** Connects a non-OAuth integration from user-supplied fields (API keys, tokens, SMTP…). */
@@ -81,7 +88,7 @@ export class IntegrationService {
       }
     }
     return this.db.transaction(async (tx) => {
-      const [row] = await tx.insert(integrations).values({ organizationId: scope.organizationId, companyId: input.companyId ?? scope.companyId ?? null, type: def.id, label: input.label?.trim() || def.name, status: "connected", authKind: def.authKind, config: publicConfig }).returning();
+      const [row] = await tx.insert(integrations).values({ organizationId: scope.organizationId, companyId: scope.companyId ?? input.companyId ?? null, type: def.id, label: input.label?.trim() || def.name, status: "connected", authKind: def.authKind, config: publicConfig }).returning();
       const env = await this.crypto.encrypt(JSON.stringify({ fields: secretFields } satisfies IntegrationSecret), this.aad(scope.organizationId, row!.id));
       await tx.insert(integrationCredentials).values({ organizationId: scope.organizationId, integrationId: row!.id, kind: "fields", secret: env as unknown as Record<string, unknown> });
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: row!.companyId, type: "integration.connected", actor: scope.actor, payload: { integrationId: row!.id, type: def.id } });
@@ -162,7 +169,7 @@ export class IntegrationService {
   }
 
   async disconnect(scope: TenantScope, id: string) {
-    const rows = await this.db.delete(integrations).where(and(eq(integrations.id, id), eq(integrations.organizationId, scope.organizationId))).returning({ id: integrations.id });
+    const rows = await this.db.delete(integrations).where(and(eq(integrations.id, id), eq(integrations.organizationId, scope.organizationId), scope.companyId ? eq(integrations.companyId, scope.companyId) : undefined)).returning({ id: integrations.id });
     return rows.length > 0;
   }
 

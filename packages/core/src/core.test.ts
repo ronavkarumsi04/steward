@@ -12,6 +12,7 @@ import { CompanyService, DEFAULT_AGENTS } from "./companies.js";
 import { ApprovalService } from "./approvals.js";
 import { BudgetExhaustedError, BudgetService } from "./budgets.js";
 import { ProviderCredentialService } from "./providers.js";
+import { IntegrationService } from "./integrations.js";
 import { EventService } from "./events.js";
 import { RunService, TaskService } from "./work.js";
 import { TenantError } from "@steward/db";
@@ -170,6 +171,42 @@ describe("core services (postgres)", () => {
     expect((await budgets.list(scope)).find((b) => b.category === "ai")!.exhausted).toBe(true);
     const evs2 = await events.since(scope, before);
     expect(evs2.map((e) => e.type)).toContain("budget.exhausted");
+  });
+
+  d("integrations are company-scoped, inherited read-only and redact inherited webhook URLs", async () => {
+    const auth = new AuthService(db);
+    const suffix = uniq();
+    const reg = await auth.register({ email: `i-${suffix}@example.com`, password: "correct horse battery", name: "Owner" });
+    const orgScope: TenantScope = { organizationId: reg.organization.id, userId: reg.user.id, role: "owner", actor: { type: "user", userId: reg.user.id } };
+    const companies = new CompanyService(db);
+    const companyA = await companies.create(orgScope, { name: `Integration A ${suffix}` });
+    const companyB = await companies.create(orgScope, { name: `Integration B ${suffix}` });
+    const scopeA: TenantScope = { ...orgScope, companyId: companyA.id };
+    const scopeB: TenantScope = { ...orgScope, companyId: companyB.id };
+    const viewerScopeA: TenantScope = { ...scopeA, role: "viewer" };
+    const integrations = new IntegrationService(db, crypto, { apiUrl: "http://localhost:4000" });
+    const orgIntegration = await integrations.connectWithFields(orgScope, { type: "stripe", fields: { secret_key: `sk_test_org_${suffix}` }, label: `Org Stripe ${suffix}` });
+    const integrationA = await integrations.connectWithFields(scopeA, { type: "stripe", fields: { secret_key: `sk_test_a_${suffix}` }, label: `Company A Stripe ${suffix}` });
+    const integrationB = await integrations.connectWithFields(scopeB, { type: "stripe", fields: { secret_key: `sk_test_b_${suffix}` }, label: `Company B Stripe ${suffix}` });
+
+    const companyIntegrations = await integrations.list(scopeA);
+    expect(companyIntegrations.map((integration) => integration.id)).toContain(orgIntegration.id);
+    expect(companyIntegrations.map((integration) => integration.id)).toContain(integrationA.id);
+    expect(companyIntegrations.map((integration) => integration.id)).not.toContain(integrationB.id);
+    expect(companyIntegrations.find((integration) => integration.id === orgIntegration.id)?.webhookUrl).toBeNull();
+    expect((await integrations.get(scopeA, orgIntegration.id))?.webhookUrl).toBeNull();
+    const viewerIntegrations = await integrations.list(viewerScopeA);
+    expect(viewerIntegrations.find((integration) => integration.id === integrationA.id)?.webhookUrl).toBeNull();
+    expect(viewerIntegrations.find((integration) => integration.id === orgIntegration.id)?.webhookUrl).toBeNull();
+    expect(await integrations.disconnect(scopeA, orgIntegration.id)).toBe(false);
+    expect(await integrations.disconnect(scopeA, integrationB.id)).toBe(false);
+    expect(await integrations.disconnect(scopeA, integrationA.id)).toBe(true);
+
+    const orgIntegrations = await integrations.list(orgScope);
+    expect(orgIntegrations.map((integration) => integration.id)).toContain(orgIntegration.id);
+    expect((await integrations.get(orgScope, orgIntegration.id))?.webhookUrl).not.toBeNull();
+    expect(await integrations.disconnect(orgScope, orgIntegration.id)).toBe(true);
+    expect(await integrations.disconnect(scopeB, integrationB.id)).toBe(true);
   });
 
   d("provider credentials are encrypted at rest and never returned in plaintext", async () => {

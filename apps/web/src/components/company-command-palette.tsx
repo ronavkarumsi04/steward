@@ -16,6 +16,7 @@ const COMMANDS = [
   { suffix: "/approvals", label: "Approvals", keywords: "review permission pending" },
   { suffix: "/agents", label: "Agents", keywords: "roster schedule automation" },
   { suffix: "/knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
+  { suffix: "/integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
   { suffix: "/settings", label: "Settings", keywords: "autonomy policy provider models" },
 ] as const;
 

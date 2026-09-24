@@ -17,6 +17,7 @@ const ITEMS = [
   ["/approvals", "Approvals", Icon.Approvals],
   ["/agents", "Agents", Icon.Agents],
   ["/knowledge", "Knowledge", Icon.Knowledge],
+  ["/integrations", "Integrations", Icon.Settings],
   ["/settings", "Settings", Icon.Settings],
 ] as const;
 

@@ -80,13 +80,21 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const deps = c.get("deps");
     return c.json({ catalog: deps.services.integrations.catalog(deps.env) });
   });
-  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/integrations", tag: "integrations", summary: "Connected integrations", query: z.object({ companyId: ID.optional() }) }, async (c) => {
-    const scope = await scopeForProviders(c, "viewer");
+  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/integrations", tag: "integrations", summary: "Connected integrations", query: z.object({ companyId: ID.optional() }) }, async (c, { query }) => {
+    const orgId = param(c, "orgId");
+    const scope = query.companyId ? await companyScope(c, query.companyId, "viewer") : orgScope(c, orgId, "viewer");
+    if (scope.organizationId !== orgId) throw new HttpError(404, "not_found");
     return c.json({ integrations: await c.get("deps").services.integrations.list(scope) });
   });
   defineRoute(app, reg, { method: "post", path: "/orgs/:orgId/integrations", tag: "integrations", summary: "Connect an integration with API key / fields", body: z.object({ type: z.string().min(1).max(64), label: z.string().max(120).optional(), fields: z.record(z.string(), z.string().max(8000)), companyId: ID.nullable().optional() }) }, async (c, { body }) => {
-    const scope = orgScope(c, param(c, "orgId"), "admin");
-    if (body.companyId) await companyScope(c, body.companyId, "admin");
+    const orgId = param(c, "orgId");
+    let scope;
+    if (body.companyId) {
+      scope = await companyScope(c, body.companyId, "admin");
+      if (scope.organizationId !== orgId) throw new HttpError(404, "not_found");
+    } else {
+      scope = orgScope(c, orgId, "admin");
+    }
     return c.json({ integration: await c.get("deps").services.integrations.connectWithFields(scope, body) }, 201);
   });
   defineRoute(app, reg, { method: "post", path: "/orgs/:orgId/integrations/oauth/:type/start", tag: "integrations", summary: "Begin an OAuth connection; returns the authorize URL", body: z.object({ companyId: ID.nullable().optional(), redirectTo: z.string().max(500).optional(), scopes: z.array(z.string()).max(50).optional() }) }, async (c, { body }) => {
@@ -108,8 +116,15 @@ export function registerProviderRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
       return c.redirect(`${appUrl}/app?integrationError=oauth_failed`);
     }
   });
-  defineRoute(app, reg, { method: "delete", path: "/orgs/:orgId/integrations/:id", tag: "integrations", summary: "Disconnect an integration (credentials destroyed)" }, async (c) => {
-    const scope = orgScope(c, param(c, "orgId"), "admin");
+  defineRoute(app, reg, { method: "delete", path: "/orgs/:orgId/integrations/:id", tag: "integrations", summary: "Disconnect an integration (credentials destroyed)", query: z.object({ companyId: ID.optional() }) }, async (c, { query }) => {
+    const orgId = param(c, "orgId");
+    let scope;
+    if (query.companyId) {
+      scope = await companyScope(c, query.companyId, "admin");
+      if (scope.organizationId !== orgId) throw new HttpError(404, "not_found");
+    } else {
+      scope = orgScope(c, orgId, "admin");
+    }
     return c.json({ ok: await c.get("deps").services.integrations.disconnect(scope, param(c, "id")) });
   });
 

@@ -120,6 +120,11 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.goto(`${companyUrl}/agents`);
   await expect(page.getByText(/orchestrator|chief of staff/i).first()).toBeVisible();
 
+  // Integrations are discoverable from the authenticated company workspace.
+  await page.getByRole("link", { name: "Integrations" }).first().click();
+  await page.waitForURL(/\/integrations/);
+  await expect(page.getByRole("heading", { name: "Integrations", exact: true })).toBeVisible();
+
   // Settings: pause outbound actions and confirm the state persists across reload.
   await page.goto(`${companyUrl}/settings`);
   await page.getByRole("button", { name: "Pause all outbound actions" }).click();
