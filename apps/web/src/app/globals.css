@@ -39,16 +39,11 @@
   --warn-soft: #ffe0c7;
   --danger: #a71f1f;
   --danger-soft: #ffd8d8;
-
-  --glass: #ffffff;
-  --glass-line: #111111;
-  --glass-shine: #ffffff;
   --focus: #8b5cf6;
 
   --shadow-1: 2px 2px 0 #111111;
   --shadow-2: 3px 3px 0 #111111;
   --shadow-3: 5px 5px 0 #111111;
-  --shadow-glass: 3px 3px 0 #111111;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -89,16 +84,11 @@
     --warn-soft: #472a18;
     --danger: #ff7777;
     --danger-soft: #4b2222;
-
-    --glass: #191919;
-    --glass-line: #f7f5ef;
-    --glass-shine: #191919;
     --focus: #a783ff;
 
     --shadow-1: 2px 2px 0 #f7f5ef;
     --shadow-2: 3px 3px 0 #f7f5ef;
     --shadow-3: 5px 5px 0 #f7f5ef;
-    --shadow-glass: 3px 3px 0 #f7f5ef;
   }
 }
 
@@ -232,13 +222,6 @@
     background: var(--panel-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-  }
-
-  .glass {
-    background: var(--panel);
-    border: 2px solid var(--line);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-2);
   }
 
   .hairline {
