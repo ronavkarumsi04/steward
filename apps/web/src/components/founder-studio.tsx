@@ -215,42 +215,42 @@ export function FounderStudio({
   }
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-line bg-panel shadow-e2" aria-label="Steward Studio">
-      <div className="border-b border-line bg-[linear-gradient(135deg,var(--panel),var(--panel-2))] px-5 py-5 sm:px-6">
+    <section className="nb-hero overflow-hidden" aria-label="Steward Studio">
+      <div className="border-b-2 border-line bg-panel px-5 py-6 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
-            <div className="eyebrow mb-1">Steward Operator</div>
-            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">What should {companyName} accomplish next?</h2>
-            <p className="mt-1.5 text-sm leading-6 text-muted">Tell Steward the outcome. It will plan the work, use the specialists and connected tools, stop for approvals when policy requires it, and leave the work inspectable.</p>
+            <div className="nb-section-label mb-2">CHIEF OF STAFF / STEWARD OPERATOR</div>
+            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">What should {companyName} accomplish next?</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">Tell Steward the outcome. It will plan the work, use the specialists and connected tools, stop for approvals when policy requires it, and leave the work inspectable.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Pill tone={autopilotEnabled ? "ok" : "neutral"}>{autopilotEnabled ? "Autopilot on" : "Autopilot off"}</Pill>
-            <button className="btn btn-sm" onClick={toggleAutopilot} disabled={busy !== null || !operator}>
+            <button className={`btn btn-sm nb-panel-flat ${autopilotEnabled ? "nb-accent-purple" : "nb-accent-yellow"}`} onClick={toggleAutopilot} disabled={busy !== null || !operator}>
               {busy === "autopilot" ? <span className="spinner" aria-hidden="true" /> : <Icon.Sparkle size={14} />}
               {autopilotEnabled ? "Pause Autopilot" : "Turn on Autopilot"}
             </button>
           </div>
         </div>
 
-        <form onSubmit={submit} className="mt-5 rounded-2xl border border-line bg-bg/70 p-2 shadow-e1 backdrop-blur">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <form onSubmit={submit} className="nb-panel-flat mt-6 bg-bg p-3 sm:p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <input
               aria-label="Tell Steward what outcome you want"
-              className="input min-h-11 flex-1 border-transparent bg-transparent text-[15px] shadow-none"
+              className="input min-h-14 flex-1 border-2 border-line bg-bg text-[15px] shadow-none"
               placeholder="e.g. Launch the smallest version this week and get it in front of 20 real prospects"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
             />
-            <button className="btn btn-primary min-h-11" disabled={busy !== null || !instruction.trim() || !operator}>
+            <button className="btn btn-primary min-h-14 shrink-0" disabled={busy !== null || !instruction.trim() || !operator}>
               {busy === "operator" ? <span className="spinner" aria-hidden="true" /> : <Icon.ArrowRight size={16} />}
               Start
             </button>
           </div>
         </form>
-        {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-sm font-semibold text-danger">{error}</p>}
       </div>
 
-      <div className="grid gap-px bg-line lg:grid-cols-3">
+      <div className="grid gap-4 bg-bg p-4 sm:p-5 lg:grid-cols-3">
         {LANES.map((lane) => {
           const signal = lane.id === "build"
             ? `${stats.artifacts} artifacts · ${stats.documents} knowledge docs`
@@ -259,15 +259,16 @@ export function FounderStudio({
               : stats.stripeConnected
                 ? "Payments connected · ready to test an offer"
                 : "No payment rail connected yet";
+          const laneAccent = lane.id === "build" ? "blue" : lane.id === "grow" ? "pink" : "green";
           return (
-            <article id={lane.id} key={lane.id} className="bg-panel p-5 sm:p-6">
-              <div className="eyebrow">{lane.kicker}</div>
-              <div className="mt-1 flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold tracking-tight">{lane.title}</h3>
-                <span className="tnum text-xs text-muted">{signal}</span>
+            <article id={lane.id} key={lane.id} className={`nb-panel-flat nb-left-${laneAccent} min-w-0 p-5 sm:p-6`}>
+              <div className={`nb-section-label nb-accent-${laneAccent} inline-flex px-2 py-1`}>{lane.kicker}</div>
+              <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+                <h3 className="text-xl font-bold tracking-tight">{lane.title}</h3>
+                <span className="tnum text-xs font-semibold text-muted">{signal}</span>
               </div>
-              <p className="mt-2 min-h-12 text-sm leading-6 text-muted">{lane.description}</p>
-              <button className="btn mt-4 w-full justify-between" onClick={() => launch(
+              <p className="mt-3 min-h-12 text-sm leading-6 text-muted">{lane.description}</p>
+              <button className={`btn nb-accent-${laneAccent} mt-4 w-full justify-between`} onClick={() => launch(
                   lane.prompt,
                   lane.id,
                   undefined,
@@ -281,10 +282,10 @@ export function FounderStudio({
                 {busy === lane.id ? <span className="spinner" aria-hidden="true" /> : <Icon.ArrowRight size={15} />}
               </button>
               {lane.id === "build" && stats.deploymentProvider === "vercel" && stats.deploymentProjectId && (
-                <div className="mt-3 rounded-xl border border-line bg-panel-2/60 p-3">
-                  <div className="text-xs font-semibold">Custom domain</div>
-                  <p className="mt-0.5 text-[11px] leading-4 text-muted">{stats.pendingDomain ? `DNS verification is pending for ${stats.pendingDomain}.` : "Attach a domain you already own to the live Vercel project."}</p>
-                  <div className="mt-2 flex gap-2">
+                <div className="nb-panel-flat mt-4 p-3">
+                  <div className="text-xs font-bold">Custom domain</div>
+                  <p className="mt-1 text-[11px] leading-4 text-muted">{stats.pendingDomain ? `DNS verification is pending for ${stats.pendingDomain}.` : "Attach a domain you already own to the live Vercel project."}</p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <input
                       className="input h-9 min-w-0 flex-1 py-1.5 text-xs"
                       aria-label="Custom domain"
@@ -300,7 +301,7 @@ export function FounderStudio({
                 </div>
               )}
               {lane.id === "earn" && !stats.stripeConnected && (
-                <Link className="mt-2 block text-center text-xs font-medium text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>
+                <Link className="mt-3 block text-center text-xs font-semibold text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>
                   Connect payments and business tools
                 </Link>
               )}
@@ -309,11 +310,11 @@ export function FounderStudio({
         })}
       </div>
 
-      <div className="border-t border-line bg-panel-2/35 px-5 py-5 sm:px-6" aria-label="Specialist workers">
+      <div className="border-t-2 border-line bg-panel px-5 py-6 sm:px-6" aria-label="Specialist workers">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="eyebrow">Specialist workers</div>
-            <h3 className="mt-1 text-lg font-semibold tracking-tight">Work Steward delegated</h3>
+            <div className="nb-section-label">Specialist workers</div>
+            <h3 className="mt-2 text-lg font-bold tracking-tight">Work Steward delegated</h3>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-muted">Each worker is a separate durable run with its own specialist permissions, AI budget, approvals, verification, and evidence trail.</p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -325,7 +326,7 @@ export function FounderStudio({
         </div>
 
         {delegatedRuns.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-line bg-panel px-4 py-5 text-sm text-muted">
+          <div className="nb-panel-flat mt-4 p-4 text-sm text-muted">
             No specialist workers yet. Give the Steward Operator a multi-step outcome; the Chief of Staff can split independent work into durable Engineering, Growth, Sales, Research, Support, Finance, or Operations runs.
           </div>
         ) : (
@@ -334,19 +335,19 @@ export function FounderStudio({
               const agent = agentById.get(run.agentId);
               const summary = typeof run.result?.summary === "string" ? run.result.summary : run.error;
               return (
-                <Link key={run.id} href={`/app/c/${companyId}/runs/${run.id}`} className="card-inset group block min-w-0 p-4 transition hover:border-accent/40 hover:bg-panel">
+                <Link key={run.id} href={`/app/c/${companyId}/runs/${run.id}`} className="nb-panel-flat group block min-w-0 p-4 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate text-xs font-semibold">{agent?.name ?? "Specialist"}</div>
-                      <div className="mt-0.5 text-[11px] capitalize text-muted">{agent?.kind ?? "agent"}</div>
+                      <div className="truncate text-xs font-bold">{agent?.name ?? "Specialist"}</div>
+                      <div className="mt-1 text-[11px] capitalize text-muted">{agent?.kind ?? "agent"}</div>
                     </div>
                     <StatusPill status={run.status} />
                   </div>
-                  <div className="mt-3 line-clamp-2 text-sm font-medium leading-5">{run.intent || "Delegated work"}</div>
+                  <div className="mt-3 line-clamp-2 text-sm font-semibold leading-5">{run.intent || "Delegated work"}</div>
                   <p className="mt-2 line-clamp-2 min-h-9 text-xs leading-4 text-muted">
                     {summary || (run.status === "waiting_approval" ? "Waiting for a founder approval before the next external action." : "Worker evidence will appear here when the run produces a verified result.")}
                   </p>
-                  <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-faint">
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t-2 border-line pt-2 text-[11px] text-faint">
                     <span>{ago(run.createdAt)}</span>
                     <span className="tnum">{usd(run.costUsd)}</span>
                   </div>
@@ -357,11 +358,11 @@ export function FounderStudio({
         )}
       </div>
 
-      <div className="border-t border-line bg-panel px-5 py-5 sm:px-6">
+      <div className="border-t-2 border-line bg-bg px-5 py-6 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="eyebrow">Business pulse</div>
-            <h3 className="mt-1 text-lg font-semibold tracking-tight">What exists outside Steward</h3>
+            <div className="nb-section-label">Business pulse</div>
+            <h3 className="mt-2 text-lg font-bold tracking-tight">What exists outside Steward</h3>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
             <Pill tone={stats.liveProductUrl ? "ok" : stats.deploymentConnected ? "accent" : "neutral"}>{stats.liveProductUrl ? "Product live" : stats.deploymentConnected ? "Hosting ready" : "Hosting missing"}</Pill>
@@ -371,42 +372,42 @@ export function FounderStudio({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="card-inset min-w-0 p-4">
-            <div className="eyebrow">Live product</div>
+        <div className="nb-bento mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="nb-metric nb-panel-flat min-w-0 p-4">
+            <div className="nb-section-label">Live product</div>
             {stats.liveProductUrl ? (
-              <a className="mt-2 block truncate text-sm font-semibold text-accent hover:underline" href={stats.liveProductUrl} target="_blank" rel="noreferrer">Open live product ↗</a>
+              <a className="mt-3 block truncate text-sm font-bold text-accent hover:underline" href={stats.liveProductUrl} target="_blank" rel="noreferrer">Open live product ↗</a>
             ) : (
-              <p className="mt-2 text-sm font-semibold">Not live yet</p>
+              <p className="mt-3 text-sm font-bold">Not live yet</p>
             )}
           </div>
-          <div className="card-inset p-4">
-            <div className="eyebrow">Revenue · {businessPulse.windowDays}d</div>
-            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : revenueLabel(businessPulse)}</div>
+          <div className="nb-metric nb-panel-flat p-4">
+            <div className="nb-section-label">Revenue · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-3 text-lg font-bold">{pulseLoading ? "…" : revenueLabel(businessPulse)}</div>
           </div>
-          <div className="card-inset p-4">
-            <div className="eyebrow">Orders · {businessPulse.windowDays}d</div>
-            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.chargesCount ?? 0 : "—"}</div>
+          <div className="nb-metric nb-panel-flat p-4">
+            <div className="nb-section-label">Orders · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-3 text-lg font-bold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.chargesCount ?? 0 : "—"}</div>
           </div>
-          <div className="card-inset p-4">
-            <div className="eyebrow">Subscriptions</div>
-            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.activeSubscriptions ?? 0 : "—"}</div>
+          <div className="nb-metric nb-panel-flat p-4">
+            <div className="nb-section-label">Subscriptions</div>
+            <div className="tnum mt-3 text-lg font-bold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.activeSubscriptions ?? 0 : "—"}</div>
           </div>
-          <div className="card-inset p-4">
-            <div className="eyebrow">New customers · {businessPulse.windowDays}d</div>
-            <div className="tnum mt-2 text-lg font-semibold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.newCustomers ?? 0 : "—"}</div>
+          <div className="nb-metric nb-panel-flat p-4">
+            <div className="nb-section-label">New customers · {businessPulse.windowDays}d</div>
+            <div className="tnum mt-3 text-lg font-bold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.newCustomers ?? 0 : "—"}</div>
           </div>
         </div>
 
         {!businessPulse.payments.connected && (
-          <p className="mt-3 text-xs text-muted">Connect Stripe in <Link className="font-medium text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>Integrations</Link> to turn Earn into a real checkout + revenue loop.</p>
+          <p className="mt-3 text-xs text-muted">Connect Stripe in <Link className="font-semibold text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>Integrations</Link> to turn Earn into a real checkout + revenue loop.</p>
         )}
         {businessPulse.payments.connected && !businessPulse.payments.available && !pulseLoading && (
-          <p className="mt-3 text-xs text-warn">Stripe is connected, but live business metrics are temporarily unavailable. Steward can continue working.</p>
+          <p className="mt-3 text-xs font-semibold text-warn">Stripe is connected, but live business metrics are temporarily unavailable. Steward can continue working.</p>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-panel-2/50 px-5 py-3 text-xs text-muted sm:px-6">
+      <div className="flex flex-col gap-2 border-t-2 border-line bg-panel px-5 py-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <span>{stats.pendingApprovals ? `${stats.pendingApprovals} decision${stats.pendingApprovals === 1 ? "" : "s"} waiting for you` : "No approvals blocking work"} · {stats.recentRuns} recent runs</span>
         <span>Autopilot runs Build, Grow and Earn specialist cycles daily in {timezone || "UTC"}; policies, budgets, quiet hours and outbound pause still apply.</span>
       </div>
