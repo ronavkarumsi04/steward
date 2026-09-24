@@ -5,6 +5,7 @@ import { AUTONOMY_LABELS } from "@steward/schema";
 import { requireMe, serverApi, tryApi } from "@/lib/server";
 import type { CompanyOverview } from "@/lib/types";
 import { CompanySidebar } from "@/components/company-sidebar";
+import { CompanyCommandPalette } from "@/components/company-command-palette";
 import { Icon } from "@/components/icons";
 import { TopNav } from "@/components/nav";
 import { Pill, StatusPill } from "@/components/ui";
@@ -36,6 +37,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
               <Pill title={`Autonomy level ${company.autonomyLevel}`}>L{company.autonomyLevel}</Pill>
               {company.outboundPaused && <Pill tone="warn">outbound paused</Pill>}
             </div>
+            <CompanyCommandPalette companyId={company.id} />
             <div className="my-3 border-t border-line" />
             <CompanySidebar companyId={company.id} pendingApprovals={pendingApprovals} />
           </div>

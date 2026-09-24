@@ -58,6 +58,19 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByRole("heading", { name: "What exists outside Steward" })).toBeVisible();
   await expect(page.getByText("Not live yet")).toBeVisible();
 
+  // Company command palette and keyboard navigation are available throughout the operating shell.
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeVisible();
+  await expect(page.getByLabel("Search company pages")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeHidden();
+  await page.keyboard.press("g");
+  await page.keyboard.press("a");
+  await page.waitForURL(/\/activity$/);
+  await page.keyboard.press("g");
+  await page.keyboard.press("t");
+  await page.waitForURL(/\/tasks$/);
+
   // Projects: founder outcomes persist independently of model/provider availability.
   await page.goto(`${companyUrl}/projects`);
   await expect(page.getByRole("heading", { name: "Outcomes that survive every thread" })).toBeVisible();
