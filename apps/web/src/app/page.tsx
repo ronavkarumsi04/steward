@@ -18,8 +18,8 @@ export default async function Landing() {
   const me = await getMeOptional();
   if (me.user) redirect("/app");
   return (
-    <div className="min-h-screen bg-[radial-gradient(1200px_600px_at_50%_-10%,var(--bg-tint),transparent_70%)]">
-      <header className="glass sticky top-0 z-30 border-x-0 border-t-0">
+    <div className="min-h-screen bg-bg">
+      <header className="sticky top-0 z-30 border-b-2 border-line bg-panel">
         <nav className="mx-auto flex h-13 max-w-6xl items-center justify-between px-4 sm:px-6" aria-label="Primary">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             <Icon.Logo size={22} />
@@ -33,7 +33,7 @@ export default async function Landing() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-20 sm:px-6 md:pt-28">
-        <section className="rise-in mx-auto max-w-3xl text-center">
+        <section className="nb-hero rise-in mx-auto max-w-5xl text-left">
           <span className="pill pill-accent mb-6">
             <Icon.Sparkle size={14} />
             Open source · Apache-2.0
@@ -53,8 +53,8 @@ export default async function Landing() {
           </div>
         </section>
 
-        <section className="rise-in-delayed mx-auto mt-16 max-w-4xl" aria-label="How a run flows">
-          <div className="card flex flex-wrap items-center justify-center gap-y-3 px-4 py-4 sm:justify-between sm:px-6">
+        <section className="rise-in-delayed mx-auto mt-12 max-w-5xl" aria-label="How a run flows">
+          <div className="card nb-left-purple flex flex-wrap items-center justify-center gap-y-3 px-4 py-4 sm:justify-between sm:px-6">
             {PIPELINE.map((step, i) => (
               <span key={step} className="flex items-center gap-2 text-sm">
                 <span className={`mono text-[13px] ${i === 0 || i === PIPELINE.length - 1 ? "text-accent" : "text-fg-2"}`}>{step}</span>
@@ -65,10 +65,10 @@ export default async function Landing() {
           <p className="mt-3 text-center text-xs text-muted">Every step is recorded with its model, tool, cost and authorization — then persisted before the next event fires.</p>
         </section>
 
-        <section className="mt-24 grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label="Capabilities">
+        <section className="mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label="Capabilities">
           {PILLARS.map(([Glyph, title, body]) => (
-            <article key={title} className="card">
-              <span className="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <article key={title} className="card nb-left-blue">
+              <span className="nb-panel-flat mb-4 flex h-10 w-10 items-center justify-center p-0 text-accent">
                 <Glyph size={18} />
               </span>
               <h2 className="text-[15px] font-semibold">{title}</h2>

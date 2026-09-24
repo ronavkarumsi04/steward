@@ -11,7 +11,7 @@ export default async function RegisterPage() {
   const [me, authConfig] = await Promise.all([getMeOptional(), getAuthConfig()]);
   if (me.user) redirect("/app");
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(900px_500px_at_50%_-10%,var(--bg-tint),transparent_70%)] p-4 sm:p-6">
+    <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
       <Suspense>{authConfig.signupOpen ? <AuthForm mode="register" /> : <SignupClosed />}</Suspense>
     </main>
   );
@@ -19,8 +19,8 @@ export default async function RegisterPage() {
 
 function SignupClosed() {
   return (
-    <section aria-labelledby="closed-title" className="card rise-in w-full max-w-md p-6 text-center shadow-e2 sm:p-7">
-      <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
+    <section aria-labelledby="closed-title" className="card nb-left-purple rise-in w-full max-w-md p-6 text-center sm:p-7">
+      <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
         <Icon.Logo size={36} />
       </Link>
       <h1 id="closed-title" className="mt-3 text-xl font-semibold tracking-tight">Sign-ups are invitation-only</h1>

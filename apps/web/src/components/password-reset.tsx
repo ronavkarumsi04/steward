@@ -9,9 +9,9 @@ import { Icon } from "./icons";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="card rise-in w-full max-w-md space-y-4 p-6 shadow-e2 sm:p-7">
+    <div className="card nb-left-blue rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
       <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
+        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
         <h1 className="mt-3 text-xl font-semibold tracking-tight">{title}</h1>
@@ -45,7 +45,7 @@ export function ForgotPasswordForm() {
   if (sentTo) {
     return (
       <Shell title="Check your email" subtitle="If an account exists for that address, a reset link is on its way.">
-        <p role="status" className="rounded-lg border border-line bg-panel-2 px-3 py-2 text-center text-sm text-fg-2">
+        <p role="status" className="nb-panel-flat nb-left-green px-3 py-2 text-center text-sm text-fg-2">
           Sent to <span className="font-medium text-fg">{sentTo}</span>. The link expires in 30 minutes.
         </p>
         <Link href="/login" className="btn btn-ghost h-11 w-full text-[15px]">Back to sign in</Link>
@@ -60,7 +60,7 @@ export function ForgotPasswordForm() {
           <label className="label" htmlFor="email">Email</label>
           <input id="email" name="email" type="email" className="input" required autoComplete="email" autoFocus />
         </div>
-        {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+        {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
         <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
           {busy && <span className="spinner" aria-hidden="true" />}
           Send reset link
@@ -110,7 +110,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <label className="label" htmlFor="confirm">Confirm password</label>
           <input id="confirm" name="confirm" type="password" className="input" required minLength={10} autoComplete="new-password" />
         </div>
-        {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+        {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
         <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
           {busy && <span className="spinner" aria-hidden="true" />}
           Set new password
