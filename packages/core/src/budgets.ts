@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { budgetLedger, budgets, emitEvent, scoped, type Db, type DbOrTx } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 
