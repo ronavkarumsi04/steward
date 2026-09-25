@@ -2,42 +2,71 @@ import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AgentServiceFactory } from "@steward/agents";
-import { ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
+import { StripeClient } from "@steward/integrations";
+import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
-import type { EventBus } from "@steward/core";
+import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus } from "@steward/core";
 
 const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
 const limit = z.coerce.number().int().min(1).max(200).optional();
 
+async function requireProject(services: AgentServiceFactory, scope: TenantScope, projectId?: string | null) {
+  if (projectId && !(await services.projects.get(scope, projectId))) throw new HttpError(404, "not_found", "Project not found");
+}
+
 /** Creates a run row, binds it to its Temporal workflow id, and starts the workflow. Exposed for chat + task routes. */
-export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" }) {
+export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event"; sourceSignalId?: string }) {
   if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
   const company = await services.companies.get(scope);
   if (!company || company.status !== "active") throw new HttpError(409, "company_inactive", "Company is paused or archived");
   const agent = await services.agents.get(scope, input.agentId);
   if (!agent || !agent.enabled) throw new HttpError(404, "not_found", "Agent not found or disabled");
-  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined } });
+  await requireProject(services, scope, input.projectId);
+  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined, sourceSignalId: input.sourceSignalId } });
   const wf = await workflows.startRun({ runId: run.id, scope: { organizationId: scope.organizationId, companyId: scope.companyId! } });
   await services.runs.attachWorkflow(scope, run.id, wf.workflowId, wf.workflowRunId);
   return { ...run, workflowId: wf.workflowId, workflowRunId: wf.workflowRunId };
 }
 
 export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: EventBus | null) {
+  // ---- projects ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/projects", tag: "projects", summary: "List founder projects", query: z.object({ status: z.enum(PROJECT_STATUSES).optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    return c.json({ projects: await c.get("deps").services.projects.list(scope, query) });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/projects", tag: "projects", summary: "Create a durable founder project", body: z.object({ name: z.string().min(3).max(200), objective: z.string().min(5).max(5000), description: z.string().max(5000).optional(), successSignal: z.string().max(2000).optional(), nextStep: z.string().max(2000).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ project: await c.get("deps").services.projects.create(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/projects/:id", tag: "projects", summary: "Project workspace with tasks, runs, outputs, decisions, conversations and campaigns" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const snapshot = await c.get("deps").services.projects.snapshot(scope, param(c, "id"));
+    if (!snapshot) throw new HttpError(404, "not_found", "Project not found");
+    return c.json(snapshot);
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/projects/:id", tag: "projects", summary: "Update project state", body: z.object({ name: z.string().min(3).max(200).optional(), objective: z.string().max(5000).optional(), description: z.string().max(5000).optional(), status: z.enum(PROJECT_STATUSES).optional(), successSignal: z.string().max(2000).optional(), nextStep: z.string().max(2000).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const project = await c.get("deps").services.projects.update(scope, param(c, "id"), body);
+    if (!project) throw new HttpError(404, "not_found", "Project not found");
+    return c.json({ project });
+  });
+
   // ---- tasks ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks", tag: "tasks", summary: "List tasks", query: z.object({ status: csv(TaskStatus), agentId: z.string().optional(), goalId: z.string().optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks", tag: "tasks", summary: "List tasks", query: z.object({ status: csv(TaskStatus), agentId: z.string().optional(), goalId: z.string().optional(), projectId: ID.optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const s = c.get("deps").services;
     return c.json({ tasks: await s.tasks.list(scope, { status: query.status, assigneeAgentId: query.agentId, goalId: query.goalId, limit: query.limit }), counts: await s.tasks.counts(scope) });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/tasks", tag: "tasks", summary: "Create a task (optionally start a run for it immediately)", body: z.object({ title: z.string().min(1).max(300), description: z.string().max(20000).optional(), priority: TaskPriority.optional(), assigneeAgentId: ID.nullable().optional(), goalId: ID.nullable().optional(), parentTaskId: ID.nullable().optional(), dueAt: z.iso.datetime().optional(), start: z.boolean().optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/tasks", tag: "tasks", summary: "Create a task (optionally start a run for it immediately)", body: z.object({ title: z.string().min(1).max(300), description: z.string().max(20000).optional(), priority: TaskPriority.optional(), assigneeAgentId: ID.nullable().optional(), goalId: ID.nullable().optional(), projectId: ID.nullable().optional(), parentTaskId: ID.nullable().optional(), dueAt: z.iso.datetime().optional(), start: z.boolean().optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
     const deps = c.get("deps");
+    await requireProject(deps.services, scope, body.projectId);
     const { start, dueAt, ...rest } = body;
     const task = await deps.services.tasks.create(scope, { ...rest, dueAt: dueAt ? new Date(dueAt) : undefined });
     let run = null;
-    if (start && task.assigneeAgentId) run = await launchRun(deps.services, deps.workflows, scope, { agentId: task.assigneeAgentId, taskId: task.id, instruction: `${task.title}\n\n${task.description}`, kind: "task" });
+    if (start && task.assigneeAgentId) run = await launchRun(deps.services, deps.workflows, scope, { agentId: task.assigneeAgentId, taskId: task.id, instruction: `${task.title}\n\n${task.description}`, projectId: task.projectId, kind: "task" });
     return c.json({ task, run }, 201);
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks/:id", tag: "tasks", summary: "Task detail with runs and artifacts" }, async (c) => {
@@ -61,33 +90,34 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     if (!task) throw new HttpError(404, "not_found");
     const agentId = body.agentId ?? task.assigneeAgentId;
     if (!agentId) throw new HttpError(422, "no_agent", "Task has no assignee; pass agentId");
-    const run = await launchRun(deps.services, deps.workflows, scope, { agentId, taskId: task.id, instruction: body.instruction ?? `${task.title}\n\n${task.description}`, kind: "task" });
+    const run = await launchRun(deps.services, deps.workflows, scope, { agentId, taskId: task.id, instruction: body.instruction ?? `${task.title}\n\n${task.description}`, projectId: task.projectId, kind: "task" });
     return c.json({ run }, 201);
   });
 
   // ---- runs ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ runs: await c.get("deps").services.runs.list(scope, query) });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs", tag: "runs", summary: "Start an ad-hoc run with an instruction", body: z.object({ agentId: ID, instruction: z.string().min(1).max(8000) }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs", tag: "runs", summary: "Start an ad-hoc run with an instruction", body: z.object({ agentId: ID, projectId: ID.nullable().optional(), instruction: z.string().min(1).max(8000) }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
     const deps = c.get("deps");
     return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { ...body, kind: "user" }) }, 201);
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, AI/model calls, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const deps = c.get("deps");
     const run = await deps.services.runs.get(scope, param(c, "id"));
     if (!run) throw new HttpError(404, "not_found");
-    const [steps, toolCalls, artifacts, approvals, workflow] = await Promise.all([
+    const [steps, aiCalls, toolCalls, artifacts, approvals, workflow] = await Promise.all([
       deps.services.runs.steps(scope, run.id),
+      deps.services.providers.callsForRun(scope, run.id),
       deps.services.runs.toolCallsFor(scope, run.id),
       deps.services.runs.listArtifacts(scope, { runId: run.id }),
       deps.services.approvals.list(scope).then((a) => a.filter((x) => x.runId === run.id)),
       deps.workflows ? deps.workflows.runStatus(run.id).catch(() => null) : Promise.resolve(null),
     ]);
-    return c.json({ run, steps, toolCalls, artifacts, approvals, workflow });
+    return c.json({ run, steps, aiCalls, toolCalls, artifacts, approvals, workflow });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs/:id/cancel", tag: "runs", summary: "Request cancellation of a run", body: z.object({ reason: z.string().max(500).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
@@ -100,13 +130,15 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   });
 
   // ---- chat ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/conversations", tag: "chat", summary: "List conversations" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/conversations", tag: "chat", summary: "List conversations", query: z.object({ projectId: ID.optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
-    return c.json({ conversations: await c.get("deps").services.conversations.list(scope) });
+    return c.json({ conversations: await c.get("deps").services.conversations.list(scope, 50, query.projectId) });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/conversations", tag: "chat", summary: "Create a conversation", body: z.object({ title: z.string().max(200).optional(), agentId: ID.nullable().optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/conversations", tag: "chat", summary: "Create a conversation", body: z.object({ title: z.string().max(200).optional(), agentId: ID.nullable().optional(), projectId: ID.nullable().optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
-    return c.json({ conversation: await c.get("deps").services.conversations.create(scope, body) }, 201);
+    const services = c.get("deps").services;
+    await requireProject(services, scope, body.projectId);
+    return c.json({ conversation: await services.conversations.create(scope, body) }, 201);
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/conversations/:id", tag: "chat", summary: "Conversation with messages" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
@@ -128,7 +160,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const agentId = body.agentId ?? conversation.agentId ?? (await s.agents.byKind(scope, "orchestrator"))?.id;
     if (!agentId) throw new HttpError(422, "no_agent", "No orchestrator agent available");
     const message = await s.conversations.addMessage(scope, { conversationId: conversation.id, role: "user", content: body.content });
-    const run = await launchRun(s, deps.workflows, scope, { agentId, conversationId: conversation.id, instruction: body.content, kind: "chat" });
+    const run = await launchRun(s, deps.workflows, scope, { agentId, conversationId: conversation.id, instruction: body.content, projectId: conversation.projectId, kind: "chat" });
     if (!conversation.title) await s.conversations.setTitle(scope, conversation.id, body.content.slice(0, 80));
     return c.json({ message, run }, 201);
   });
@@ -149,6 +181,53 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
     if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending");
     return c.json({ approval: a });
+  });
+
+  // ---- growth pipeline ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/growth", tag: "growth", summary: "Lead pipeline and recent outbound activity", query: z.object({ stage: z.enum(LEAD_STAGES).optional(), limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const growth = c.get("deps").services.growth;
+    const [leads, outbound, campaigns] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope)]);
+    return c.json({ leads, outbound, campaigns });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/leads", tag: "growth", summary: "Create a lead/contact in the company pipeline", body: z.object({ title: z.string().min(1).max(300), stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional(), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ lead: await c.get("deps").services.growth.createLead(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/leads/:id", tag: "growth", summary: "Update a lead stage/value/notes", body: z.object({ stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).nullable().optional(), notes: z.string().max(8000).optional(), title: z.string().min(1).max(300).optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const lead = await c.get("deps").services.growth.updateLead(scope, param(c, "id"), body);
+    if (!lead) throw new HttpError(404, "not_found", "Lead not found");
+    return c.json({ lead });
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/campaigns", tag: "growth", summary: "Create a tracked growth campaign plan", body: z.object({ name: z.string().min(1).max(200), channel: z.enum(CAMPAIGN_CHANNELS), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).optional(), projectId: ID.nullable().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const services = c.get("deps").services;
+    await requireProject(services, scope, body.projectId);
+    return c.json({ campaign: await services.growth.createCampaign(scope, body) }, 201);
+  });
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/campaigns/:id", tag: "growth", summary: "Update a campaign plan or lifecycle status", body: z.object({ status: z.enum(CAMPAIGN_STATUSES).optional(), name: z.string().min(1).max(200).optional(), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).nullable().optional() }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const campaign = await c.get("deps").services.growth.updateCampaign(scope, param(c, "id"), body);
+    if (!campaign) throw new HttpError(404, "not_found", "Campaign not found");
+    return c.json({ campaign });
+  });
+
+  // ---- business pulse ----
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/business/pulse", tag: "business", summary: "Aggregated business outcomes from connected systems", query: z.object({ days: z.coerce.number().int().min(1).max(90).default(30) }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const s = c.get("deps").services;
+    const stripe = await s.integrations.findByType(scope, "stripe");
+    if (!stripe) return c.json({ windowDays: query.days, payments: { connected: false, available: false, provider: null }, balance: null, revenue: null });
+    try {
+      const { secret } = await s.integrations.resolveSecret(scope, stripe.id);
+      const client = new StripeClient(secret);
+      const [balance, revenue] = await Promise.all([client.balance(), client.revenueSummary(Math.floor(Date.now() / 1000) - query.days * 86_400)]);
+      return c.json({ windowDays: query.days, payments: { connected: true, available: true, provider: "stripe" }, balance, revenue });
+    } catch {
+      // The Studio must remain usable when an external metrics provider is degraded.
+      return c.json({ windowDays: query.days, payments: { connected: true, available: false, provider: "stripe" }, balance: null, revenue: null });
+    }
   });
 
   // ---- events ----
@@ -182,23 +261,54 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const scope = await companyScope(c, param(c, "companyId"), "member");
     return c.json({ ok: await c.get("deps").services.forScope(scope).memory.forget(param(c, "id")) });
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents", query: z.object({ folder: z.string().max(200).optional() }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents and playbooks", query: z.object({ folder: z.string().max(200).optional(), kind: z.enum(DOCUMENT_KINDS).optional(), projectId: ID.optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
-    return c.json({ documents: await c.get("deps").services.documents.list(scope, query.folder) });
+    return c.json({ documents: await c.get("deps").services.documents.list(scope, query.folder, { kind: query.kind, projectId: query.projectId }) });
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Read a document" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Read a document or playbook" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const d = await c.get("deps").services.documents.get(scope, param(c, "id"));
     if (!d) throw new HttpError(404, "not_found");
     return c.json({ document: d });
   });
-  defineRoute(app, reg, { method: "put", path: "/companies/:companyId/documents", tag: "knowledge", summary: "Create or update a document", body: z.object({ id: ID.optional(), title: z.string().min(1).max(200), content: z.string().max(500000), folder: z.string().max(200).optional(), format: z.string().max(20).optional() }) }, async (c, { body }) => {
-    const scope = await companyScope(c, param(c, "companyId"), "member");
-    return c.json({ document: await c.get("deps").services.documents.upsert(scope, body) });
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents/:id/versions", tag: "knowledge", summary: "Immutable document/playbook version history", query: z.object({ limit }) }, async (c, { query }) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const d = await c.get("deps").services.documents.get(scope, param(c, "id"));
+    if (!d) throw new HttpError(404, "not_found");
+    return c.json({ versions: await c.get("deps").services.documents.versions(scope, d.id, query.limit ?? 50) });
   });
-  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Delete a document" }, async (c) => {
-    const scope = await companyScope(c, param(c, "companyId"), "member");
-    return c.json({ ok: await c.get("deps").services.documents.delete(scope, param(c, "id")) });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/documents/:id/versions/:version/restore", tag: "knowledge", summary: "Restore a historical document/playbook version as a new version" }, async (c) => {
+    const companyId = param(c, "companyId");
+    const readScope = await companyScope(c, companyId);
+    const current = await c.get("deps").services.documents.get(readScope, param(c, "id"));
+    if (!current) throw new HttpError(404, "not_found");
+    const scope = await companyScope(c, companyId, current.kind === "playbook" ? "admin" : "member");
+    const version = Number(param(c, "version"));
+    if (!Number.isInteger(version) || version < 1) throw new HttpError(400, "invalid_version");
+    const document = await c.get("deps").services.documents.restore(scope, current.id, version);
+    if (!document) throw new HttpError(404, "not_found");
+    return c.json({ document });
+  });
+  defineRoute(app, reg, { method: "put", path: "/companies/:companyId/documents", tag: "knowledge", summary: "Create or update a document or playbook", body: z.object({ id: ID.optional(), title: z.string().min(1).max(200), content: z.string().max(500000), folder: z.string().max(200).optional(), format: z.string().max(20).optional(), kind: z.enum(DOCUMENT_KINDS).optional(), projectId: ID.nullable().optional(), agentKinds: z.array(AgentKind).max(9).optional() }) }, async (c, { body }) => {
+    const companyId = param(c, "companyId");
+    let kind = body.kind ?? "document";
+    if (body.id) {
+      const readScope = await companyScope(c, companyId);
+      const current = await c.get("deps").services.documents.get(readScope, body.id);
+      if (!current) throw new HttpError(404, "not_found");
+      kind = current.kind as (typeof DOCUMENT_KINDS)[number];
+      if (body.kind && body.kind !== kind) throw new HttpError(409, "document_kind_immutable", "Document kind cannot be changed after creation");
+    }
+    const scope = await companyScope(c, companyId, kind === "playbook" ? "admin" : "member");
+    return c.json({ document: await c.get("deps").services.documents.upsert(scope, { ...body, kind }) });
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/documents/:id", tag: "knowledge", summary: "Delete a document or playbook" }, async (c) => {
+    const companyId = param(c, "companyId");
+    const readScope = await companyScope(c, companyId);
+    const current = await c.get("deps").services.documents.get(readScope, param(c, "id"));
+    if (!current) throw new HttpError(404, "not_found");
+    const scope = await companyScope(c, companyId, current.kind === "playbook" ? "admin" : "member");
+    return c.json({ ok: await c.get("deps").services.documents.delete(scope, current.id) });
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/decisions", tag: "knowledge", summary: "Decision log", query: z.object({ limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));

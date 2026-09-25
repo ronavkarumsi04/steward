@@ -28,7 +28,7 @@ export function ConversationList({ companyId, conversations, activeId }: { compa
         <ul className="space-y-0.5 overflow-auto text-sm">
           {conversations.map((c) => (
             <li key={c.id}>
-              <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate rounded-lg px-3 py-1.5 ${c.id === activeId ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2 hover:text-fg"}`}>
+              <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate border-2 px-3 py-2 ${c.id === activeId ? "border-line bg-panel-2 text-fg" : "border-transparent text-muted hover:border-line hover:bg-panel-2 hover:text-fg"}`}>
                 {c.title || "New conversation"}
                 <span className="block text-xs text-muted"><Ago iso={c.updatedAt} /></span>
               </Link>
@@ -95,7 +95,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
 
   const agent = agents.find((a) => a.id === (conversation.agentId ?? agents.find((x) => x.kind === "orchestrator")?.id));
   return (
-    <div className="flex h-full min-h-[70vh] flex-col">
+    <div className="card nb-left-purple flex h-full min-h-[70vh] flex-col p-4">
       <header className="mb-3 flex items-center justify-between border-b border-line pb-2">
         <div>
           <h1 className="font-semibold">{conversation.title || "New conversation"}</h1>
@@ -111,7 +111,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
         {messages.length === 0 && <Empty>Say hello. Ask for a plan, a research brief, or tell the agent what to build.</Empty>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-role={m.role}>
-            <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-accent text-accent-fg" : m.role === "assistant" ? "bg-panel-2" : "border border-line text-muted"}`}>
+            <div className={`max-w-[80%] border-2 border-line px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "nb-accent-purple" : m.role === "assistant" ? "bg-panel-2" : "text-muted"}`}>
               {m.content}
               <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-accent-fg/70" : "text-muted"}`}>
                 <Ago iso={m.createdAt} />
@@ -121,7 +121,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
           </div>
         ))}
         {activeRun && !["succeeded", "failed", "cancelled"].includes(activeRun.status) && (
-          <div className="flex justify-start"><div className="rounded-xl bg-panel-2 px-3 py-2 text-sm text-muted">{agent?.name ?? "Agent"} is {activeRun.status.replace(/_/g, " ")}…</div></div>
+          <div className="flex justify-start"><div className="nb-panel-flat nb-left-blue px-3 py-2 text-sm text-muted">{agent?.name ?? "Agent"} is {activeRun.status.replace(/_/g, " ")}…</div></div>
         )}
         {activeRun?.status === "failed" && <p className="text-xs text-danger">Run failed: {activeRun.error ?? "see run details"}</p>}
         <div ref={bottom} />

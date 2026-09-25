@@ -32,19 +32,18 @@ export function QuickStart({ companyId, agents }: { companyId: string; agents: A
   }
 
   return (
-    <form onSubmit={submit} className="glass rounded-2xl p-2 shadow-e1">
+    <form onSubmit={submit} className="nb-panel-flat border-2 border-[#1c1917] p-3 shadow-[4px_4px_0_#1c1917]">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon.Sparkle size={16} aria-hidden="true" />
+        <span className="nb-section-label">MANUAL TASK</span>
+      </div>
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
-        <div className="flex items-center gap-2 md:w-56">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent" aria-hidden="true">
-            <Icon.Sparkle size={16} />
-          </span>
-          <select aria-label="Agent" className="input flex-1 border-transparent bg-transparent shadow-none" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            {enabled.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
+        <select aria-label="Agent" className="input w-full md:w-56" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+          {enabled.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
         <input
           aria-label="Instruction"
-          className="input flex-1 border-transparent bg-transparent shadow-none"
+          className="input min-w-0 flex-1"
           placeholder="Give an agent something to do, e.g. “Research the top 5 competitors and write a positioning doc”"
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
@@ -54,7 +53,7 @@ export function QuickStart({ companyId, agents }: { companyId: string; agents: A
           {busy ? "Starting…" : "Run"}
         </button>
       </div>
-      {error && <p role="alert" className="mt-2 px-2 text-xs text-danger">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
     </form>
   );
 }

@@ -7,6 +7,8 @@ export * from "./budgets.js";
 export * from "./approvals.js";
 export * from "./work.js";
 export * from "./events.js";
+export * from "./signals.js";
 export * from "./integrations.js";
 export * from "./companion.js";
 export * from "./mailer.js";
+export * from "./growth.js";

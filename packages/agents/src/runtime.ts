@@ -85,12 +85,14 @@ export class AgentRuntime {
     try {
       const company = await this.s.companies.get(this.scope);
       if (!company) throw new Error("Company not found");
-      const [profileRow, goals, task, recentDecisions, budgets] = await Promise.all([
+      const [profileRow, goals, task, recentDecisions, budgets, projectSnapshot, playbooks] = await Promise.all([
         this.s.companies.profile(this.scope),
         this.s.companies.listGoals(this.scope),
         run.taskId ? this.s.tasks.get(this.scope, run.taskId) : Promise.resolve(null),
-        this.s.runs.listDecisions(this.scope, 8),
+        this.s.runs.listDecisions(this.scope, 8, run.projectId ?? undefined),
         this.s.budgets.list(this.scope),
+        run.projectId ? this.s.projects.snapshot(this.scope, run.projectId) : Promise.resolve(null),
+        this.s.documents.playbooksForContext(this.scope, agent.kind, run.projectId),
       ]);
       const trigger = run.trigger as { kind: string; instruction: string; conversationId?: string };
       const instruction = trigger.instruction || task?.title || "Review the company state and propose the next most valuable work.";
@@ -105,6 +107,18 @@ export class AgentRuntime {
       const sections: string[] = [];
       sections.push(`# Company: ${company.name}`);
       if (profile) sections.push(`Profile:\n${JSON.stringify(profile, null, 1).slice(0, 6000)}`);
+      if (playbooks.length) {
+        const playbookBlock = playbooks.map((p) => `## ${p.title} (v${p.version}${p.projectId ? ", project-specific" : ", company-wide"})\n${p.content.slice(0, 3500)}`).join("\n\n").slice(0, 14000);
+        sections.push(`Company playbooks (founder-managed operating instructions; follow them unless they conflict with Steward's safety, policy, budget, or approval rules):\n${playbookBlock}`);
+      }
+      if (projectSnapshot) {
+        const p = projectSnapshot.project;
+        const recentTasks = projectSnapshot.tasks.slice(0, 8).map((x) => `- [${x.status}] ${x.title}`).join("\n");
+        const outputs = projectSnapshot.artifacts.slice(0, 8).map((x) => `- ${x.kind}: ${x.title}${x.url ? ` → ${x.url}` : ""}`).join("\n");
+        const projectDecisions = projectSnapshot.decisions.slice(0, 6).map((x) => `- ${x.title}`).join("\n");
+        const recentSignals = projectSnapshot.signals.slice(0, 8).map((x) => `- [${x.state}/${x.severity}] ${x.title}${x.summary ? ` — ${x.summary}` : ""}`).join("\n");
+        sections.push(`Active project: ${p.name} [${p.status}]\nObjective: ${p.objective || p.description || "(not set)"}\nSuccess signal: ${p.successSignal || "(not set)"}\nNext step: ${p.nextStep || "(not set)"}${recentTasks ? `\nRecent project tasks:\n${recentTasks}` : ""}${outputs ? `\nProject outputs:\n${outputs}` : ""}${projectDecisions ? `\nProject decisions:\n${projectDecisions}` : ""}${recentSignals ? `\nRecent business signals:\n${recentSignals}` : ""}`);
+      }
       sections.push(`Autonomy level: ${company.autonomyLevel} (0 read-only … 4 high autonomy). Outbound ${company.outboundPaused ? "PAUSED" : "enabled"}. Timezone ${company.timezone}.`);
       if (goals.length) sections.push(`Goals:\n${goals.filter((g) => g.status === "active").map((g) => `- ${g.title}${g.metric ? ` (${g.metric} → ${g.target ?? "?"})` : ""}${g.horizon ? ` by ${g.horizon}` : ""}`).join("\n")}`);
       if (budgets.length) sections.push(`Budgets this period:\n${budgets.map((b) => `- ${b.category}: $${b.spentUsd.toFixed(2)} of $${b.limitUsd.toFixed(2)}${b.exhausted ? " (EXHAUSTED)" : ""}`).join("\n")}`);

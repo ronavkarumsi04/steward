@@ -1,22 +1,24 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, ProviderCredentialService, RunService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, SignalService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
 import { searchProviderFromEnv } from "@steward/tools";
-import type { AgentServices } from "./services.js";
+import type { AgentServices, RunWorkflowLauncher } from "./services.js";
 
 export interface AgentServiceFactoryOptions {
   core: CoreContext;
   sandbox?: SandboxProvider;
   approvalSignal?: ApprovalSignal;
   companionBridge?: CompanionBridge;
+  runWorkflowLauncher?: RunWorkflowLauncher;
   env?: NodeJS.ProcessEnv;
 }
 
 /** Builds the tenant-scoped service bundle a run needs. Shared services are constructed once; scope-bound ones per call. */
 export class AgentServiceFactory {
   readonly companies: CompanyService;
+  readonly projects: ProjectService;
   readonly tasks: TaskService;
   readonly agents: AgentService;
   readonly runs: RunService;
@@ -25,8 +27,10 @@ export class AgentServiceFactory {
   readonly documents: DocumentService;
   readonly conversations: ConversationService;
   readonly integrations: IntegrationService;
+  readonly growth: GrowthService;
   readonly providers: ProviderCredentialService;
   readonly events: EventService;
+  readonly signals: SignalService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -34,6 +38,7 @@ export class AgentServiceFactory {
     const { db, crypto, config } = o.core;
     this.env = o.env ?? process.env;
     this.companies = new CompanyService(db);
+    this.projects = new ProjectService(db);
     this.tasks = new TaskService(db);
     this.agents = new AgentService(db);
     this.runs = new RunService(db);
@@ -42,8 +47,10 @@ export class AgentServiceFactory {
     this.documents = new DocumentService(db);
     this.conversations = new ConversationService(db);
     this.integrations = new IntegrationService(db, crypto, { apiUrl: config.apiUrl, oauthClient: (p) => oauthClientFromEnv(p, this.env) });
+    this.growth = new GrowthService(db);
     this.providers = new ProviderCredentialService(db, crypto);
     this.events = new EventService(db);
+    this.signals = new SignalService(db);
     this.companion = new CompanionService(db);
   }
 
@@ -56,6 +63,7 @@ export class AgentServiceFactory {
       gateway,
       memory,
       companies: this.companies,
+      projects: this.projects,
       tasks: this.tasks,
       agents: this.agents,
       runs: this.runs,
@@ -64,8 +72,10 @@ export class AgentServiceFactory {
       documents: this.documents,
       conversations: this.conversations,
       integrations: this.integrations,
+      growth: this.growth,
       providers: this.providers,
       events: this.events,
+      runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),
       emailFrom: this.env.PLATFORM_EMAIL_FROM,

@@ -53,16 +53,14 @@ function demux(stream: NodeJS.ReadableStream, docker: Docker, maxBytes: number):
   let outBytes = 0;
   let errBytes = 0;
   stdout.on("data", (c: Buffer) => {
-    if (outBytes < maxBytes) {
-      outChunks.push(c.subarray(0, maxBytes - outBytes));
-      outBytes += c.length;
-    }
+    if (outBytes < maxBytes) outChunks.push(c.subarray(0, maxBytes - outBytes));
+    // Track total bytes observed, not only bytes retained. Otherwise output arriving in a
+    // later chunk after the cap is invisible and the caller cannot know it was truncated.
+    outBytes += c.length;
   });
   stderr.on("data", (c: Buffer) => {
-    if (errBytes < maxBytes) {
-      errChunks.push(c.subarray(0, maxBytes - errBytes));
-      errBytes += c.length;
-    }
+    if (errBytes < maxBytes) errChunks.push(c.subarray(0, maxBytes - errBytes));
+    errBytes += c.length;
   });
   docker.modem.demuxStream(stream, stdout, stderr);
   const done = new Promise<{ stdout: string; stderr: string }>((resolve) => {

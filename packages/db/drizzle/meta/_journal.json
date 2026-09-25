@@ -8,6 +8,55 @@
       "when": 1789932281189,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790163600000,
+      "tag": "0001_growth_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790166600000,
+      "tag": "0002_campaign_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790190800000,
+      "tag": "0003_delegation_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790191500000,
+      "tag": "0004_projects_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790199189000,
+      "tag": "0005_business_signals",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790201191167,
+      "tag": "0006_reactive_autopilot",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790205400000,
+      "tag": "0007_company_playbooks",
+      "breakpoints": true
     }
   ]
 }

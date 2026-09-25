@@ -123,10 +123,10 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
-      <Card title="Controls">
+      <Card title="Controls" className="nb-left-red">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
             <div className="font-medium">Outbound pause</div>
@@ -150,7 +150,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <form onSubmit={saveCompany} className="card space-y-3">
+      <form onSubmit={saveCompany} className="card nb-left-blue space-y-3">
         <h2 className="font-semibold">Autonomy &amp; schedule</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div><label className="label">Company name</label><input name="name" className="input" defaultValue={company.name} required /></div>
@@ -159,7 +159,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             <label className="label">Autonomy level</label>
             <div className="grid gap-2 md:grid-cols-5">
               {([0, 1, 2, 3, 4] as AutonomyLevel[]).map((l) => (
-                <label key={l} className="flex cursor-pointer items-start gap-2 rounded-lg border border-line p-2 text-sm has-[:checked]:border-accent">
+                <label key={l} className="nb-panel-flat flex cursor-pointer items-start gap-2 p-2 text-sm has-[:checked]:border-accent">
                   <input type="radio" name="autonomy" value={l} defaultChecked={company.autonomyLevel === l} className="mt-1" />
                   <span><span className="font-medium">{l} · {AUTONOMY_LABELS[l]}</span></span>
                 </label>
@@ -173,7 +173,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>Save</button></div>
       </form>
 
-      <form onSubmit={saveProfile} className="card space-y-3">
+      <form onSubmit={saveProfile} className="card nb-left-green space-y-3">
         <h2 className="font-semibold">Company profile</h2>
         <p className="text-sm text-muted">This is what every agent reads first. Keep it accurate; agents update it too as they learn.</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -193,13 +193,13 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
       </form>
 
-      <Card title="Policies">
+      <Card title="Policies" className="nb-left-yellow">
         <p className="mb-3 text-sm text-muted">Per-dimension rules evaluated before every tool call. <b>deny</b> blocks outright, <b>approve</b> always asks you, <b>allow</b> lets the agent proceed up to the chosen risk level and within the limits.</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
             const p = policies.find((x) => x.dimension === d.id);
             return (
-              <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="grid items-center gap-2 rounded-lg border border-line p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
+              <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
                 <div><div className="font-medium">{d.label}</div><div className="mono text-xs text-muted">{d.id}</div></div>
                 <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label="Mode">{["deny", "approve", "allow"].map((m) => <option key={m}>{m}</option>)}</select>
                 <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label="Max risk without approval"><option value="">risk: default</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {r}</option>)}</select>
@@ -213,7 +213,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <Card title="Budgets">
+      <Card title="Budgets" className="nb-left-orange">
         {budgets.length === 0 ? <Empty>No budgets set — agents cannot spend until a budget exists.</Empty> : (
           <table className="mb-4 w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">Category</th><th>Period</th><th>Limit</th><th>Spent</th><th>Reserved</th><th>Remaining</th><th>Hard stop</th></tr></thead>
@@ -236,7 +236,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title="Goals" id="goals" className="scroll-mt-20">
+      <Card title="Goals" id="goals" className="nb-left-purple scroll-mt-20">
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">

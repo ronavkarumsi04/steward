@@ -30,17 +30,24 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   }
 
   return (
-    <header className="glass sticky top-0 z-30 border-x-0 border-t-0">
+    <header className="sticky top-0 z-30 border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
       <div className="mx-auto flex h-13 max-w-[1440px] items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-          <Link href="/app" className="flex items-center gap-2 rounded-md py-1 pr-1 font-semibold tracking-tight">
-            <Icon.Logo size={22} className="text-fg" />
-            <span>Steward</span>
+          <Link
+            href="/app"
+            className="flex shrink-0 items-center gap-2 rounded-sm font-black tracking-tight"
+          >
+            <span className="grid size-9 place-items-center border-2 border-fg bg-fg text-bg shadow-[3px_3px_0_0_#111]">
+              <Icon.Logo size={21} />
+            </span>
+            <span className="text-lg font-black">Steward</span>
           </Link>
           {org && (
             <>
               <span className="hidden text-faint sm:inline" aria-hidden="true">/</span>
-              <Link href="/app" className="hidden min-w-0 truncate text-sm text-fg-2 hover:text-fg sm:inline">{org.name}</Link>
+              <Link href="/app" className="hidden min-w-0 truncate text-sm font-semibold text-fg-2 hover:text-fg sm:inline">
+                {org.name}
+              </Link>
             </>
           )}
         </div>
@@ -63,7 +70,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
 
         <div className="flex items-center gap-2 text-sm">
           <span className="hidden max-w-[16rem] truncate text-muted lg:inline" title={me.user?.email}>{me.user?.email}</span>
-          <button className="btn btn-ghost btn-sm" onClick={logout} disabled={busy}>
+          <button className="btn btn-sm border-2 border-fg shadow-[3px_3px_0_0_#111]" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
             Sign out
           </button>

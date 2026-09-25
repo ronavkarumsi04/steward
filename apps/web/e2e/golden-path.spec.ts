@@ -47,9 +47,42 @@ test("register → onboarding → dashboard → tasks → settings → providers
   const companyUrl = page.url();
 
   // Dashboard renders durable state seeded by company creation, including the onboarding profile.
-  await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
   await expect(page.getByText("A weekly analytics digest for small online stores.")).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Earn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Turn on Autopilot/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Work Steward delegated" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What exists outside Steward" })).toBeVisible();
+  await expect(page.getByText("Not live yet")).toBeVisible();
+
+  // Company command palette and keyboard navigation are available throughout the operating shell.
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeVisible();
+  await expect(page.getByLabel("Search company pages")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeHidden();
+  await page.keyboard.press("g");
+  await page.keyboard.press("a");
+  await page.waitForURL(/\/activity$/);
+  await page.keyboard.press("g");
+  await page.keyboard.press("t");
+  await page.waitForURL(/\/tasks$/);
+
+  // Projects: founder outcomes persist independently of model/provider availability.
+  await page.goto(`${companyUrl}/projects`);
+  await expect(page.getByRole("heading", { name: "Outcomes that survive every thread" })).toBeVisible();
+  await page.getByLabel("Project name").fill("E2E launch project");
+  await page.getByLabel("Project objective").fill("Launch a durable pilot across multiple specialist work sessions");
+  await page.getByLabel("Project success signal").fill("A real design partner completes the pilot");
+  await page.getByLabel("Project next step").fill("Prepare the first onboarding workflow");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.getByRole("heading", { name: "E2E launch project" })).toBeVisible();
+  await expect(page.getByText("Launch a durable pilot across multiple specialist work sessions")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "E2E launch project" })).toBeVisible();
 
   // Tasks: create one without starting a run (no model provider is configured in E2E).
   await page.goto(`${companyUrl}/tasks`);
@@ -60,9 +93,37 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.reload();
   await expect(page.getByText("Draft positioning statement")).toBeVisible();
 
+  // Growth: a lead is durable and visible in the customer pipeline.
+  await page.goto(`${companyUrl}/growth`);
+  await page.getByLabel("Lead title").fill("Pilot design partner");
+  await page.getByLabel("Lead email").fill(`pilot-${Date.now()}@example.com`);
+  await page.getByLabel("Lead company").fill("E2E Retailer");
+  await page.getByLabel("Lead value USD").fill("1200");
+  await page.getByRole("button", { name: "Add lead" }).click();
+  await expect(page.getByText("Pilot design partner")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Pilot design partner")).toBeVisible();
+
+  // Campaigns persist as plans; creation itself does not send anything.
+  await page.getByLabel("Campaign name").fill("Design partner launch");
+  await page.getByLabel("Campaign channel").selectOption("email");
+  await page.getByLabel("Campaign audience").fill("Independent retailers");
+  await page.getByLabel("Campaign objective").fill("Book five customer interviews");
+  await page.getByLabel("Campaign budget USD").fill("250");
+  await page.getByRole("button", { name: "Create campaign" }).click();
+  await expect(page.getByText("Design partner launch")).toBeVisible();
+  await expect(page.getByText("Book five customer interviews")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Design partner launch")).toBeVisible();
+
   // Agents seeded by company creation.
   await page.goto(`${companyUrl}/agents`);
   await expect(page.getByText(/orchestrator|chief of staff/i).first()).toBeVisible();
+
+  // Integrations are discoverable from the authenticated company workspace.
+  await page.getByRole("link", { name: "Integrations" }).first().click();
+  await page.waitForURL(/\/integrations/);
+  await expect(page.getByRole("heading", { name: "Integrations", exact: true })).toBeVisible();
 
   // Settings: pause outbound actions and confirm the state persists across reload.
   await page.goto(`${companyUrl}/settings`);
@@ -89,5 +150,5 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/app\/c\/[0-9a-f-]+$/);
-  await expect(page.getByRole("heading", { name: "E2E Analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
 });

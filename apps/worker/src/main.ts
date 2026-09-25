@@ -53,7 +53,13 @@ async function main() {
   };
   const sandbox = sandboxFromEnv(process.env);
   const companionBridge = new HttpCompanionBridge(config.apiInternalUrl, internalServiceToken(config));
-  const factory = new AgentServiceFactory({ core, sandbox, approvalSignal, companionBridge });
+  const factory = new AgentServiceFactory({
+    core,
+    sandbox,
+    approvalSignal,
+    companionBridge,
+    runWorkflowLauncher: { start: (input) => workflows.startRun(input) },
+  });
   const activities = createActivities({ core, factory, sandbox, approvalSignal });
 
   const connection = await NativeConnection.connect({ address: temporal.address, tls: await nativeTls(temporal), apiKey: temporal.apiKey });

@@ -67,6 +67,16 @@ export interface Budget {
   exhausted: boolean;
   overSoftThreshold: boolean;
 }
+export interface BudgetLedgerEntry {
+  id: string;
+  category: Budget["category"];
+  amountUsd: string;
+  kind: "reserve" | "settle" | "release" | "charge";
+  refType: string | null;
+  refId: string | null;
+  periodKey: string;
+  createdAt: string;
+}
 export interface Policy {
   id: string;
   dimension: string;
@@ -92,6 +102,72 @@ export interface CompanyOverview {
   role: Membership["role"];
 }
 
+export type ProjectStatus = "active" | "blocked" | "complete" | "cancelled";
+export interface Project {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  name: string;
+  description: string;
+  objective: string;
+  status: ProjectStatus;
+  successSignal: string;
+  nextStep: string;
+  repoIntegrationId: string | null;
+  repoFullName: string | null;
+  defaultBranch: string;
+  deployIntegrationId: string | null;
+  deployProjectId: string | null;
+  productionUrl: string | null;
+  sandboxImage: string | null;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProjectCampaign {
+  id: string;
+  projectId: string | null;
+  name: string;
+  channel: string;
+  status: string;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProjectSnapshot {
+  project: Project;
+  tasks: Task[];
+  runs: Run[];
+  artifacts: Artifact[];
+  decisions: Decision[];
+  conversations: Conversation[];
+  campaigns: ProjectCampaign[];
+  signals: BusinessSignal[];
+}
+
+export type SignalState = "unread" | "reviewing" | "reviewed" | "dismissed";
+export type SignalSeverity = "info" | "positive" | "warning" | "critical";
+export interface BusinessSignal {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  integrationId: string | null;
+  provider: string;
+  externalId: string;
+  kind: string;
+  title: string;
+  summary: string;
+  severity: SignalSeverity;
+  state: SignalState;
+  projectId: string | null;
+  customerRef: string | null;
+  data: Record<string, unknown>;
+  reviewRunId: string | null;
+  occurredAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -100,6 +176,7 @@ export interface Task {
   priority: "low" | "medium" | "high" | "urgent";
   assigneeAgentId: string | null;
   goalId: string | null;
+  projectId: string | null;
   result: Record<string, unknown> | null;
   labels: string[];
   createdAt: string;
@@ -112,6 +189,7 @@ export interface Run {
   id: string;
   agentId: string;
   taskId: string | null;
+  projectId: string | null;
   conversationId: string | null;
   trigger: Record<string, unknown>;
   status: RunStatus;
@@ -141,13 +219,35 @@ export interface RunStep {
   finishedAt: string | null;
   durationMs: number | null;
 }
+export interface AICall {
+  id: string;
+  runId: string | null;
+  stepId: string | null;
+  provider: string;
+  model: string;
+  purpose: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  latencyMs: number;
+  costUsd: string;
+  costEstimated: boolean;
+  status: "ok" | "error";
+  errorCode: string | null;
+  retries: number;
+  routingReason: string;
+  createdAt: string;
+}
 export interface ToolCall {
   id: string;
+  stepId: string | null;
   toolName: string;
   input: unknown;
   output: unknown;
   status: string;
   risk: RiskLevel;
+  policyDecision: Record<string, unknown> | null;
   approvalId: string | null;
   durationMs: number | null;
   createdAt: string;
@@ -156,6 +256,7 @@ export interface Artifact {
   id: string;
   runId: string | null;
   taskId: string | null;
+  projectId: string | null;
   kind: string;
   title: string;
   url: string | null;
@@ -187,6 +288,7 @@ export interface Approval {
 export interface RunDetail {
   run: Run;
   steps: RunStep[];
+  aiCalls: AICall[];
   toolCalls: ToolCall[];
   artifacts: Artifact[];
   approvals: Approval[];
@@ -196,6 +298,7 @@ export interface RunDetail {
 export interface Conversation {
   id: string;
   title: string;
+  projectId: string | null;
   agentId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -225,11 +328,28 @@ export interface StewardEvent {
 export interface Document {
   id: string;
   title: string;
+  content?: string;
+  format: string;
+  folder: string;
+  kind: "document" | "playbook";
+  projectId: string | null;
+  agentKinds: string[];
+  version: number;
+  updatedAt: string;
+}
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  version: number;
+  title: string;
   content: string;
   format: string;
   folder: string;
-  version: number;
-  updatedAt: string;
+  kind: "document" | "playbook";
+  projectId: string | null;
+  agentKinds: string[];
+  createdBy: Record<string, unknown>;
+  createdAt: string;
 }
 export interface Decision {
   id: string;
@@ -237,6 +357,7 @@ export interface Decision {
   rationale: string;
   decidedBy: Record<string, unknown>;
   runId: string | null;
+  projectId: string | null;
   status: string;
   createdAt: string;
 }
@@ -318,6 +439,7 @@ export interface Integration {
   lastError: string | null;
   lastCheckedAt: string | null;
   createdAt: string;
+  webhookUrl: string | null;
   definition: IntegrationCatalogEntry;
 }
 export interface UsageRow {
@@ -328,4 +450,71 @@ export interface UsageRow {
   inputTokens: number;
   outputTokens: number;
   errors: number;
+}
+
+export interface BusinessPulse {
+  windowDays: number;
+  payments: { connected: boolean; available: boolean; provider: "stripe" | null };
+  balance: {
+    available: Array<{ amount: number; currency: string }>;
+    pending: Array<{ amount: number; currency: string }>;
+  } | null;
+  revenue: {
+    chargesCount: number;
+    grossByCurrencyMinor: Record<string, number>;
+    activeSubscriptions: number;
+    newCustomers: number;
+  } | null;
+}
+
+export type LeadStage = "new" | "qualified" | "contacted" | "interested" | "won" | "lost";
+export interface Lead {
+  id: string;
+  contactId: string | null;
+  title: string;
+  stage: LeadStage;
+  valueUsd: string | null;
+  notes: string;
+  externalRef: Record<string, string>;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactCompany: string | null;
+  source: string | null;
+  optedOutAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export type CampaignChannel = "email" | "social" | "ads";
+export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "cancelled";
+export interface Campaign {
+  id: string;
+  organizationId: string;
+  companyId: string;
+  projectId: string | null;
+  name: string;
+  channel: CampaignChannel;
+  status: CampaignStatus;
+  config: { objective?: string; audience?: string; budgetUsd?: number | null; [key: string]: unknown };
+  stats: Record<string, number>;
+  delivery: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface OutboundActivity {
+  id: string;
+  channel: string;
+  provider: string;
+  recipient: string;
+  subject: string | null;
+  status: string;
+  externalId: string | null;
+  campaignId: string | null;
+  runId: string | null;
+  error: string | null;
+  createdAt: string;
+}
+export interface GrowthSnapshot {
+  leads: Lead[];
+  outbound: OutboundActivity[];
+  campaigns: Campaign[];
 }

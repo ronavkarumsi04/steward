@@ -43,9 +43,9 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
   }
 
   return (
-    <form onSubmit={onSubmit} className="card rise-in w-full max-w-md space-y-4 p-6 shadow-e2 sm:p-7">
+    <form onSubmit={onSubmit} className="card nb-left-purple rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
       <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex rounded-xl p-1" aria-label="Steward home">
+        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
         <h1 className="mt-3 text-xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
@@ -78,7 +78,7 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
           <input id="orgName" name="orgName" className="input" placeholder="Defaults to your personal workspace" />
         </div>
       )}
-      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
       <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
         {busy && <span className="spinner" aria-hidden="true" />}
         {mode === "login" ? "Sign in" : invite ? "Create account & join" : "Create account"}

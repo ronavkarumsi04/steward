@@ -57,7 +57,7 @@ const documentRead = defineTool({
 
 const documentList = defineTool({
   name: "document.list",
-  description: "List company documents (title, folder, version).",
+  description: "List company documents and playbooks (metadata only). Playbook content is injected automatically when relevant.",
   input: z.object({ folder: z.string().optional() }),
   risk: "LOW",
   idempotent: true,
@@ -75,8 +75,8 @@ const documentWrite = defineTool({
   sideEffects: "internal",
   execute: async ({ title, content, folder }, ctx) => {
     const s = svc(ctx);
-    const existing = await s.documents.findByTitle(s.scope, title, folder);
-    const d = await s.documents.upsert(s.scope, { id: existing?.id, title, content, folder });
+    const existing = await s.documents.findByTitle(s.scope, title, folder, "document");
+    const d = await s.documents.upsert(s.scope, { id: existing?.id, title, content, folder, kind: "document" });
     if (!d) return fail("Failed to write document.");
     await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title, metadata: { documentId: d.id, version: d.version } });
     return { ok: true, content: `Wrote document "${title}" (v${d.version}, id ${d.id}).`, data: { id: d.id, version: d.version } };
@@ -94,6 +94,29 @@ const decisionRecord = defineTool({
     const d = await s.runs.recordDecision(s.scope, { ...input, runId: ctx.runId, taskId: ctx.taskId });
     return { ok: true, content: `Recorded decision ${d.id}.`, data: d };
   },
+});
+
+
+async function currentProjectId(s: AgentServices, runId?: string) {
+  if (!runId) return undefined;
+  return (await s.runs.get(s.scope, runId))?.projectId ?? undefined;
+}
+
+const ProjectStatus = z.enum(["active", "blocked", "complete", "cancelled"]);
+const projectList = defineTool({
+  name: "project.list", description: "List founder-level projects and their objective, status, success signal, and next step.",
+  input: z.object({ status: ProjectStatus.optional(), limit: z.number().int().min(1).max(100).default(30) }), risk: "LOW", idempotent: true,
+  execute: async ({ status, limit }, ctx) => { const s = svc(ctx); const rows = await s.projects.list(s.scope, { status, limit }); return { ok: true, content: rows.length ? rows.map((p) => `- [${p.status}] ${p.name} — ${p.objective || p.description || "no objective"} (id ${p.id})${p.nextStep ? `; next: ${p.nextStep}` : ""}`).join("\n") : "No projects.", data: rows }; },
+});
+const projectCreate = defineTool({
+  name: "project.create", description: "Create a durable founder project that can contain multiple tasks, worker runs, conversations, outputs, decisions, and campaigns.",
+  input: z.object({ name: z.string().min(3).max(200), objective: z.string().min(5).max(5000), description: z.string().max(5000).default(""), successSignal: z.string().max(2000).default(""), nextStep: z.string().max(2000).default("") }), risk: "LOW", sideEffects: "internal",
+  execute: async (input, ctx) => { const s = svc(ctx); const row = await s.projects.create(s.scope, input); return { ok: true, content: `Created project ${row.name} (id ${row.id}).`, data: row }; },
+});
+const projectUpdate = defineTool({
+  name: "project.update", description: "Update a project's objective, status, success signal, or concrete next step as evidence changes.",
+  input: z.object({ id: z.string().min(1), name: z.string().min(3).max(200).optional(), objective: z.string().max(5000).optional(), description: z.string().max(5000).optional(), status: ProjectStatus.optional(), successSignal: z.string().max(2000).optional(), nextStep: z.string().max(2000).optional() }), risk: "LOW", sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => { const s = svc(ctx); const row = await s.projects.update(s.scope, id, patch); if (!row) return fail("Project not found."); return { ok: true, content: `Updated project ${row.name} → ${row.status}${row.nextStep ? `; next: ${row.nextStep}` : ""}.`, data: row }; },
 });
 
 // ---------- Work management ----------
@@ -114,15 +137,95 @@ const taskList = defineTool({
 
 const taskCreate = defineTool({
   name: "task.create",
-  description: "Create a task. Assign it to a specialist agent (by kind) to delegate work; the orchestrator will schedule a run for it.",
+  description: "Create a task for planning or later work. Assign it to a specialist by kind, but use delegate.run when the work should start immediately.",
   input: z.object({ title: z.string().min(3).max(200), description: z.string().max(8000).default(""), priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"), assigneeKind: z.enum(["orchestrator", "research", "engineering", "marketing", "sales", "support", "finance", "operations"]).optional(), goalId: z.string().optional(), dueInDays: z.number().int().min(0).max(365).optional() }),
   risk: "LOW",
   sideEffects: "internal",
   execute: async (input, ctx) => {
     const s = svc(ctx);
     const assignee = input.assigneeKind ? await s.agents.byKind(s.scope, input.assigneeKind) : null;
-    const t = await s.tasks.create(s.scope, { title: input.title, description: input.description, priority: input.priority, assigneeAgentId: assignee?.id ?? null, goalId: input.goalId ?? null, parentTaskId: ctx.taskId ?? null, dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null });
+    const projectId = await currentProjectId(s, ctx.runId);
+    const t = await s.tasks.create(s.scope, { title: input.title, description: input.description, priority: input.priority, assigneeAgentId: assignee?.id ?? null, goalId: input.goalId ?? null, parentTaskId: ctx.taskId ?? null, projectId, dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null });
     return { ok: true, content: `Created task ${t.id} "${t.title}"${assignee ? ` assigned to ${assignee.name}` : ""}.`, data: { id: t.id } };
+  },
+});
+
+const SpecialistKind = z.enum(["research", "engineering", "marketing", "sales", "support", "finance", "operations"]);
+const MAX_DELEGATIONS_PER_RUN = 8;
+
+const delegateRun = defineTool({
+  name: "delegate.run",
+  description: "Delegate a concrete objective to a specialist now. Creates a child task and starts a separate durable run with that specialist's own tools, budget, policy checks, approvals, and audit trail.",
+  input: z.object({
+    assigneeKind: SpecialistKind,
+    title: z.string().min(3).max(200),
+    instruction: z.string().min(10).max(8000),
+    priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+    goalId: z.string().optional(),
+    dueInDays: z.number().int().min(0).max(365).optional(),
+  }),
+  risk: "MEDIUM",
+  dimension: "ai_spend",
+  sideEffects: "internal",
+  costCategory: "ai",
+  preflight: async ({ assigneeKind, title }, ctx) => {
+    const s = svc(ctx);
+    const assignee = await s.agents.byKind(s.scope, assigneeKind);
+    const budget = assignee?.budgetUsdPerRun === null || assignee?.budgetUsdPerRun === undefined ? undefined : Number(assignee.budgetUsdPerRun);
+    return {
+      summary: `Delegate "${title}" to ${assignee?.name ?? assigneeKind}`,
+      affectedSystem: "Steward specialist runtime",
+      estimatedCostUsd: Number.isFinite(budget) && budget! > 0 ? budget : undefined,
+      risk: "MEDIUM",
+      alternatives: ["Create a task without starting it", "Keep the work in the Chief of Staff planning queue"],
+    };
+  },
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    if (!ctx.runId) return fail("Delegation requires a parent run.");
+    if (!s.runWorkflowLauncher) return fail("Durable workflow launcher is unavailable in this runtime.");
+    const assignee = await s.agents.byKind(s.scope, input.assigneeKind);
+    if (!assignee) return fail(`No enabled ${input.assigneeKind} agent exists for this company.`);
+    if (assignee.id === ctx.agentId) return fail("A run cannot delegate back to itself.");
+
+    const parent = await s.runs.get(s.scope, ctx.runId);
+    const projectId = parent?.projectId ?? undefined;
+    const parentLabel = `delegated-from:${ctx.runId}`;
+    const tasks = await s.tasks.list(s.scope, { limit: 200 });
+    const activeDelegations = tasks.filter((t) => Array.isArray(t.labels) && t.labels.includes(parentLabel) && t.status !== "cancelled").length;
+    if (activeDelegations >= MAX_DELEGATIONS_PER_RUN) return fail(`This run already created ${MAX_DELEGATIONS_PER_RUN} specialist delegations. Finish or review those workers before spawning more.`);
+
+    const task = await s.tasks.create(s.scope, {
+      title: input.title,
+      description: input.instruction,
+      priority: input.priority,
+      assigneeAgentId: assignee.id,
+      goalId: input.goalId ?? null,
+      parentTaskId: ctx.taskId ?? null,
+      projectId,
+      dueAt: input.dueInDays !== undefined ? new Date(Date.now() + input.dueInDays * 86_400_000) : null,
+      labels: ["delegated", parentLabel, `specialist:${input.assigneeKind}`],
+    });
+    const run = await s.runs.create(s.scope, {
+      agentId: assignee.id,
+      taskId: task.id,
+      projectId,
+      trigger: { kind: "delegation", instruction: input.instruction, parentRunId: ctx.runId, parentAgentId: ctx.agentId },
+    });
+    try {
+      const wf = await s.runWorkflowLauncher.start({ runId: run.id, scope: { organizationId: s.scope.organizationId, companyId: s.scope.companyId! } });
+      await s.runs.attachWorkflow(s.scope, run.id, wf.workflowId, wf.workflowRunId);
+      return {
+        ok: true,
+        content: `Delegated "${task.title}" to ${assignee.name}. Specialist run ${run.id} is queued independently.`,
+        data: { taskId: task.id, runId: run.id, agentId: assignee.id, agentKind: assignee.kind, workflowId: wf.workflowId },
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.runs.setStatus(s.scope, run.id, "failed", { error: `Delegation launch failed: ${msg}` }).catch(() => undefined);
+      await s.tasks.update(s.scope, task.id, { status: "blocked", result: { summary: `Specialist workflow could not start: ${msg}`, parentRunId: ctx.runId } }).catch(() => undefined);
+      return fail(`Specialist workflow could not start: ${msg}`);
+    }
   },
 });
 
@@ -182,6 +285,11 @@ const companyProfileUpdate = defineTool({
 
 // ---------- Outbound communication ----------
 
+async function validCampaign(s: AgentServices, campaignId?: string) {
+  if (!campaignId) return true;
+  return Boolean(await s.growth.getCampaign(s.scope, campaignId));
+}
+
 async function checkOutbound(s: AgentServices, channel: string, recipient: string) {
   const [sup] = await s.db.select({ id: suppressionList.id }).from(suppressionList).where(and(eq(suppressionList.companyId, s.scope.companyId!), eq(suppressionList.channel, channel), sql`lower(${suppressionList.address}) = lower(${recipient})`)).limit(1);
   if (sup) return `${recipient} is on the suppression list.`;
@@ -194,7 +302,7 @@ async function checkOutbound(s: AgentServices, channel: string, recipient: strin
 const emailSend = defineTool({
   name: "email.send",
   description: "Send an email through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Externally visible; subject to approval policy.",
-  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional() }),
+  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional(), campaignId: z.string().optional() }),
   risk: "HIGH",
   dimension: "email_send",
   sideEffects: "external",
@@ -208,22 +316,25 @@ const emailSend = defineTool({
     const s = svc(ctx);
     const integ = (await Promise.all(["resend", "postmark", "sendgrid", "smtp"].map((t) => s.integrations.findByType(s.scope, t)))).find(Boolean);
     if (!integ) return fail("No email provider is connected. Connect Resend, Postmark, SendGrid or SMTP in Settings → Integrations.");
+    if (!(await validCampaign(s, input.campaignId))) return fail("Campaign not found in this company.");
     const blocked = await checkOutbound(s, "email", input.to);
     if (blocked) return fail(blocked);
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
     const from = input.from ?? (integ.config.fromAddress as string | undefined) ?? secret.fields?.fromAddress ?? s.emailFrom;
     if (!from) return fail("No sender address configured for the email integration.");
-    const key = idempotencyKey("email", ctx.runId, input.to, input.subject);
+    const key = idempotencyKey("email", ctx.runId, input.campaignId, input.to, input.subject);
+    const currentRun = ctx.runId ? await s.runs.get(s.scope, ctx.runId) : null;
+    const messageTags: Record<string, string> = { ...(input.campaignId ? { campaign: input.campaignId } : {}), ...(currentRun?.projectId ? { steward_project_id: currentRun.projectId } : {}), ...(ctx.runId ? { steward_run_id: ctx.runId } : {}), ...(ctx.taskId ? { steward_task_id: ctx.taskId } : {}) };
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Email already sent (id ${existing.externalId}).` };
     const provider = emailProviderFor(integ.type, secret);
     try {
-      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" } });
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" }, tags: messageTags });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
       return { ok: true, content: `Email sent to ${input.to} via ${integ.type} (id ${res.id}).`, data: res };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "failed", runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "failed", campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
       return fail(`Email send failed: ${msg}`);
     }
   },
@@ -232,39 +343,144 @@ const emailSend = defineTool({
 const slackPost = defineTool({
   name: "slack.post",
   description: "Post a message to a Slack channel via the connected Slack workspace.",
-  input: z.object({ channel: z.string().min(1), text: z.string().min(1).max(4000) }),
+  input: z.object({ channel: z.string().min(1), text: z.string().min(1).max(4000), campaignId: z.string().optional() }),
   risk: "MEDIUM",
   dimension: "customer_comms",
   sideEffects: "external",
-  execute: async ({ channel, text }, ctx) => {
+  execute: async ({ channel, text, campaignId }, ctx) => {
     const s = svc(ctx);
     const integ = await s.integrations.findByType(s.scope, "slack");
     if (!integ) return fail("Slack is not connected.");
+    if (!(await validCampaign(s, campaignId))) return fail("Campaign not found in this company.");
+    const key = idempotencyKey("slack", ctx.runId, campaignId, channel, text);
+    const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
+    if (existing?.status === "sent") return { ok: true, content: `Already posted to ${channel} (id ${existing.externalId}).` };
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
-    const res = await new SlackClient(secret).postMessage({ channel, text });
-    return { ok: true, content: `Posted to ${channel}.`, data: res };
+    try {
+      const res = await new SlackClient(secret).postMessage({ channel, text });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "slack", provider: "slack", recipient: channel, body: text, status: "sent", externalId: res.ts, campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      return { ok: true, content: `Posted to ${channel} (id ${res.ts}).`, data: res };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "slack", provider: "slack", recipient: channel, body: text, status: "failed", campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      return fail(`Slack post failed: ${msg}`);
+    }
   },
 });
 
 const socialPublish = defineTool({
   name: "social.publish",
   description: "Publish a post to a connected social account (X or LinkedIn). Public and irreversible; requires approval by default.",
-  input: z.object({ network: z.enum(["x", "linkedin"]), text: z.string().min(1).max(3000) }),
+  input: z.object({ network: z.enum(["x", "linkedin"]), text: z.string().min(1).max(3000), campaignId: z.string().optional() }),
   risk: "HIGH",
   dimension: "social_publish",
   sideEffects: "external",
   preflight: async ({ network, text }) => ({ summary: `Publish to ${network}: "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"`, affectedSystem: network, alternatives: ["Save as a draft document", "Schedule for later review"] }),
-  execute: async ({ network, text }, ctx) => {
+  execute: async ({ network, text, campaignId }, ctx) => {
     const s = svc(ctx);
     const integ = await s.integrations.findByType(s.scope, network);
     if (!integ) return fail(`${network} is not connected.`);
+    if (!(await validCampaign(s, campaignId))) return fail("Campaign not found in this company.");
     const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
-    const key = idempotencyKey("social", ctx.runId, network, text);
+    const key = idempotencyKey("social", ctx.runId, campaignId, network, text);
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Already published (id ${existing.externalId}).` };
-    const res = network === "x" ? await new XClient(secret).publish({ text }) : await new LinkedInClient(secret).publish({ text });
-    await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "sent", externalId: res.id, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
-    return { ok: true, content: `Published to ${network} (id ${res.id}).`, data: res };
+    try {
+      const res = network === "x" ? await new XClient(secret).publish({ text }) : await new LinkedInClient(secret).publish({ text });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "sent", externalId: res.id, campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      return { ok: true, content: `Published to ${network} (id ${res.id}).`, data: res };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: network, provider: network, recipient: "public", body: text, status: "failed", campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      return fail(`${network} publish failed: ${msg}`);
+    }
+  },
+});
+
+const CampaignChannel = z.enum(["email", "social", "ads"]);
+const CampaignStatus = z.enum(["draft", "active", "paused", "completed", "cancelled"]);
+
+const campaignList = defineTool({
+  name: "campaign.list",
+  description: "List growth campaigns with objectives, status, budget context, and persisted delivery counts.",
+  input: z.object({}),
+  risk: "LOW",
+  idempotent: true,
+  execute: async (_input, ctx) => {
+    const s = svc(ctx);
+    const rows = await s.growth.listCampaigns(s.scope);
+    return { ok: true, content: rows.length ? JSON.stringify(rows, null, 2) : "No campaigns yet.", data: rows };
+  },
+});
+
+const campaignCreate = defineTool({
+  name: "campaign.create",
+  description: "Create a campaign plan in Steward. This does not send or publish anything by itself.",
+  input: z.object({ name: z.string().min(1).max(200), channel: CampaignChannel, objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const projectId = await currentProjectId(s, ctx.runId);
+    const row = await s.growth.createCampaign(s.scope, { ...input, projectId });
+    return { ok: true, content: `Created ${row.channel} campaign ${row.name} in draft. Use its id ${row.id} when sending campaign-linked messages.`, data: row };
+  },
+});
+
+const campaignUpdate = defineTool({
+  name: "campaign.update",
+  description: "Update a campaign's plan or lifecycle status. External sends remain separately policy-gated.",
+  input: z.object({ id: z.string().min(1), status: CampaignStatus.optional(), name: z.string().min(1).max(200).optional(), objective: z.string().max(2000).optional(), audience: z.string().max(2000).optional(), budgetUsd: z.number().nonnegative().max(100_000_000).nullable().optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => {
+    const s = svc(ctx);
+    const row = await s.growth.updateCampaign(s.scope, id, patch);
+    if (!row) return fail("Campaign not found.");
+    return { ok: true, content: `Updated campaign ${row.name} → ${row.status}.`, data: row };
+  },
+});
+
+// ---------- Growth pipeline ----------
+
+const LeadStage = z.enum(["new", "qualified", "contacted", "interested", "won", "lost"]);
+
+const leadList = defineTool({
+  name: "lead.list",
+  description: "List the company's current sales/growth leads and contact context.",
+  input: z.object({ stage: LeadStage.optional(), limit: z.number().int().min(1).max(100).default(50) }),
+  risk: "LOW",
+  idempotent: true,
+  execute: async ({ stage, limit }, ctx) => {
+    const rows = await svc(ctx).growth.listLeads(svc(ctx).scope, { stage, limit });
+    return { ok: true, content: rows.length ? JSON.stringify(rows, null, 2) : "No leads yet.", data: rows };
+  },
+});
+
+const leadCreate = defineTool({
+  name: "lead.create",
+  description: "Record a real prospective customer in the company pipeline. Use only evidence-backed prospects; do not invent people or contact details.",
+  input: z.object({ title: z.string().min(1).max(300), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional(), stage: LeadStage.default("new"), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const lead = await s.growth.createLead(s.scope, input);
+    return { ok: true, content: `Recorded lead ${lead.title} (${lead.stage}).`, data: lead };
+  },
+});
+
+const leadUpdate = defineTool({
+  name: "lead.update",
+  description: "Update a lead's stage, value, title, or notes based on new evidence.",
+  input: z.object({ id: z.string().min(1), stage: LeadStage.optional(), valueUsd: z.number().nonnegative().max(100_000_000).nullable().optional(), title: z.string().min(1).max(300).optional(), notes: z.string().max(8000).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => {
+    const s = svc(ctx);
+    const lead = await s.growth.updateLead(s.scope, id, patch);
+    if (!lead) return fail("Lead not found.");
+    return { ok: true, content: `Updated lead ${lead.title} → ${lead.stage}.`, data: lead };
   },
 });
 
@@ -463,6 +679,49 @@ const deployList = defineTool({
   },
 });
 
+const deployCreateProject = defineTool({
+  name: "deploy.create_project",
+  description: "Create a deployable Vercel or Render project, optionally linked to a GitHub repository. May create billable infrastructure and is policy-gated.",
+  input: z.object({
+    name: z.string().min(1).max(100),
+    repo: repoRef.optional(),
+    branch: z.string().min(1).max(200).optional(),
+    framework: z.string().max(80).optional(),
+    rootDirectory: z.string().max(500).optional(),
+  }),
+  risk: "MEDIUM",
+  dimension: "infra_spend",
+  sideEffects: "external",
+  costCategory: "infra",
+  preflight: async ({ name, repo }) => ({
+    summary: `Create deployment project ${name}${repo ? ` linked to ${repo}` : ""}`,
+    affectedSystem: "deployment provider",
+    risk: "MEDIUM",
+    alternatives: ["Use an existing deployment project", "Prepare the repository without provisioning hosting"],
+  }),
+  execute: async ({ name, repo, branch, framework, rootDirectory }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected. Connect Vercel or Render first.");
+    if (d.type === "render" && !repo) return fail("Render project creation requires a GitHub repository (owner/repo).");
+    const project = await d.provider.createProject({
+      name,
+      repo: repo ? { provider: "github" as const, fullName: repo, branch } : undefined,
+      framework,
+      rootDirectory,
+    });
+    await s.runs.addArtifact(s.scope, {
+      runId: ctx.runId,
+      taskId: ctx.taskId,
+      kind: "deployment_project",
+      title: `${name} deployment project`,
+      url: project.url,
+      metadata: { provider: d.type, projectId: project.id, repo: repo ?? null, branch: branch ?? null },
+    });
+    return { ok: true, content: `Created ${d.type} project ${project.name} (id ${project.id})${project.url ? ` → ${project.url}` : ""}.`, data: project };
+  },
+});
+
 const deployCreate = defineTool({
   name: "deploy.create_deployment",
   description: "Trigger a deployment for a project. production=true deploys to production (HIGH risk, approval by default); otherwise a preview.",
@@ -479,6 +738,75 @@ const deployCreate = defineTool({
     const dep = await d.provider.deploy(projectId, { production, branch });
     await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "deployment", title: `${production ? "Production" : "Preview"} deployment`, url: dep.url, metadata: { provider: d.type, deploymentId: dep.id, projectId } });
     return { ok: true, content: `Deployment ${dep.id} is ${dep.status}${dep.url ? ` → ${dep.url}` : ""}. Check with deploy.status.`, data: dep };
+  },
+});
+
+const DomainName = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, "Use a hostname such as example.com or app.example.com");
+
+const deployListDomains = defineTool({
+  name: "deploy.list_domains",
+  description: "List custom domains attached to a Vercel deployment project and their DNS verification state.",
+  input: z.object({ projectId: z.string().min(1) }),
+  risk: "LOW",
+  idempotent: true,
+  execute: async ({ projectId }, ctx) => {
+    const d = await deployProvider(svc(ctx));
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.listDomains) return fail(`${d.type} does not expose custom-domain management through Steward.`);
+    const domains = await d.provider.listDomains(projectId);
+    return { ok: true, content: domains.length ? JSON.stringify(domains, null, 2) : "No custom domains attached.", data: domains };
+  },
+});
+
+const deployAddDomain = defineTool({
+  name: "deploy.add_domain",
+  description: "Attach a custom domain to a Vercel project. If DNS verification is required, returns the exact verification challenge instead of claiming the domain is live.",
+  input: z.object({ projectId: z.string().min(1), domain: DomainName }),
+  risk: "HIGH",
+  dimension: "prod_deploy",
+  sideEffects: "external",
+  preflight: async ({ projectId, domain }) => ({
+    summary: `Attach ${domain} to production project ${projectId}`,
+    affectedSystem: "public domain / deployment",
+    risk: "HIGH",
+    alternatives: ["Keep the provider-assigned deployment URL", "Attach the domain manually in the hosting dashboard"],
+  }),
+  execute: async ({ projectId, domain }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.addDomain) return fail(`${d.type} custom-domain automation is not implemented. Connect Vercel or configure the domain manually.`);
+    const result = await d.provider.addDomain(projectId, domain);
+    const challenges = result.verification?.map((v) => `${v.type} ${v.domain} = ${v.value}${v.reason ? ` (${v.reason})` : ""}`).join("\n") ?? "";
+    if (result.verified) {
+      await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain", title: domain, url: `https://${domain}`, metadata: { provider: d.type, projectId, domain, verified: true } });
+      return { ok: true, content: `${domain} is verified and attached to the production project.`, data: result };
+    }
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain_pending", title: `${domain} DNS verification`, metadata: { provider: d.type, projectId, domain, verified: false, verification: result.verification ?? [] } });
+    return { ok: true, content: `${domain} was attached but is not live yet.${challenges ? `\nComplete DNS verification:\n${challenges}\nThen use deploy.verify_domain.` : " Check the Vercel project Domains screen for the required DNS configuration, then use deploy.verify_domain."}`, data: result };
+  },
+});
+
+const deployVerifyDomain = defineTool({
+  name: "deploy.verify_domain",
+  description: "Ask Vercel to re-check a custom domain after the required DNS records have been added.",
+  input: z.object({ projectId: z.string().min(1), domain: DomainName }),
+  risk: "HIGH",
+  dimension: "prod_deploy",
+  sideEffects: "external",
+  preflight: async ({ projectId, domain }) => ({ summary: `Verify and activate ${domain} on production project ${projectId}`, affectedSystem: "public domain / deployment", risk: "HIGH", alternatives: ["Verify the domain manually in Vercel"] }),
+  execute: async ({ projectId, domain }, ctx) => {
+    const s = svc(ctx);
+    const d = await deployProvider(s);
+    if (!d) return fail("No deployment provider connected.");
+    if (!d.provider.verifyDomain) return fail(`${d.type} custom-domain verification is not implemented through Steward.`);
+    const result = await d.provider.verifyDomain(projectId, domain);
+    if (!result.verified) {
+      const challenges = result.verification?.map((v) => `${v.type} ${v.domain} = ${v.value}`).join("\n") ?? "DNS is not correct yet.";
+      return { ok: false, content: `${domain} is still unverified.\n${challenges}`, data: result };
+    }
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "domain", title: domain, url: `https://${domain}`, metadata: { provider: d.type, projectId, domain, verified: true } });
+    return { ok: true, content: `${domain} is verified and live on the project.`, data: result };
   },
 });
 
@@ -516,22 +844,84 @@ const stripeSummary = defineTool({
   },
 });
 
+const stripeCreateOffer = defineTool({
+  name: "stripe.create_offer",
+  description: "Create a Stripe product with a price and a hosted checkout link. This changes the external payment account and is approval-gated by the payments policy.",
+  input: z.object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    amountUsd: z.number().positive().max(1_000_000),
+    currency: z.string().regex(/^[a-zA-Z]{3}$/).default("usd"),
+    interval: z.enum(["month", "year"]).optional(),
+    successUrl: z.string().url(),
+    cancelUrl: z.string().url(),
+    quantity: z.number().int().min(1).max(1000).default(1),
+  }),
+  risk: "HIGH",
+  dimension: "payments",
+  sideEffects: "external",
+  costCategory: "payments",
+  preflight: async ({ name, amountUsd, currency, interval }) => ({
+    summary: `Create Stripe offer ${name} for ${amountUsd.toFixed(2)} ${currency.toUpperCase()}${interval ? `/${interval}` : ""} and generate a checkout link`,
+    affectedSystem: "stripe",
+    risk: "HIGH",
+    alternatives: ["Save the proposed offer and pricing as a document", "Create the checkout manually in Stripe"],
+  }),
+  execute: async ({ name, description, amountUsd, currency, interval, successUrl, cancelUrl, quantity }, ctx) => {
+    const s = svc(ctx);
+    const integ = await s.integrations.findByType(s.scope, "stripe");
+    if (!integ) return fail("Stripe is not connected. Connect Stripe before creating a paid offer.");
+    const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
+    const client = new StripeClient(secret);
+    const unitAmountMinor = Math.round(amountUsd * 100);
+    const baseKey = idempotencyKey("stripe-offer", ctx.runId, name, unitAmountMinor, currency.toLowerCase(), interval);
+    const currentRun = ctx.runId ? await s.runs.get(s.scope, ctx.runId) : null;
+    const metadata: Record<string, string> = { ...(currentRun?.projectId ? { steward_project_id: currentRun.projectId } : {}), ...(ctx.runId ? { steward_run_id: ctx.runId } : {}), ...(ctx.taskId ? { steward_task_id: ctx.taskId } : {}) };
+    const product = await client.createProduct({ name, description, unitAmountMinor, currency: currency.toLowerCase(), interval }, `${baseKey}-product`);
+    const checkout = await client.createCheckoutSession({
+      priceId: product.default_price,
+      successUrl,
+      cancelUrl,
+      mode: interval ? "subscription" : "payment",
+      quantity,
+      metadata,
+    }, `${baseKey}-checkout`);
+    await s.runs.addArtifact(s.scope, {
+      runId: ctx.runId,
+      taskId: ctx.taskId,
+      kind: "checkout",
+      title: `${name} checkout`,
+      url: checkout.url,
+      metadata: {
+        provider: "stripe",
+        productId: product.id,
+        priceId: product.default_price,
+        checkoutSessionId: checkout.id,
+        amountUsd,
+        currency: currency.toLowerCase(),
+        interval: interval ?? null,
+      },
+    });
+    return { ok: true, content: `Created Stripe offer ${name} and checkout link → ${checkout.url}`, data: { product, checkout } };
+  },
+});
+
 // ---------- Registry ----------
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, taskList, taskCreate, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreate, deployStatus, stripeSummary] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
 
 /** Default tool allowlists per agent kind; company operators can override per agent. */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "task.*", "goal.*", "company.*", "web.*", "slack.post"],
+  orchestrator: ["memory.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"],
   research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*"],
   engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "social.publish", "email.send"],
-  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "email.send"],
+  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "social.publish", "email.send"],
+  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "email.send"],
   support: ["memory.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
   finance: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
   operations: ["memory.*", "document.*", "task.*", "company.profile", "web.*", "slack.post"],

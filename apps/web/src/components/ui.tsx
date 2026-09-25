@@ -22,7 +22,7 @@ export function Card({
       {(title || action) && (
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {title && <h2 className="text-[15px] font-semibold leading-6 text-fg">{title}</h2>}
+            {title && <h2 className="text-xs font-bold uppercase leading-6 tracking-wider text-fg">{title}</h2>}
             {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
@@ -38,7 +38,7 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
     <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
         {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight">{title}</h1>
         {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
       </div>
       {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
@@ -49,7 +49,11 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
 export function Empty({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
     <div className="card-inset flex flex-col items-center justify-center gap-2 px-4 py-8 text-center text-sm text-muted">
-      {icon && <div className="text-faint">{icon}</div>}
+      {icon && (
+        <div className="text-faint" aria-hidden="true">
+          {icon}
+        </div>
+      )}
       <p className="max-w-sm">{children}</p>
     </div>
   );
@@ -137,14 +141,14 @@ export function RiskPill({ risk }: { risk: RiskLevel }) {
 export function Stat({ label, value, hint, href }: { label: string; value: ReactNode; hint?: ReactNode; href?: string }) {
   const body = (
     <>
-      <div className="text-xs font-medium text-muted">{label}</div>
-      <div className="tnum mt-1.5 text-[26px] font-semibold leading-none tracking-tight">{value}</div>
+      <div className="text-[11px] font-bold uppercase tracking-wider text-muted">{label}</div>
+      <div className="tnum mt-1.5 text-[30px] font-bold leading-none tracking-tight">{value}</div>
       {hint && <div className="mt-2 text-xs text-muted">{hint}</div>}
     </>
   );
   if (href) {
     return (
-      <Link href={href} className="card block transition-[box-shadow,transform,border-color] duration-150 hover:border-line-strong hover:shadow-e2 active:scale-[0.99]">
+      <Link href={href} className="card block transition-[box-shadow,transform,border-color] duration-150 hover:border-line-strong hover:shadow-e2 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">
         {body}
       </Link>
     );

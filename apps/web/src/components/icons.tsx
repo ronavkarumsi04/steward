@@ -36,15 +36,41 @@ export const Icon = {
       <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16H6.5A2.5 2.5 0 0 1 4 13.5z" />
     </Base>
   ),
+  Growth: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M4 19V5M4 19h16" />
+      <path d="M7 15l4-4 3 2 5-6" />
+      <path d="M16 7h3v3" />
+    </Base>
+  ),
+  Finance: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M15 14h3" />
+    </Base>
+  ),
   Tasks: (p: IconProps) => (
     <Base {...p}>
       <path d="M4 6h3M4 12h3M4 18h3" />
       <path d="M10 6h10M10 12h10M10 18h10" />
     </Base>
   ),
+  Signals: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M3 12h4l2.2-5 4.2 10 2.2-5H21" />
+      <circle cx="12" cy="12" r="9" opacity=".25" />
+    </Base>
+  ),
   Runs: (p: IconProps) => (
     <Base {...p}>
       <path d="M5 12h3l2-5 4 10 2-5h3" />
+    </Base>
+  ),
+  Activity: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M3 12h4l2.2-5 4.1 10 2.2-5H21" />
+      <path d="M4 5.5h3M17 18.5h3" opacity=".45" />
     </Base>
   ),
   Approvals: (p: IconProps) => (

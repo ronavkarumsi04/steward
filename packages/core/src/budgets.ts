@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { budgetLedger, budgets, emitEvent, scoped, type Db, type DbOrTx } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 
@@ -48,14 +48,21 @@ export class BudgetService {
   }
 
   private async statusFor(scope: TenantScope, b: typeof budgets.$inferSelect, tx: DbOrTx = this.db): Promise<BudgetStatus> {
-    const key = periodKey(b.period);
+    // Spend is scoped to the configured budget period, while reservations are all-time net outstanding.
+    // This keeps a reservation consuming capacity across day/month boundaries until a release/settle row clears it.
+    const month = periodKey("monthly");
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const spentExpr = b.period === "daily"
+      ? sql<string>`coalesce(sum(case when ${budgetLedger.kind} in ('charge','settle') and ${budgetLedger.createdAt} >= ${dayStart} then ${budgetLedger.amountUsd} else 0 end),0)::text`
+      : sql<string>`coalesce(sum(case when ${budgetLedger.kind} in ('charge','settle') and ${budgetLedger.periodKey} = ${month} then ${budgetLedger.amountUsd} else 0 end),0)::text`;
     const [sums] = await tx
       .select({
-        spent: sql<string>`coalesce(sum(case when ${budgetLedger.kind} in ('charge','settle') then ${budgetLedger.amountUsd} else 0 end),0)::text`,
+        spent: spentExpr,
         reserved: sql<string>`coalesce(sum(case when ${budgetLedger.kind}='reserve' then ${budgetLedger.amountUsd} when ${budgetLedger.kind} in ('release','settle') then -${budgetLedger.amountUsd} else 0 end),0)::text`,
       })
       .from(budgetLedger)
-      .where(and(eq(budgetLedger.companyId, scope.companyId!), eq(budgetLedger.periodKey, key), b.category === "total" ? undefined : eq(budgetLedger.category, b.category)));
+      .where(and(eq(budgetLedger.organizationId, scope.organizationId), eq(budgetLedger.companyId, scope.companyId!), b.category === "total" ? undefined : eq(budgetLedger.category, b.category)));
     const limit = Number(b.limitUsd);
     const spent = Number(sums?.spent ?? 0);
     const reserved = Math.max(0, Number(sums?.reserved ?? 0));
@@ -100,6 +107,17 @@ export class BudgetService {
     });
   }
 
+  /** Recent spend/reservation ledger for founder-facing finance inspection. */
+  async ledger(scope: TenantScope, opts: { category?: BudgetCategory; limit?: number } = {}) {
+    const limit = Math.min(500, Math.max(1, opts.limit ?? 100));
+    return this.db
+      .select()
+      .from(budgetLedger)
+      .where(and(eq(budgetLedger.organizationId, scope.organizationId), eq(budgetLedger.companyId, scope.companyId!), opts.category ? eq(budgetLedger.category, opts.category) : undefined))
+      .orderBy(desc(budgetLedger.createdAt))
+      .limit(limit);
+  }
+
   /** Spend per policy dimension for the policy engine. */
   async spendByDimension(scope: TenantScope): Promise<Record<string, { day: number; month: number }>> {
     const month = periodKey("monthly");
@@ -108,7 +126,7 @@ export class BudgetService {
     const rows = await this.db
       .select({ category: budgetLedger.category, month: sql<string>`coalesce(sum(${budgetLedger.amountUsd}),0)::text`, day: sql<string>`coalesce(sum(case when ${budgetLedger.createdAt} >= ${dayStart} then ${budgetLedger.amountUsd} else 0 end),0)::text` })
       .from(budgetLedger)
-      .where(and(eq(budgetLedger.companyId, scope.companyId!), eq(budgetLedger.periodKey, month), eq(budgetLedger.kind, "charge")))
+      .where(and(eq(budgetLedger.organizationId, scope.organizationId), eq(budgetLedger.companyId, scope.companyId!), eq(budgetLedger.periodKey, month), eq(budgetLedger.kind, "charge")))
       .groupBy(budgetLedger.category);
     const map: Record<string, { day: number; month: number }> = {};
     const dims: Record<string, string> = { ai: "ai_spend", infra: "infra_spend", ads: "ad_spend", payments: "payments" };

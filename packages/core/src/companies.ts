@@ -5,10 +5,10 @@ import { CompanyProfile, type Actor, type AgentKind, type AutonomyLevel, type Po
 import { slugify } from "./auth.js";
 
 export const DEFAULT_AGENTS: Array<{ kind: AgentKind; name: string; description: string; toolAllowlist: string[] }> = [
-  { kind: "orchestrator", name: "Chief of Staff", description: "Owns strategy, weekly planning, prioritization and delegation to specialist agents.", toolAllowlist: ["memory.*", "task.*", "document.*", "decision.*", "goal.*", "company.*", "web.*", "slack.post"] },
+  { kind: "orchestrator", name: "Chief of Staff", description: "Owns strategy, weekly planning, prioritization and delegation to specialist agents.", toolAllowlist: ["memory.*", "task.*", "delegate.run", "document.*", "decision.*", "project.*", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "slack.post"] },
   { kind: "engineering", name: "Engineer", description: "Builds and ships software in an isolated sandbox, opens pull requests and deploys with approval.", toolAllowlist: ["sandbox.*", "github.*", "deploy.*", "web.*", "memory.*", "task.update", "document.*", "decision.record", "company.profile"] },
-  { kind: "marketing", name: "Growth Marketer", description: "Researches positioning, writes content, and runs approved campaigns.", toolAllowlist: ["web.*", "memory.*", "document.*", "decision.record", "email.send", "social.publish", "task.update", "goal.list", "company.profile"] },
-  { kind: "sales", name: "Sales", description: "Finds leads, drafts outreach, and manages the pipeline.", toolAllowlist: ["web.*", "memory.*", "email.send", "document.*", "decision.record", "task.update", "goal.list", "company.profile"] },
+  { kind: "marketing", name: "Growth Marketer", description: "Researches positioning, writes content, and runs approved campaigns.", toolAllowlist: ["web.*", "memory.*", "document.*", "decision.record", "campaign.*", "lead.*", "email.send", "social.publish", "task.update", "goal.list", "company.profile"] },
+  { kind: "sales", name: "Sales", description: "Finds leads, drafts outreach, and manages the pipeline.", toolAllowlist: ["web.*", "memory.*", "campaign.list", "lead.*", "email.send", "document.*", "decision.record", "task.update", "goal.list", "company.profile"] },
   { kind: "support", name: "Support", description: "Triages inbound support and drafts replies for approval.", toolAllowlist: ["email.send", "slack.post", "memory.*", "document.*", "task.update", "company.profile"] },
   { kind: "research", name: "Researcher", description: "Market, competitor and customer research with cited sources.", toolAllowlist: ["web.*", "memory.*", "document.*", "decision.record", "task.update", "goal.list", "company.profile"] },
   { kind: "finance", name: "Finance", description: "Tracks revenue, spend and runway from connected sources.", toolAllowlist: ["stripe.*", "memory.*", "document.*", "decision.record", "task.update", "goal.list", "company.profile"] },
@@ -57,7 +57,7 @@ export class CompanyService {
     });
   }
 
-  async update(scope: TenantScope, patch: Partial<{ name: string; status: string; autonomyLevel: AutonomyLevel; outboundPaused: boolean; timezone: string; quietHours: { start: string; end: string } | null; settings: Record<string, unknown> }>) {
+  async update(scope: TenantScope, patch: Partial<{ name: string; status: string; autonomyLevel: AutonomyLevel; outboundPaused: boolean; signalAutoReview: boolean; timezone: string; quietHours: { start: string; end: string } | null; settings: Record<string, unknown> }>) {
     return this.db.transaction(async (tx) => {
       const [c] = await tx.update(companies).set({ ...patch, updatedAt: new Date() }).where(scoped(scope, { organizationId: companies.organizationId, companyId: companies.id })).returning();
       if (!c) return null;
