@@ -1,8 +1,8 @@
 import { ProviderError, parseStructured, type ChatMessage, type ContentPart, type ToolCall } from "@steward/ai";
 import { BudgetExhaustedError } from "@steward/core";
-import { evaluate, isQuietHours, type PolicyContext } from "@steward/policy";
+import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
 import { redactSecrets } from "@steward/crypto";
-import { PolicyRule, RoutingPolicy, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
+import { PolicyRule, RoutingPolicy, VerificationVerdict, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
 import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } from "@steward/tools";
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
@@ -24,6 +24,13 @@ export const Verification = z.object({
   summary: z.string(),
   unmet: z.array(z.string()).default([]),
   followUps: z.array(z.object({ title: z.string(), assigneeKind: z.string() })).default([]),
+  /**
+   * How the verdict was reached. `passed: false` means the reviewer judged the work unmet; `unverified`
+   * means no judgement was possible at all (the reviewer crashed, the provider was unreachable). Optional
+   * so records written before this field existed still parse — `verificationVerdict` derives the verdict
+   * from `passed` for those.
+   */
+  verdict: VerificationVerdict.optional(),
 });
 export type Verification = z.infer<typeof Verification>;
 
@@ -52,6 +59,20 @@ export interface ApprovalResumption {
 }
 
 const MAX_TOOL_OUTPUT_CHARS = 24_000;
+
+/**
+ * How many times an approver may keep editing a payload and pushing the same tool call back into a fresh
+ * approval before the runtime refuses. Bounded so a looping editor (or a buggy client) cannot spin a run.
+ */
+const MAX_APPROVAL_EDITS = 3;
+
+/** Raised when a tool outlives its manifest timeout; the call is abandoned, not merely asked to stop. */
+class ToolTimeoutError extends Error {
+  constructor(toolName: string, timeoutMs: number) {
+    super(`${toolName} exceeded its ${timeoutMs}ms timeout and was terminated`);
+    this.name = "ToolTimeoutError";
+  }
+}
 
 /**
  * The agent runtime. Each public method is designed to be a Temporal activity: idempotent given the run's
@@ -175,7 +196,7 @@ export class AgentRuntime {
 
   // ---------- 3. Iterate (one model call + tool executions) ----------
 
-  private async transcript(runId: string, ctx: RunContextBundle): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; stepId: string } | null }> {
+  private async transcript(runId: string, ctx: RunContextBundle): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null }> {
     const steps = await this.s.runs.steps(this.scope, runId);
     const messages: ChatMessage[] = [{ role: "system", content: ctx.systemPrompt }, { role: "user", content: ctx.userPrompt }];
     const planStep = steps.find((s) => s.kind === "plan" && s.status === "succeeded");
@@ -184,7 +205,7 @@ export class AgentRuntime {
       if (plan) messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: "Proceed with the plan. Use tools as needed." });
     }
     let iterations = 0;
-    let pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; stepId: string } | null = null;
+    let pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null = null;
     for (const st of steps) {
       if (st.kind === "model_call" && st.status === "succeeded") {
         iterations += 1;
@@ -194,7 +215,7 @@ export class AgentRuntime {
         for (const tc of out.toolCalls ?? []) parts.push({ type: "tool_call", id: tc.id, name: tc.name, arguments: tc.arguments });
         messages.push({ role: "assistant", content: parts.length ? parts : "" });
       } else if (st.kind === "tool_call" || st.kind === "approval") {
-        const inp = st.input as { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string };
+        const inp = st.input as { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[] };
         if (st.status === "running") {
           pending = { ...inp, stepId: st.id };
           continue;
@@ -223,8 +244,50 @@ export class AgentRuntime {
         await this.s.runs.finishStep(this.scope, pending.stepId, { status: "skipped", error: `Approval ${resume.status}${resume.note ? `: ${resume.note}` : ""}` });
         return { kind: "continue" };
       }
-      const args = resume.editedPayload ?? pending.args;
-      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: pending.stepId, toolCallId: pending.toolCallId, approvalId: pending.approvalId, decision: { decision: "allow", reason: "approved by user", dimension: tool.manifest.dimension ?? "external_write", risk: tool.manifest.risk } });
+      // An approval is consent for one exact action. Anything the approver changed — and anything policy would
+      // decide differently now that budgets and kill switches may have moved — is re-validated here, right
+      // before execution, through the same gate a first-time tool call goes through.
+      const candidate = resume.editedPayload ?? pending.args;
+      const parsed = tool.input.safeParse(candidate);
+      if (!parsed.success) {
+        const detail = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+        await this.s.runs.finishStep(this.scope, pending.stepId, { status: "failed", error: `Edited payload rejected by the ${pending.toolName} schema: ${detail}` });
+        await this.s.runs.recordToolCall(this.scope, { runId, stepId: pending.stepId, toolName: pending.toolName, input: candidate, output: null, status: "failed", risk: tool.manifest.risk, approvalId: pending.approvalId });
+        return { kind: "continue" };
+      }
+      const args = parsed.data as Record<string, unknown>;
+      const toolCtx = this.toolContext(runId, agent.id, run.taskId ?? undefined);
+      const pre = tool.preflight ? await tool.preflight(args, toolCtx).catch(() => undefined) : undefined;
+      const decision = await this.policyFor(tool.manifest, pre?.estimatedCostUsd, pre?.risk);
+      const approvedRow = pending.approvalId ? await this.s.approvals.get(this.scope, pending.approvalId) : null;
+      const assessment = assessApprovalPayload({
+        approved: pending.args,
+        executing: args,
+        approvedRisk: (approvedRow?.risk ?? tool.manifest.risk) as RiskLevel,
+        executingRisk: pre?.risk ?? tool.manifest.risk,
+      });
+
+      if (decision.decision === "deny") {
+        await this.s.runs.finishStep(this.scope, pending.stepId, { status: "failed", error: `Denied by policy before execution: ${decision.reason}` });
+        await this.s.runs.recordToolCall(this.scope, { runId, stepId: pending.stepId, toolName: pending.toolName, input: args, output: null, status: "denied", risk: decision.risk, policyDecision: decision, approvalId: pending.approvalId });
+        return { kind: "continue" };
+      }
+
+      if (needsFreshApproval({ assessment, policyRequiresApproval: decision.decision === "require_approval" })) {
+        const chain = pending.approvalChain ?? [];
+        if (chain.length >= MAX_APPROVAL_EDITS) {
+          await this.s.runs.finishStep(this.scope, pending.stepId, { status: "failed", error: `Refusing to execute: ${chain.length} consecutive edits each needed a fresh approval (${assessment.detail}). A human should perform this action directly.` });
+          return { kind: "continue" };
+        }
+        const req: ApprovalRequest = { action: pending.toolName, reason: `${assessment.detail}; policy: ${decision.reason}`, payload: args, risk: decision.risk, dimension: decision.dimension, estimatedCostUsd: pre?.estimatedCostUsd, affectedSystem: pre?.affectedSystem ?? pending.toolName.split(".")[0]!, alternatives: pre?.alternatives ?? [], expiresInSeconds: 3 * 86_400 };
+        const approval = await this.s.approvals.request(scope, { ...req, runId, taskId: run.taskId ?? undefined, agentId: agent.id, workflowId: run.workflowId ?? undefined });
+        await this.s.runs.setStepInput(this.scope, pending.stepId, { toolCallId: pending.toolCallId, toolName: pending.toolName, args, approvalId: approval.id, approvalChain: [...chain, pending.approvalId] });
+        await this.s.runs.setStatus(scope, runId, "waiting_approval");
+        return { kind: "needs_approval", approvalId: approval.id, toolCallId: pending.toolCallId, toolName: pending.toolName };
+      }
+
+      // The human's yes is the authority; the record keeps both that fact and the policy reasoning behind it.
+      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: pending.stepId, toolCallId: pending.toolCallId, approvalId: pending.approvalId, decision: { decision: "allow", reason: `approved by user (${assessment.detail}); policy: ${decision.reason}`, dimension: decision.dimension, risk: decision.risk } });
       if (!result.ok && result.fatal) return { kind: "failed", error: result.content, retryable: false };
       return { kind: "continue" };
     }
@@ -315,9 +378,19 @@ export class AgentRuntime {
       }
     }
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), tool.manifest.timeoutMs);
+    // A timeout must end the call, not just request that it ends. The signal is still handed to the tool so
+    // well-behaved tools can unwind, but the race below abandons a tool that ignores it instead of letting it
+    // hold the run open indefinitely. Promise.race attaches handlers to both branches, so a late settle from
+    // the abandoned call cannot surface as an unhandled rejection.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        ac.abort();
+        reject(new ToolTimeoutError(tool.manifest.name, tool.manifest.timeoutMs));
+      }, tool.manifest.timeoutMs);
+    });
     try {
-      const res = await tool.execute(args, { ...ctx, signal: ac.signal });
+      const res = await Promise.race([tool.execute(args, { ...ctx, signal: ac.signal }), timedOut]);
       const content = redactSecrets(res.content).slice(0, MAX_TOOL_OUTPUT_CHARS);
       await this.s.runs.finishStep(this.scope, meta.stepId, { status: res.ok ? "succeeded" : "failed", output: { content, data: safeJson(res.data), costUsd: res.costUsd }, error: res.ok ? undefined : content.slice(0, 500) });
       await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: { content: content.slice(0, 4000), data: safeJson(res.data) }, status: res.ok ? "succeeded" : "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
@@ -327,10 +400,11 @@ export class AgentRuntime {
     } catch (e) {
       const msg = redactSecrets(errMsg(e));
       await this.s.runs.finishStep(this.scope, meta.stepId, { status: "failed", error: msg });
-      await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: null, status: "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
+      await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: null, status: e instanceof ToolTimeoutError ? "timed_out" : "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
+      // A timeout is a failed tool call, not a fatal run: the model sees it and can choose another path.
       return { ok: false, content: msg, fatal: e instanceof BudgetExhaustedError };
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -381,21 +455,34 @@ export class AgentRuntime {
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: v });
       return v;
     } catch (e) {
-      await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: errMsg(e) });
-      return { passed: true, score: 50, summary: finalText.slice(0, 1000), unmet: [`Verification step failed: ${errMsg(e)}`], followUps: [] };
+      // A verifier that crashes has verified nothing. Reporting `passed: true` here would let an unreviewed
+      // run reach `succeeded` — the exact failure mode `unverified` exists to prevent.
+      const message = errMsg(e);
+      await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: message });
+      return {
+        passed: false,
+        verdict: "unverified",
+        score: 0,
+        summary: `Verification could not be completed (${message}). The work is recorded but has not been reviewed.`,
+        unmet: [`Verification step failed: ${message}`],
+        followUps: [],
+      };
     }
   }
 
   // ---------- 5. Finalize ----------
 
-  async finalize(runId: string, outcome: { status: "succeeded" | "failed" | "needs_review" | "cancelled"; finalText?: string; verification?: Verification; error?: string }) {
+  async finalize(runId: string, outcome: { status: "succeeded" | "failed" | "needs_review" | "cancelled"; finalText?: string; verification?: Verification; error?: string }): Promise<{ status: string; result: { summary: string; finalText?: string; verification?: Verification } }> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     const scope = { ...this.scope, actor };
     const result = { summary: outcome.verification?.summary ?? outcome.finalText?.slice(0, 2000) ?? outcome.error ?? "", finalText: outcome.finalText, verification: outcome.verification };
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: outcome.status === "failed" ? "error" : "result", title: outcome.status === "failed" ? "Run failed" : "Result" });
     await this.s.runs.finishStep(this.scope, step.id, { status: outcome.status === "failed" ? "failed" : "succeeded", output: result, error: outcome.error });
-    await this.s.runs.setStatus(scope, runId, outcome.status, { result, error: outcome.error ?? null });
+    // The write is guarded by the run state machine. It returns null when the run already finished another
+    // way (typically a founder cancelling while the workflow was completing), in which case the run keeps
+    // that outcome — and this method reports it, so the workflow never claims a result the database rejected.
+    const updated = await this.s.runs.setStatus(scope, runId, outcome.status, { result, error: outcome.error ?? null });
 
     if (run.taskId) {
       const task = await this.s.tasks.get(this.scope, run.taskId);
@@ -414,7 +501,7 @@ export class AgentRuntime {
       }
     }
     if (this.s.sandbox) await this.s.sandbox.get(runId).then((sb) => sb?.destroy()).catch(() => undefined);
-    return result;
+    return { status: updated?.status ?? outcome.status, result };
   }
 
   private actor(agentId: string, runId: string) {

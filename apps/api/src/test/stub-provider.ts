@@ -72,8 +72,11 @@ export async function startStubProvider(opts: { apiKey?: string; failFirstChat?:
       if (rf?.type === "json_schema" && rf.json_schema?.name === "plan") {
         return json(200, chat(JSON.stringify({ objective: "Produce positioning + decision", steps: [{ title: "Write positioning doc", tools: ["document.write"] }, { title: "Record customer decision", tools: ["decision.record"] }], successCriteria: ["Positioning document exists", "Decision recorded"], risks: [], needsHuman: [] })));
       }
-      if (rf?.type === "json_schema" && rf.json_schema?.name === "verify") {
-        return json(200, chat(JSON.stringify({ passed: true, score: 92, summary: "Positioning document written and target-customer decision recorded.", unmet: [], followUps: [{ title: "Draft landing page copy", assigneeKind: "marketing" }] })));
+      // The runtime names this schema "verification"; "verify" was a typo here for a long time, and because the
+      // old verification fallback reported `passed: true` after a parse failure, nothing ever noticed. The stub
+      // now answers the request the runtime actually makes and states the verdict explicitly.
+      if (rf?.type === "json_schema" && (rf.json_schema?.name === "verification" || rf.json_schema?.name === "verify")) {
+        return json(200, chat(JSON.stringify({ passed: true, verdict: "passed", score: 92, summary: "Positioning document written and target-customer decision recorded.", unmet: [], followUps: [{ title: "Draft landing page copy", assigneeKind: "marketing" }] })));
       }
 
       const msgs = (body.messages as Msg[]) ?? [];

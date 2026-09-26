@@ -7,7 +7,7 @@ import { APPROVAL_SIGNAL, CANCEL_SIGNAL, type AgentActivities, type IterationOut
 const input = { runId: "run-1", scope: { organizationId: "org", companyId: "co" } };
 const ctx = { systemPrompt: "s", userPrompt: "u", toolNames: [], routingPolicy: {}, maxIterations: 10, budgetUsdPerRun: null };
 
-function mockActivities(script: IterationOutcome[], calls: Record<string, unknown[]>): AgentActivities {
+function mockActivities(script: IterationOutcome[], calls: Record<string, unknown[]>, verify?: () => Promise<{ passed: boolean; verdict?: "passed" | "failed" | "unverified"; score: number; summary: string; unmet: string[]; followUps: Array<{ title: string; assigneeKind: string }> }>): AgentActivities {
   let i = 0;
   const rec = (name: string, v: unknown) => (calls[name] ??= []).push(v);
   return {
@@ -17,9 +17,11 @@ function mockActivities(script: IterationOutcome[], calls: Record<string, unknow
       rec("iterate", inp.resume ?? null);
       return script[Math.min(i++, script.length - 1)]!;
     },
-    verify: async () => ({ passed: true, score: 90, summary: "ok", unmet: [], followUps: [] }),
+    verify: verify ?? (async () => ({ passed: true, verdict: "passed" as const, score: 90, summary: "ok", unmet: [], followUps: [] })),
     finalize: async (inp) => {
       rec("finalize", inp.outcome);
+      // The real activity returns the status the database holds after finalizing.
+      return { status: inp.outcome.status };
     },
     markRunning: async () => {},
     markApprovalExpired: async (inp) => {
@@ -39,9 +41,9 @@ describe("agentRunWorkflow", () => {
     await env?.teardown();
   });
 
-  async function run(script: IterationOutcome[], drive?: (handle: Awaited<ReturnType<typeof env.client.workflow.start>>) => Promise<void>) {
+  async function run(script: IterationOutcome[], drive?: (handle: Awaited<ReturnType<typeof env.client.workflow.start>>) => Promise<void>, verify?: Parameters<typeof mockActivities>[2]) {
     const calls: Record<string, unknown[]> = {};
-    const worker = await Worker.create({ connection: env.nativeConnection, taskQueue: "test", workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)), activities: mockActivities(script, calls) });
+    const worker = await Worker.create({ connection: env.nativeConnection, taskQueue: "test", workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)), activities: mockActivities(script, calls, verify) });
     const result = await worker.runUntil(async () => {
       const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue: "test", workflowId: `wf-${Math.random()}`, args: [input] });
       if (drive) await drive(handle);
@@ -56,6 +58,15 @@ describe("agentRunWorkflow", () => {
     expect(calls.iterate).toHaveLength(2);
     expect((calls.finalize![0] as { status: string; finalText: string }).finalText).toBe("did it");
   }, 60_000);
+
+  it("routes an unverified run to needs_review instead of reporting success", async () => {
+    // This is the shape the runtime returns when verification itself fails: nothing was reviewed, so the work
+    // must not be reported as finished.
+    const { result, calls } = await run([{ kind: "done", finalText: "did it" }], undefined, async () => ({ passed: false, verdict: "unverified", score: 0, summary: "Verification could not be completed", unmet: ["Verification step failed"], followUps: [] }));
+    expect(result.status).toBe("needs_review");
+    expect((calls.finalize![0] as { status: string }).status).toBe("needs_review");
+  }, 60_000);
+
 
   it("pauses for approval and resumes with the decision", async () => {
     const { result, calls } = await run(
