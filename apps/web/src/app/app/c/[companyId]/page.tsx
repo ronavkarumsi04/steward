@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AUTONOMY_LABELS } from "@steward/schema";
 import { serverApi, tryApi } from "@/lib/server";
-import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, UsageRow } from "@/lib/types";
+import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, Task, UsageRow } from "@/lib/types";
+import { buildAttentionQueue } from "@/lib/attention";
+import { AttentionQueue } from "@/components/attention-queue";
 import { Icon } from "@/components/icons";
 import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
@@ -14,7 +16,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const api = await serverApi();
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
-  const [events, runs, approvals, usage, schedules, artifacts, documents, integrations] = await Promise.all([
+  const [events, runs, approvals, usage, schedules, artifacts, documents, integrations, attentionRuns, attentionTasks] = await Promise.all([
     api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=50`),
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=20`),
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
@@ -23,6 +25,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     api.get<{ artifacts: Artifact[] }>(`/companies/${companyId}/artifacts?limit=100`),
     api.get<{ documents: Document[] }>(`/companies/${companyId}/documents`),
     api.get<{ integrations: Integration[] }>(`/orgs/${overview.company.organizationId}/integrations`),
+    // What the attention queue needs: runs that stopped for a human, and the open work that could be late.
+    api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=needs_review,failed,waiting_budget,waiting_approval&limit=50`),
+    api.get<{ tasks: Task[] }>(`/companies/${companyId}/tasks?status=backlog,todo,in_progress,blocked,waiting_approval,review&limit=100`),
   ]);
   const { company, goals, agents, taskCounts, budgets } = overview;
   const profile = overview.profile?.profile ?? null;
@@ -47,6 +52,15 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     ? String(latestPendingDomain.metadata.domain)
     : null;
   const base = `/app/c/${companyId}`;
+  // The dashboard shows state; this ranks what actually needs the founder, and why. Rules live in
+  // `lib/attention.ts` so they are tested without a browser.
+  const attention = buildAttentionQueue({
+    companyId,
+    approvals: approvals.approvals,
+    runs: attentionRuns.runs,
+    tasks: attentionTasks.tasks,
+    budget: aiBudget ?? null,
+  });
 
   return (
     <div className="space-y-6">
@@ -71,6 +85,8 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
           </div>
         </dl>
       </header>
+
+      <AttentionQueue items={attention} />
 
       <div className="nb-bento grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="nb-metric nb-accent-blue">
