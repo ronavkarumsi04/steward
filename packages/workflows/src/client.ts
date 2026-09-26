@@ -17,7 +17,9 @@ export function temporalConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Tem
     namespace: env.TEMPORAL_NAMESPACE ?? "default",
     taskQueue: env.TEMPORAL_TASK_QUEUE ?? TASK_QUEUE_DEFAULT,
     tls: env.TEMPORAL_TLS_CERT_PATH ? { clientCertPath: env.TEMPORAL_TLS_CERT_PATH, clientKeyPath: env.TEMPORAL_TLS_KEY_PATH, serverRootCACertPath: env.TEMPORAL_TLS_CA_PATH } : null,
-    apiKey: env.TEMPORAL_API_KEY,
+    // Normalize empty-string env vars: an empty TEMPORAL_API_KEY would make the Temporal client auto-enable TLS
+    // and fail to connect to a plaintext local server ("Failed to connect before the deadline").
+    apiKey: env.TEMPORAL_API_KEY?.trim() ? env.TEMPORAL_API_KEY.trim() : undefined,
   };
 }
 
@@ -82,9 +84,9 @@ export class WorkflowClient {
   /** Creates or updates the Temporal Schedule backing an agent schedule row. */
   async upsertSchedule(input: ScheduledRunInput & { cron: string; timezone: string; enabled: boolean }): Promise<string> {
     const id = scheduleWorkflowId(input.scheduleId);
-    const action = { type: "startWorkflow" as const, workflowType: "scheduledRunWorkflow", taskQueue: this.taskQueue, args: [{ scheduleId: input.scheduleId, scope: input.scope }], workflowExecutionTimeout: "14 days" };
+    const action = { type: "startWorkflow", workflowType: "scheduledRunWorkflow", taskQueue: this.taskQueue, args: [{ scheduleId: input.scheduleId, scope: input.scope }], workflowExecutionTimeout: "14 days" } as const;
     const spec = { cronExpressions: [input.cron], timezone: input.timezone };
-    const policies = { overlap: ScheduleOverlapPolicy.SKIP, catchupWindow: "10 minutes" };
+    const policies = { overlap: ScheduleOverlapPolicy.SKIP, catchupWindow: "10 minutes" } as const;
     let handle: ScheduleHandle;
     try {
       handle = this.client.schedule.getHandle(id);

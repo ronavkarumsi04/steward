@@ -26,7 +26,7 @@ async function nativeTls(cfg: ReturnType<typeof temporalConfigFromEnv>) {
   if (cfg.tls?.clientCertPath && cfg.tls.clientKeyPath) {
       return { clientCertPair: { crt: await readFile(cfg.tls.clientCertPath), key: await readFile(cfg.tls.clientKeyPath) }, serverRootCACertificate: cfg.tls.serverRootCACertPath ? await readFile(cfg.tls.serverRootCACertPath) : undefined };
   }
-  return cfg.apiKey ? true : undefined;
+  return cfg.apiKey?.trim() ? true : undefined;
 }
 
 async function main() {

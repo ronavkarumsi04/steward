@@ -12,41 +12,48 @@ import type { PendingCommand, ResultMessage } from "./protocol.js";
  * (`--version`, `login status`, `exec --json -o <file> --output-schema <file> -`) so the runner
  * can be exercised without an OpenAI login.
  */
-const FAKE_CODEX = `#!/usr/bin/env bash
-set -e
-if [ "$1" = "--version" ]; then echo "codex-cli 0.0.0-fake"; exit 0; fi
-if [ "$1" = "login" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-if [ "$1" = "exec" ]; then
-  out=""; schema=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -o) out="$2"; shift 2;;
-      --output-schema) schema="$2"; shift 2;;
-      *) shift;;
-    esac
-  done
-  prompt="$(cat)"
-  printf '%s\\n' "$prompt" > "$(dirname "$out")/prompt.txt"
-  echo '{"type":"thread.started","thread_id":"t-123"}'
-  if [ -n "$schema" ] && grep -q tool_calls "$schema"; then
-    msg='{"text":"","tool_calls":[{"name":"web.search","arguments_json":"{\\"q\\":\\"steward\\"}"}]}'
-  else
-    msg="hello from fake codex"
-  fi
-  printf '{"type":"item.completed","item":{"type":"agent_message","text":%s}}\\n' "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$msg")"
-  echo '{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":2,"output_tokens":5}}'
-  printf '%s' "$msg" > "$out"
-  exit 0
-fi
-echo "unknown" >&2; exit 1
+/**
+ * A stand-in for the real `codex` binary that speaks the same CLI surface we depend on
+ * (`--version`, `login status`, `exec --json -o <file> --output-schema <file> -`), written in
+ * cross-platform Node so the runner can be exercised on Windows too.
+ */
+const FAKE_CODEX = `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const { join, dirname } = require("node:path");
+const args = process.argv.slice(2);
+if (args[0] === "--version") { console.log("codex-cli 0.0.0-fake"); process.exit(0); }
+if (args[0] === "login") { console.log("Logged in using ChatGPT"); process.exit(0); }
+if (args[0] === "exec") {
+  let out = "", schema = "", next = null;
+  for (const a of args.slice(1)) { if (next) { if (next === "out") out = a; else schema = a; next = null; } else if (a === "-o") next = "out"; else if (a === "--output-schema") next = "schema"; }
+  let prompt = "";
+  try { prompt = require("node:fs").readFileSync(0, "utf8"); } catch {}
+  try { writeFileSync(join(dirname(out), "prompt.txt"), prompt + "\\n"); } catch {}
+  console.log(JSON.stringify({ type: "thread.started", thread_id: "t-123" }));
+  let msg = "hello from fake codex";
+  try { if (schema && require("node:fs").readFileSync(schema, "utf8").includes("tool_calls")) msg = JSON.stringify({ text: "", tool_calls: [{ name: "web.search", arguments_json: JSON.stringify({ q: "steward" }) }] }); } catch {}
+  const usage = JSON.stringify({ type: "turn.completed", usage: { input_tokens: 12, cached_input_tokens: 2, output_tokens: 5 } });
+  console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: msg } }));
+  console.log(usage);
+  writeFileSync(out, msg);
+  process.exit(0);
+}
+console.error("unknown"); process.exit(1);
 `;
 
 let bin: string;
 beforeAll(async () => {
   const dir = await mkdtemp(join(tmpdir(), "fake-codex-"));
-  bin = join(dir, "codex");
-  await writeFile(bin, FAKE_CODEX);
-  await chmod(bin, 0o755);
+  const isWindows = process.platform === "win32";
+  if (isWindows) {
+    await writeFile(join(dir, "codex.cjs"), FAKE_CODEX);
+    await writeFile(join(dir, "codex.cmd"), `@echo off\r\nnode "%~dp0codex.cjs" %*\r\n`);
+    bin = join(dir, "codex.cmd");
+  } else {
+    bin = join(dir, "codex");
+    await writeFile(bin, FAKE_CODEX);
+    await chmod(bin, 0o755);
+  }
 });
 
 describe("codex runner", () => {

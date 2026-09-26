@@ -19,9 +19,20 @@ interface RunOutput {
   stderr: string;
 }
 
+/**
+ * Windows cannot exec extensionless scripts or .cmd shims directly via spawn (and Node blocks
+ * .cmd/.bat without a shell). Route everything except native executables through the shell there,
+ * quoting args ourselves since Node joins them verbatim when shell is enabled.
+ */
+function spawnCommand(bin: string, args: string[]): { file: string; args: string[]; shell: boolean } {
+  if (process.platform !== "win32" || /\.(exe|com)$/i.test(bin)) return { file: bin, args, shell: false };
+  return { file: bin, args: args.map((a) => (/\s|"/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)), shell: true };
+}
+
 function run(bin: string, args: string[], opts: { stdin?: string; timeoutMs?: number; signal?: AbortSignal; cwd?: string; onLine?: (line: string) => void }): Promise<RunOutput> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"], env: process.env });
+    const cmd = spawnCommand(bin, args);
+    const child = spawn(cmd.file, cmd.args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"], env: process.env, shell: cmd.shell });
     let stdout = "";
     let stderr = "";
     let partial = "";
@@ -52,6 +63,11 @@ function run(bin: string, args: string[], opts: { stdin?: string; timeoutMs?: nu
     });
     child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
     child.on("close", (code) => finish(() => {
+      // With shell:true a missing executable exits non-zero with a cmd message instead of ENOENT.
+      if (cmd.shell && code !== 0 && /cannot find the path|is not recognized/i.test(stderr)) {
+        reject(Object.assign(new Error(`spawn ${bin} ENOENT`), { code: "ENOENT" }));
+        return;
+      }
       if (partial.trim() && opts.onLine) opts.onLine(partial);
       resolve({ code, stdout, stderr });
     }));
@@ -67,7 +83,8 @@ export async function codexStatus(bin: string): Promise<StatusResult> {
     const v = await run(bin, ["--version"], { timeoutMs: 15_000 });
     version = v.stdout.trim() || undefined;
   } catch (e) {
-    return { loggedIn: false, models: [], detail: `codex CLI not found (${e instanceof Error ? e.message : String(e)}). Install: npm i -g @openai/codex` };
+    const msg = e instanceof Error ? e.message : String(e);
+    return { loggedIn: false, models: [], detail: `codex CLI not found (${msg}). Install: npm i -g @openai/codex` };
   }
   try {
     const st = await run(bin, ["login", "status"], { timeoutMs: 20_000 });

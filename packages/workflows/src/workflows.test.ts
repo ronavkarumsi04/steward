@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -40,7 +41,7 @@ describe("agentRunWorkflow", () => {
 
   async function run(script: IterationOutcome[], drive?: (handle: Awaited<ReturnType<typeof env.client.workflow.start>>) => Promise<void>) {
     const calls: Record<string, unknown[]> = {};
-    const worker = await Worker.create({ connection: env.nativeConnection, taskQueue: "test", workflowsPath: new URL("./workflows.ts", import.meta.url).pathname, activities: mockActivities(script, calls) });
+    const worker = await Worker.create({ connection: env.nativeConnection, taskQueue: "test", workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)), activities: mockActivities(script, calls) });
     const result = await worker.runUntil(async () => {
       const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue: "test", workflowId: `wf-${Math.random()}`, args: [input] });
       if (drive) await drive(handle);
