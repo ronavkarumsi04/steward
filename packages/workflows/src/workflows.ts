@@ -1,9 +1,8 @@
 import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
-import { verificationVerdict } from "@steward/schema";
+import { endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
 import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
 
 const APPROVAL_TIMEOUT = "3 days";
-const MAX_PROVIDER_RETRIES = 4;
 
 const model = proxyActivities<Pick<AgentActivities, "buildContext" | "plan" | "verify">>({
   startToCloseTimeout: "5 minutes",
@@ -73,38 +72,36 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
       const outcome: IterationOutcome = await iteration.iterate({ ...input, ctx, resume });
       resume = undefined;
       iterations += 1;
-      switch (outcome.kind) {
+      if (outcome.kind === "needs_approval") {
+        phase = "waiting_approval";
+        waitingApprovalId = outcome.approvalId;
+        const decided = await condition(() => decisions.has(outcome.approvalId) || cancelRequested !== null, APPROVAL_TIMEOUT);
+        waitingApprovalId = null;
+        if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
+        if (!decided) {
+          await bookkeeping.markApprovalExpired({ ...input, approvalId: outcome.approvalId });
+          resume = { approvalId: outcome.approvalId, status: "expired", toolCallId: outcome.toolCallId };
+        } else {
+          const d = decisions.get(outcome.approvalId)!;
+          resume = { approvalId: d.approvalId, status: d.status, toolCallId: outcome.toolCallId, note: d.note, editedPayload: d.editedPayload };
+        }
+        phase = "executing";
+        continue;
+      }
+
+      // Everything that ends a run — the review verdict, an exhausted budget, an unrecoverable failure — is
+      // decided in `endingFor`, which the in-process drivers share so that none of them can disagree with the
+      // workflow about whether work was reviewed.
+      if (outcome.kind === "done") phase = "verifying";
+      const verification = outcome.kind === "done" ? await model.verify({ ...input, ctx, finalText: outcome.finalText }) : undefined;
+      const ending = endingFor(outcome, verification);
+      switch (ending.action) {
         case "continue":
           continue;
-        case "done": {
-          phase = "verifying";
-          const verification = await model.verify({ ...input, ctx, finalText: outcome.finalText });
-          // Only an explicit pass succeeds. `needs_review` covers both a reviewer who said no and a reviewer
-          // that never ran (`unverified`): work nobody reviewed must never be reported as finished.
-          const verdict = verificationVerdict(verification);
-          return finish({ status: verdict === "passed" ? "succeeded" : "needs_review", finalText: outcome.finalText, verification });
-        }
-        case "needs_approval": {
-          phase = "waiting_approval";
-          waitingApprovalId = outcome.approvalId;
-          const decided = await condition(() => decisions.has(outcome.approvalId) || cancelRequested !== null, APPROVAL_TIMEOUT);
-          waitingApprovalId = null;
-          if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
-          if (!decided) {
-            await bookkeeping.markApprovalExpired({ ...input, approvalId: outcome.approvalId });
-            resume = { approvalId: outcome.approvalId, status: "expired", toolCallId: outcome.toolCallId };
-          } else {
-            const d = decisions.get(outcome.approvalId)!;
-            resume = { approvalId: d.approvalId, status: d.status, toolCallId: outcome.toolCallId, note: d.note, editedPayload: d.editedPayload };
-          }
-          phase = "executing";
-          continue;
-        }
-        case "budget_exhausted":
-          return finish({ status: "needs_review", error: outcome.detail, finalText: `Stopped: ${outcome.detail}` });
-        case "failed":
-          if (outcome.retryable) throw ApplicationFailure.retryable(outcome.error, "ProviderFailure");
-          return finish({ status: "failed", error: outcome.error });
+        case "retry":
+          throw ApplicationFailure.retryable(ending.error, "ProviderFailure");
+        case "finish":
+          return finish({ status: ending.status, finalText: ending.finalText, error: ending.error, verification: ending.verification ?? undefined });
       }
     }
   } catch (e) {
