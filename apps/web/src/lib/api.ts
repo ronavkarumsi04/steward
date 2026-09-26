@@ -29,7 +29,8 @@ export interface ApiClient {
   post<T>(path: string, body?: unknown): Promise<T>;
   put<T>(path: string, body?: unknown): Promise<T>;
   patch<T>(path: string, body?: unknown): Promise<T>;
-  del<T>(path: string): Promise<T>;
+  /** DELETE may carry a body: destructive endpoints require an explicit confirmation payload. */
+  del<T>(path: string, body?: unknown): Promise<T>;
 }
 
 export function createClient(opts: { baseUrl: string; cookie?: string; fetchImpl?: typeof fetch }): ApiClient {
@@ -65,7 +66,7 @@ export function createClient(opts: { baseUrl: string; cookie?: string; fetchImpl
     post: (p, b) => call("POST", p, b ?? {}),
     put: (p, b) => call("PUT", p, b ?? {}),
     patch: (p, b) => call("PATCH", p, b ?? {}),
-    del: (p) => call("DELETE", p),
+    del: (p, b) => call("DELETE", p, b),
   };
 }
 

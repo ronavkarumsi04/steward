@@ -14,9 +14,18 @@ export interface Membership {
   name: string;
   slug: string;
 }
+export interface PendingAgreement {
+  document: "terms" | "privacy" | "acceptable-use";
+  title: string;
+  acceptedVersion: string | null;
+  requiredVersion: string;
+}
+
 export interface Me {
   user: User | null;
   memberships: Membership[];
+  /** Present when the session must accept a new version of a required document before continuing. */
+  pendingAgreements?: PendingAgreement[];
 }
 
 export interface Company {

@@ -7,6 +7,8 @@ import { csrf, rateLimit, requestId, securityHeaders, session } from "./middlewa
 import { RouteRegistry, openApiDocument } from "./route.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCompanyRoutes } from "./routes/companies.js";
+import { registerLegalRoutes } from "./routes/legal.js";
+import { registerPrivacyRoutes } from "./routes/privacy.js";
 import { registerCompanionRoutes } from "./routes/companion.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerWorkRoutes } from "./routes/work.js";
@@ -57,6 +59,8 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   v1.use("*", rateLimit({ capacity: 600, refillPerSec: 10 }));
 
   registerAuthRoutes(v1, registry);
+  registerLegalRoutes(v1, registry);
+  registerPrivacyRoutes(v1, registry);
   registerCompanyRoutes(v1, registry);
   registerWorkRoutes(v1, registry, bus);
   registerSignalRoutes(v1, registry);

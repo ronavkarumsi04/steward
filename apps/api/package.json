@@ -20,6 +20,7 @@
     "@steward/crypto": "workspace:*",
     "@steward/db": "workspace:*",
     "@steward/integrations": "workspace:*",
+    "@steward/legal": "workspace:*",
     "@steward/memory": "workspace:*",
     "@steward/policy": "workspace:*",
     "@steward/schema": "workspace:*",

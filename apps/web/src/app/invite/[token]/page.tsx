@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { clickwrapCopy } from "@steward/legal";
 import { AuthForm } from "@/components/auth-form";
 import { AcceptInvite } from "@/components/accept-invite";
 import { Icon } from "@/components/icons";
@@ -34,7 +35,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     return (
       <main className={shell}>
         <Suspense>
-          <AuthForm mode="register" invite={{ token, email: invitation.email, organizationName: invitation.organizationName, role: invitation.role }} />
+          <AuthForm mode="register" agreements={clickwrapCopy()} invite={{ token, email: invitation.email, organizationName: invitation.organizationName, role: invitation.role }} />
         </Suspense>
       </main>
     );

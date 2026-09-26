@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, OrganizationService, renderEmail } from "@steward/core";
+import { AuthError, OrganizationService, PrivacyService, renderEmail } from "@steward/core";
+import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS, acceptanceStatement, pendingAgreements } from "@steward/legal";
 import { Role } from "@steward/schema";
 import { HttpError, orgScope, requireUser, type ApiDeps, type AppEnv, param } from "../context.js";
 import { clearSessionCookie, clientIp, rateLimit, setSessionCookie } from "../middleware.js";
@@ -8,6 +9,21 @@ import { defineRoute, type RouteRegistry } from "../route.js";
 
 const Credentials = z.object({ email: z.email(), password: z.string().min(10).max(200) });
 const RESET_TOKEN_TTL_MS = 1000 * 60 * 30;
+
+/** Clickwrap payload. Marketing consent is deliberately absent: it is opt-in elsewhere. */
+const AcceptanceInput = z.array(z.object({ document: z.enum(REQUIRED_AGREEMENTS), version: z.string().min(1).max(40) })).min(1);
+
+/** Validates that the caller accepted the current version of every required document. */
+function buildAgreements(accepted: Array<{ document: (typeof REQUIRED_AGREEMENTS)[number]; version: string }>) {
+  const byDoc = new Map(accepted.map((a) => [a.document, a.version]));
+  const missing = REQUIRED_AGREEMENTS.filter((slug) => !byDoc.has(slug));
+  if (missing.length) throw new AuthError("forbidden", `You must accept the current version of: ${missing.join(", ")}`);
+  return REQUIRED_AGREEMENTS.map((slug) => {
+    const version = byDoc.get(slug)!;
+    if (version !== REQUIRED_VERSIONS[slug]) throw new AuthError("forbidden", `The ${slug} version you accepted (${version}) is out of date; reload the page and accept version ${REQUIRED_VERSIONS[slug]}`);
+    return { document: slug, version, statement: acceptanceStatement(slug, version), source: "web" };
+  });
+}
 
 /**
  * Public sign-up is open when ALLOW_SIGNUP is true, or when no user exists yet (first-owner bootstrap).
@@ -39,18 +55,25 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
       tag: "auth",
       summary: "Register a user and personal organization (or join an org via invitation token)",
       auth: "public",
-      body: Credentials.extend({ name: z.string().min(1).max(120), orgName: z.string().max(120).optional(), inviteToken: z.string().min(10).max(200).optional() }),
+      body: Credentials.extend({
+        name: z.string().min(1).max(120),
+        orgName: z.string().max(120).optional(),
+        inviteToken: z.string().min(10).max(200).optional(),
+        accepted: AcceptanceInput,
+      }),
     },
     async (c, { body }) => {
       const deps = c.get("deps");
       const { auth } = deps;
       const orgs = new OrganizationService(deps.core.db);
+      // Checked before the account is created: registering without accepting is not an option.
+      const agreements = buildAgreements(body.accepted);
       const invitation = body.inviteToken ? await orgs.peekInvitation(body.inviteToken) : null;
       if (body.inviteToken && !invitation) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
       if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
       if (!invitation && !(await signupOpen(deps))) throw new AuthError("signup_closed", "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.");
 
-      const { user, organization } = await auth.register({ ...body, personalOrganization: !invitation });
+      const { user, organization } = await auth.register({ ...body, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
       const joined = body.inviteToken ? await orgs.acceptInvitation(user.id, body.inviteToken) : null;
       const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
       setSessionCookie(c, token);
@@ -113,10 +136,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     return c.json({ ok: true });
   });
 
-  defineRoute(app, reg, { method: "get", path: "/auth/me", tag: "auth", summary: "Current user and memberships", auth: "public" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/auth/me", tag: "auth", summary: "Current user, memberships, and any outstanding agreement acceptances", auth: "public" }, async (c) => {
     const user = c.get("user");
     if (!user) return c.json({ user: null, memberships: [] });
-    return c.json({ user, memberships: c.get("memberships") ?? [] });
+    // The app gate reads this: a session that has not accepted the current terms must be prompted.
+    const accepted = await new PrivacyService(c.get("deps").core.db).acceptedFor(user.id);
+    c.header("cache-control", "no-store");
+    return c.json({ user, memberships: c.get("memberships") ?? [], pendingAgreements: pendingAgreements(accepted) });
   });
 
   defineRoute(app, reg, { method: "post", path: "/auth/password", tag: "auth", summary: "Change password (requires current password)", body: z.object({ currentPassword: z.string(), newPassword: z.string().min(10).max(200) }) }, async (c, { body }) => {

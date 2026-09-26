@@ -13,11 +13,21 @@ export interface InviteContext {
   role: string;
 }
 
-export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?: InviteContext }) {
+/** The current versions of the documents a person must accept, resolved on the server. */
+export interface RequiredAgreement {
+  document: "terms" | "privacy" | "acceptable-use";
+  title: string;
+  version: string;
+  href: string;
+}
+
+export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "register"; invite?: InviteContext; agreements?: RequiredAgreement[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,14 +35,17 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
     setError(null);
     const fd = new FormData(e.currentTarget);
     const body: Record<string, string> = { email: invite?.email ?? String(fd.get("email")), password: String(fd.get("password")) };
+    let payload: Record<string, unknown> = body;
     if (mode === "register") {
       body.name = String(fd.get("name"));
       const org = String(fd.get("orgName") ?? "").trim();
       if (org) body.orgName = org;
       if (invite) body.inviteToken = invite.token;
+      // Clickwrap: the exact versions the person saw are sent and stored as evidence.
+      payload = { ...body, accepted: agreements.map((a) => ({ document: a.document, version: a.version })), marketingOptIn };
     }
     try {
-      await browserApi.post(`/auth/${mode}`, body);
+      await browserApi.post(`/auth/${mode}`, payload);
       const next = params.get("next");
       router.replace(next && next.startsWith("/") ? next : "/app");
       router.refresh();
@@ -78,8 +91,35 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
           <input id="orgName" name="orgName" className="input" placeholder="Defaults to your personal workspace" />
         </div>
       )}
+      {mode === "register" && agreements.length > 0 && (
+        <fieldset className="space-y-3">
+          <legend className="label mb-2">Before you create your account</legend>
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} aria-describedby="clickwrap-hint" />
+            <span>
+              I agree to the{" "}
+              {agreements.map((a, i) => (
+                <span key={a.document}>
+                  {i > 0 && (i === agreements.length - 1 ? " and the " : ", the ")}
+                  <Link href={a.href} target="_blank" className="font-medium text-accent hover:underline">
+                    {a.title}
+                  </Link>
+                </span>
+              ))}
+              , and I confirm I am at least 18 and authorized to act on behalf of any organization I use Steward for.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm text-muted">
+            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} />
+            <span>Send me occasional product news. Optional, separate from the agreement above, and you can turn it off at any time.</span>
+          </label>
+          <p id="clickwrap-hint" className="hint">
+            We store the document versions, the time, and the IP address you accepted from, so both of us can see what you agreed to.
+          </p>
+        </fieldset>
+      )}
       {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
-      <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
+      <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy || (mode === "register" && agreements.length > 0 && !accepted)}>
         {busy && <span className="spinner" aria-hidden="true" />}
         {mode === "login" ? "Sign in" : invite ? "Create account & join" : "Create account"}
       </button>
@@ -113,6 +153,8 @@ export function friendly(err: ApiError): string {
       return "Please check the form — the password must be at least 10 characters.";
     case "rate_limited":
       return "Too many attempts. Please wait a moment.";
+    case "forbidden":
+      return err.message.includes("out of date") ? "Our policies were updated while this page was open. Reload the page and accept the new versions." : err.message;
     default:
       return err.message;
   }

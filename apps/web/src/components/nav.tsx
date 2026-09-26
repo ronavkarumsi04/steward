@@ -12,6 +12,7 @@ const ORG_LINKS = [
   ["providers", "Providers", Icon.Providers],
   ["integrations", "Integrations", Icon.Integrations],
   ["members", "Members", Icon.Members],
+  ["privacy", "Data & privacy", Icon.Lock],
 ] as const;
 
 export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
@@ -71,6 +72,11 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
 
         <div className="flex items-center gap-2 text-sm">
           <span className="hidden max-w-[16rem] truncate text-muted lg:inline" title={me.user?.email}>{me.user?.email}</span>
+          <Link href="/app/account" className="btn btn-sm" aria-current={path.startsWith("/app/account") ? "page" : undefined}>
+            <Icon.Lock size={14} />
+            <span className="hidden sm:inline">Account</span>
+            <span className="sr-only sm:hidden">Account and privacy</span>
+          </Link>
           <ThemeToggle />
           <button className="btn btn-sm border-2 border-fg shadow-[3px_3px_0_0_#111]" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}

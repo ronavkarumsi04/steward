@@ -9,6 +9,7 @@ import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
 import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
+import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
 import type { TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { createApp } from "./app.js";
@@ -105,10 +106,17 @@ function client(token = "", cookie = "", target: () => typeof app = () => app): 
   return c;
 }
 
+/**
+ * The clickwrap versions a client must send, taken from the same registry the API enforces. Every
+ * registration in this suite goes through here, which is also what keeps the requirement honest: if
+ * acceptance became optional, these registrations would still pass but the explicit test below would fail.
+ */
+const CLICKWRAP = REQUIRED_AGREEMENTS.map((document) => ({ document, version: REQUIRED_VERSIONS[document] }));
+
 async function register(name = "Founder") {
   const email = `${name.toLowerCase()}-${uniq()}@example.com`;
   const anon = client();
-  const res = await anon.call("POST", "/auth/register", { email, password: "correct-horse-battery", name });
+  const res = await anon.call("POST", "/auth/register", { email, password: "correct-horse-battery", name, accepted: CLICKWRAP });
   expect(res.status).toBe(201);
   const body = (await res.json()) as { token: string; user: { id: string }; organization: { id: string } };
   const setCookie = res.headers.get("set-cookie") ?? "";
@@ -143,6 +151,40 @@ function fakeTemporal(): WorkflowClient {
 }
 
 describe("auth + sessions", () => {
+  d("registration requires accepting the current legal documents, and records what was accepted", async () => {
+    const anon = client();
+    const email = `clickwrap-${uniq()}@example.com`;
+
+    // No acceptance at all: rejected before an account exists.
+    expect((await anon.json("POST", "/auth/register", { email, password: "correct-horse-battery", name: "No Accept" })).status).toBe(422);
+
+    // A stale version is refused with an explicit code rather than silently recorded.
+    const stale = await anon.json<{ error: { code: string } }>("POST", "/auth/register", {
+      email,
+      password: "correct-horse-battery",
+      name: "Stale Accept",
+      accepted: [{ document: "terms", version: "0.0.1" }, { document: "privacy", version: REQUIRED_VERSIONS.privacy }, { document: "acceptable-use", version: REQUIRED_VERSIONS["acceptable-use"] }],
+    });
+    expect(stale.status).toBe(403);
+    expect(stale.body.error.code).toBe("forbidden");
+
+    // Accepting the current versions creates the account and stores one record per document.
+    const ok = await anon.json<{ token: string }>("POST", "/auth/register", { email, password: "correct-horse-battery", name: "Accepts", accepted: CLICKWRAP });
+    expect(ok.status).toBe(201);
+    const api = client(ok.body.token);
+    const agreements = await api.json<{ accepted: Array<{ document: string; version: string }>; pending: unknown[]; history: Array<{ statement: string; source: string; ip: string | null; userAgent: string | null }> }>("GET", "/auth/agreements");
+    expect(agreements.body.accepted.map((a) => a.document).sort()).toEqual([...REQUIRED_AGREEMENTS].sort());
+    expect(agreements.body.pending).toHaveLength(0);
+    // Evidence: the statement shown, the source, and where it came from.
+    expect(agreements.body.history[0]?.statement).toContain("I accept the");
+    expect(agreements.body.history[0]?.source).toBe("web");
+    // At least one provenance field must be captured (the in-process test client sends no user agent).
+    expect(agreements.body.history[0]?.ip ?? agreements.body.history[0]?.userAgent).toBeTruthy();
+
+    // /auth/me drives the in-app gate and must report nothing outstanding.
+    expect((await api.json<{ pendingAgreements: unknown[] }>("GET", "/auth/me")).body.pendingAgreements).toEqual([]);
+  });
+
   d("register → me → logout invalidates bearer + cookie", async () => {
     const { api, cookieApi, email, orgId } = await register();
     expect((await api.json("GET", "/auth/me")).body).toMatchObject({ user: { email } });
@@ -201,7 +243,7 @@ describe("sign-up policy (ALLOW_SIGNUP=false)", () => {
     await register(); // guarantees bootstrap is over
     expect((await closed().json("GET", "/auth/config")).body).toEqual({ signupOpen: false, inviteOnly: true });
     expect((await client().json("GET", "/auth/config")).body).toEqual({ signupOpen: true, inviteOnly: false });
-    const res = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `late-${uniq()}@example.com`, password: "correct-horse-battery", name: "Late" });
+    const res = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `late-${uniq()}@example.com`, password: "correct-horse-battery", name: "Late", accepted: CLICKWRAP });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("signup_closed");
   });
@@ -217,16 +259,16 @@ describe("sign-up policy (ALLOW_SIGNUP=false)", () => {
     expect((await client().json<{ invitation: { email: string } }>("GET", `/invitations/${token}`)).body.invitation).toMatchObject({ email, role: "member" });
     expect((await client().json("GET", `/invitations/not-a-real-token`)).status).toBe(404);
 
-    const wrongEmail = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `other-${uniq()}@example.com`, password: "correct-horse-battery", name: "Other", inviteToken: token });
+    const wrongEmail = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `other-${uniq()}@example.com`, password: "correct-horse-battery", name: "Other", inviteToken: token, accepted: CLICKWRAP });
     expect(wrongEmail.status).toBe(400);
     expect(wrongEmail.body.error.code).toBe("invitation_email_mismatch");
-    const joined = await closed().json<{ token: string; joined: { organizationId: string; role: string } }>("POST", "/auth/register", { email, password: "correct-horse-battery", name: "Invitee", inviteToken: token });
+    const joined = await closed().json<{ token: string; joined: { organizationId: string; role: string } }>("POST", "/auth/register", { email, password: "correct-horse-battery", name: "Invitee", inviteToken: token, accepted: CLICKWRAP });
     expect(joined.status).toBe(201);
     expect(joined.body.joined).toEqual({ organizationId: owner.orgId, role: "member" });
     expect((await client(joined.body.token).json("GET", `/orgs/${owner.orgId}`)).status).toBe(200);
     const orgs = await client(joined.body.token).json<{ organizations: { organizationId: string }[] }>("GET", "/orgs");
     expect(orgs.body.organizations.map((o) => o.organizationId)).toEqual([owner.orgId]);
-    const replay = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `again-${uniq()}@example.com`, password: "correct-horse-battery", name: "Again", inviteToken: token });
+    const replay = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `again-${uniq()}@example.com`, password: "correct-horse-battery", name: "Again", inviteToken: token, accepted: CLICKWRAP });
     expect(replay.status).toBe(400);
     expect(replay.body.error.code).toBe("invalid_invitation");
   });

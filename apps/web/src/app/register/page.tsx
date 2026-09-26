@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { clickwrapCopy } from "@steward/legal";
 import { AuthForm } from "@/components/auth-form";
 import { Icon } from "@/components/icons";
 import { getAuthConfig, getMeOptional } from "@/lib/server";
@@ -12,7 +13,7 @@ export default async function RegisterPage() {
   if (me.user) redirect("/app");
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
-      <Suspense>{authConfig.signupOpen ? <AuthForm mode="register" /> : <SignupClosed />}</Suspense>
+      <Suspense>{authConfig.signupOpen ? <AuthForm mode="register" agreements={clickwrapCopy()} /> : <SignupClosed />}</Suspense>
     </main>
   );
 }
