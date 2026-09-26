@@ -48,15 +48,16 @@ previously red `main` green: boot verification, all unit/integration suites, and
 
 ## P1 — perfect the existing product
 
-Verified by [PR #7](https://github.com/ronavkarumsi04/steward/pull/7) (merge `aa0c4f5`) and
-[PR #9](https://github.com/ronavkarumsi04/steward/pull/9) (merge `c32d449`): `Lint, typecheck, test, boot
-verification` green on both merge commits, golden path re-run, pages checked in a real browser.
+Verified by [PR #7](https://github.com/ronavkarumsi04/steward/pull/7) (merge `aa0c4f5`),
+[PR #9](https://github.com/ronavkarumsi04/steward/pull/9) (merge `c32d449`) and
+[PR #11](https://github.com/ronavkarumsi04/steward/pull/11) (merge `0cb929b`): `Lint, typecheck, test, boot
+verification` green on all three merge commits, golden path re-run, pages checked in a real browser.
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | Founder Command Center: what needs you, ranked, with the reason | ✅ | ranked ownership queue (`lib/attention.ts`, 15 tests) + panel; `3f9b4b6` |
 | 2 | Run Inspector: what a run actually did, step by step, from durable rows | ✅ | timeline + verdict built only from stored rows (`lib/run-inspection.ts`, 28 tests); a run is a verified success only when its stored verification says `passed`; `e26ae98` |
-| 3 | Approvals UX: decide from the workspace with the policy reason in front of you | ⬜ | |
+| 3 | Approvals UX: decide from the workspace with the policy reason in front of you | ✅ | decision surface on the command center, run page and approvals list: the rule is quoted verbatim and labelled by code, the payload is decoded and open beside an editable copy, every blast-radius line names its source, and a yes that would resume nothing says so (`lib/approval-review.ts`, 35 tests; code-base policy vocabulary proved against the real engine in `packages/policy`); `resolve` commits the decision before signalling, so an unreachable workflow no longer returns a 500 for a recorded decision and the failed hand-off becomes an `approval.signal_failed` event; `e71a83e` |
 | 4 | Command palette beyond navigation: run, cancel, approve, assign | ⬜ | exists for navigation only |
 | 5 | Agent evals: regression suites that score agents on real tasks | ⬜ | |
 | 6 | Event-driven Autopilot: react to signals, not just schedules | ⬜ | |
