@@ -139,6 +139,10 @@ export const smtpDefinition: IntegrationDefinition = {
     { key: "user", label: "Username", secret: false },
     { key: "password", label: "Password", secret: true },
     { key: "secure", label: "Implicit TLS (true for port 465)", secret: false, placeholder: "false" },
+    // The sending tool reads a from address off the integration before falling back to the deployment's
+    // platform sender, so an SMTP connection has to be able to store one: without it, a connected server can
+    // be reached and still refuse every send for want of a sender.
+    { key: "fromAddress", label: "From address", secret: false, placeholder: "Steward <hi@yourdomain.com>" },
   ],
   docsUrl: "https://nodemailer.com/smtp/",
   actions: emailActions,

@@ -9,11 +9,14 @@ import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
 import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
+import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
 import type { TenantScope } from "@steward/schema";
 import type { WorkflowClient } from "@steward/workflows";
 import { createApp } from "./app.js";
 import { CompanionHub } from "./companion-hub.js";
+import { runEvalSuite, SCRIPT_FOR_BACKEND } from "./test/eval-harness.js";
+import { startSmtpSink, type SmtpSink } from "./test/smtp-sink.js";
 import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
@@ -613,6 +616,70 @@ describe("webhooks", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].p).not.toContain("should-not-persist");
     expect((await app.request("http://api.test/v1/webhooks/unknown", { method: "POST", body: "{}" })).status).toBe(404);
+  });
+});
+
+/**
+ * The agent eval suite, run against the real database and a real HTTP provider.
+ *
+ * Each case gets its own organisation and its own scripted provider, is driven through the same runtime the
+ * worker uses, and is then judged only on the rows the product wrote. "Green" here means every rule the suite
+ * defends held — and nothing was left unverified, because a case that could not be checked has not passed.
+ */
+describe("agent evals (scripted backends, in-process runtime)", () => {
+  d("holds every rule the suite defends, with nothing unverified", async () => {
+    const providers: StubProvider[] = [];
+    const sinks: SmtpSink[] = [];
+    try {
+      const { scorecard, text } = await runEvalSuite({
+        services,
+        createOrg: async (backend) => {
+          // The backend decides what the scripted model does: what it reaches for, and what its reviewer says.
+          const provider = await startStubProvider({ script: SCRIPT_FOR_BACKEND[backend], failFirstChat: backend === "provider-outage" });
+          providers.push(provider);
+          const { orgId, userId, api } = await register(backend);
+          const installed = await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: provider.apiKey, baseUrl: provider.baseUrl });
+          expect(installed.status).toBe(201);
+          // A case about an email leaving the building needs somewhere for it to go: a real SMTP endpoint, so the
+          // product's own send path runs end to end and the message can be checked afterwards.
+          const sink = backend === "scripted-outbound" ? await startSmtpSink() : null;
+          if (sink) sinks.push(sink);
+          return {
+            orgId,
+            userId,
+            api,
+            afterCompany: sink
+              ? async (companyId) => {
+                  const connected = await api.json("POST", `/orgs/${orgId}/integrations`, {
+                    type: "smtp",
+                    label: "Eval SMTP",
+                    companyId,
+                    fields: { host: sink.host, port: String(sink.port), secure: "false", fromAddress: "steward@eval.test" },
+                  });
+                  expect(connected.status).toBe(201);
+                }
+              : undefined,
+          };
+        },
+      });
+
+      // The scorecard goes into the log, so a green run still says what was proved and on which backend.
+      console.log(`\n${text}\n`);
+      const notPassing = scorecard.cases
+        .filter((c) => c.status !== "pass")
+        .map((c) => `${c.id} [${c.status}]: ${c.checks.filter((k) => k.status !== "pass").map((k) => `${k.name} — ${k.detail}`).join(" | ")}`);
+      expect(notPassing).toEqual([]);
+      expect(scorecard.summary).toMatchObject({ total: SUITE.length, fail: 0, unverified: 0 });
+      expect(scorecard.byAgent.length).toBeGreaterThan(0);
+
+      // The outbound cases are only evidence if mail actually arrived: check the other side of the wire.
+      const received = sinks.flatMap((s) => s.messages);
+      expect(received.length).toBeGreaterThan(0);
+      expect(received.some((m) => m.to.includes("beta@example.com"))).toBe(true);
+    } finally {
+      await Promise.all(providers.map((p) => p.close()));
+      await Promise.all(sinks.map((s) => s.close()));
+    }
   });
 });
 

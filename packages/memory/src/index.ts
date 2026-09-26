@@ -15,6 +15,8 @@ export interface MemoryRecord {
   importance: number;
   tags: string[];
   createdAt: Date;
+  /** The run that produced this memory, when a run produced it. Provenance a founder can check. */
+  createdByRunId: string | null;
   score?: number;
 }
 
@@ -50,7 +52,7 @@ export interface MemoryServiceOptions {
 }
 
 function toRecord(row: typeof memories.$inferSelect, score?: number): MemoryRecord {
-  return { id: row.id, kind: row.kind as MemoryKind, scope: row.scope, title: row.title, content: row.content, confidence: Number(row.confidence), importance: row.importance, tags: row.tags, createdAt: row.createdAt, score };
+  return { id: row.id, kind: row.kind as MemoryKind, scope: row.scope, title: row.title, content: row.content, confidence: Number(row.confidence), importance: row.importance, tags: row.tags, createdAt: row.createdAt, createdByRunId: row.createdByRunId ?? null, score };
 }
 
 /**

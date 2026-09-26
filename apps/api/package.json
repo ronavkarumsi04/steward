@@ -26,6 +26,7 @@
     "@steward/core": "workspace:*",
     "@steward/crypto": "workspace:*",
     "@steward/db": "workspace:*",
+    "@steward/evals": "workspace:*",
     "@steward/integrations": "workspace:*",
     "@steward/legal": "workspace:*",
     "@steward/memory": "workspace:*",
