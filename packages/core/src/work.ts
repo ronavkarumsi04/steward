@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
-import type { AgentKind, RunStatus, StepKind, TaskStatus, TenantScope } from "@steward/schema";
+import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -183,10 +183,15 @@ export class RunService {
     return r ?? null;
   }
 
-  async create(scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
+  /**
+   * Creates the run row. The caller may supply the id and the workflow id, which is what makes launching a run
+   * recoverable: the row records the workflow that is supposed to drive it *before* the workflow is started, so
+   * a run left behind by a Temporal outage can be found and started later instead of becoming an orphan.
+   */
+  async create(scope: TenantScope, input: { id?: string; agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
     return this.db.transaction(async (tx) => {
       await assertScopedProject(tx, scope, input.projectId);
-      const [r] = await tx.insert(agentRuns).values({ organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
+      const [r] = await tx.insert(agentRuns).values({ ...(input.id ? { id: input.id } : {}), organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null, sourceSignalId: input.trigger.sourceSignalId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}), ...(input.trigger.sourceSignalId ? { signalId: input.trigger.sourceSignalId } : {}) } });
       return r!;
     });
@@ -196,8 +201,25 @@ export class RunService {
     await this.db.update(agentRuns).set({ workflowId, workflowRunId: workflowRunId ?? null, updatedAt: new Date() }).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, id)));
   }
 
+  /**
+   * Moves a run to a new status. The transition is checked against the live row under a row lock, so a run
+   * that has already reached an outcome cannot be reopened by a late activity — for example a run the founder
+   * cancelled while its workflow was already finishing successfully. A refused transition is recorded as an
+   * event and returns null rather than throwing, because it is a race the caller cannot fix by retrying.
+   */
   async setStatus(scope: TenantScope, id: string, status: RunStatus, extra: Partial<{ error: string | null; result: Record<string, unknown> | null; plan: Record<string, unknown> | null; workflowRunId: string; iterations: number }> = {}) {
     return this.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: agentRuns.status })
+        .from(agentRuns)
+        .where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, id)))
+        .for("update")
+        .limit(1);
+      if (!current) return null;
+      if (!canTransitionRun(current.status as RunStatus, status)) {
+        await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.status_rejected", actor: scope.actor, payload: { runId: id, from: current.status, to: status, reason: "illegal transition" }, correlation: { runId: id } });
+        return null;
+      }
       const set: Record<string, unknown> = { status, updatedAt: new Date(), ...extra };
       if (status === "building_context") set.startedAt = new Date();
       if (["succeeded", "failed", "cancelled", "needs_review"].includes(status)) set.finishedAt = new Date();
@@ -221,7 +243,7 @@ export class RunService {
 
   async beginStep(scope: TenantScope, runId: string, step: { kind: StepKind; title: string; input?: unknown; idempotencyKey?: string }) {
     return this.db.transaction(async (tx) => {
-      const [{ n } = { n: 0 }] = await tx.select({ n: sql<number>`coalesce(max(${agentRunSteps.stepIndex}), -1)::int + 1` }).from(agentRunSteps).where(eq(agentRunSteps.runId, runId));
+      const [{ n } = { n: 0 }] = await tx.select({ n: sql<number>`coalesce(max(${agentRunSteps.stepIndex}), -1)::int + 1` }).from(agentRunSteps).where(scoped(scope, { organizationId: agentRunSteps.organizationId, companyId: agentRunSteps.companyId }, eq(agentRunSteps.runId, runId)));
       const [s] = await tx.insert(agentRunSteps).values({ organizationId: scope.organizationId, companyId: scope.companyId!, runId, stepIndex: n, kind: step.kind, title: step.title.slice(0, 300), input: step.input ?? null, idempotencyKey: step.idempotencyKey ?? null }).returning();
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.step", actor: scope.actor, payload: { runId, stepId: s!.id, stepIndex: n, kind: step.kind, title: s!.title, status: "running" }, correlation: { runId } });
       return s!;
@@ -229,13 +251,16 @@ export class RunService {
   }
 
   async setStepInput(scope: TenantScope, stepId: string, input: unknown) {
-    await this.db.update(agentRunSteps).set({ input }).where(and(eq(agentRunSteps.id, stepId), eq(agentRunSteps.organizationId, scope.organizationId)));
+    // Both tenant ids, always: a step belongs to a company inside an organization, and matching only the
+    // organization would let one company's run rewrite another's step within the same tenant.
+    await this.db.update(agentRunSteps).set({ input }).where(scoped(scope, { organizationId: agentRunSteps.organizationId, companyId: agentRunSteps.companyId }, eq(agentRunSteps.id, stepId)));
   }
 
   async finishStep(scope: TenantScope, stepId: string, result: { status: "succeeded" | "failed" | "skipped"; output?: unknown; error?: string }) {
     return this.db.transaction(async (tx) => {
       const [prev] = await tx.select().from(agentRunSteps).where(eq(agentRunSteps.id, stepId)).limit(1);
       if (!prev || prev.organizationId !== scope.organizationId) return null;
+      if (scope.companyId && prev.companyId !== scope.companyId) return null;
       const finished = new Date();
       const [s] = await tx.update(agentRunSteps).set({ status: result.status, output: result.output ?? null, error: result.error?.slice(0, 4000) ?? null, finishedAt: finished, durationMs: finished.getTime() - prev.startedAt.getTime() }).where(eq(agentRunSteps.id, stepId)).returning();
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.step", actor: scope.actor, payload: { runId: prev.runId, stepId, stepIndex: prev.stepIndex, kind: prev.kind, title: prev.title, status: result.status, error: result.error }, correlation: { runId: prev.runId } });
@@ -407,7 +432,7 @@ export class ConversationService {
     });
   }
   async updateMessage(scope: TenantScope, id: string, patch: { content?: string; parts?: unknown[]; status?: string }) {
-    const [m] = await this.db.update(messages).set(patch).where(and(eq(messages.id, id), eq(messages.organizationId, scope.organizationId))).returning();
+    const [m] = await this.db.update(messages).set(patch).where(scoped(scope, { organizationId: messages.organizationId, companyId: messages.companyId }, eq(messages.id, id))).returning();
     return m ?? null;
   }
   async setTitle(scope: TenantScope, id: string, title: string) {

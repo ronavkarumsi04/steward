@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AgentServiceFactory } from "@steward/agents";
 import { StripeClient } from "@steward/integrations";
 import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
-import type { WorkflowClient } from "@steward/workflows";
+import { runWorkflowId, type WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus } from "@steward/core";
@@ -16,7 +17,15 @@ async function requireProject(services: AgentServiceFactory, scope: TenantScope,
   if (projectId && !(await services.projects.get(scope, projectId))) throw new HttpError(404, "not_found", "Project not found");
 }
 
-/** Creates a run row, binds it to its Temporal workflow id, and starts the workflow. Exposed for chat + task routes. */
+/**
+ * Creates a run row, binds it to its Temporal workflow id, and starts the workflow. Exposed for chat + task routes.
+ *
+ * The ordering is deliberate. A run's workflow id is derived from its run id, so the row is written *with* the
+ * workflow that is meant to drive it, and only then is that workflow started. Starting is idempotent (see
+ * `WorkflowClient.startRun`), which means a launch can be retried safely and a reconciler can finish a launch
+ * that was interrupted. If Temporal is down the row is left queued with its workflow id recorded, and the caller
+ * is told the work is pending — rather than the run existing in the database while nothing will ever run it.
+ */
 export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event"; sourceSignalId?: string }) {
   if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
   const company = await services.companies.get(scope);
@@ -24,10 +33,25 @@ export async function launchRun(services: AgentServiceFactory, workflows: Workfl
   const agent = await services.agents.get(scope, input.agentId);
   if (!agent || !agent.enabled) throw new HttpError(404, "not_found", "Agent not found or disabled");
   await requireProject(services, scope, input.projectId);
-  const run = await services.runs.create(scope, { agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined, sourceSignalId: input.sourceSignalId } });
-  const wf = await workflows.startRun({ runId: run.id, scope: { organizationId: scope.organizationId, companyId: scope.companyId! } });
-  await services.runs.attachWorkflow(scope, run.id, wf.workflowId, wf.workflowRunId);
-  return { ...run, workflowId: wf.workflowId, workflowRunId: wf.workflowRunId };
+  const runId = randomUUID();
+  const run = await services.runs.create(scope, {
+    id: runId,
+    workflowId: runWorkflowId(runId),
+    agentId: input.agentId,
+    taskId: input.taskId ?? null,
+    projectId: input.projectId ?? null,
+    conversationId: input.conversationId ?? null,
+    trigger: { kind: input.kind, instruction: input.instruction, conversationId: input.conversationId ?? undefined, sourceSignalId: input.sourceSignalId },
+  });
+  try {
+    const wf = await workflows.startRun({ runId: run.id, scope: { organizationId: scope.organizationId, companyId: scope.companyId! } });
+    await services.runs.attachWorkflow(scope, run.id, wf.workflowId, wf.workflowRunId);
+    return { ...run, workflowId: wf.workflowId, workflowRunId: wf.workflowRunId };
+  } catch (e) {
+    // Recovery, not deletion: the row stays queued with its workflow id, the reconciler starts it, and the
+    // caller is told the work is pending rather than that it began.
+    throw new HttpError(503, "workflow_start_failed", `The run was recorded as ${run.id} but its workflow could not be started (${e instanceof Error ? e.message : String(e)}). It will be retried automatically.`);
+  }
 }
 
 export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: EventBus | null) {
@@ -57,7 +81,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/tasks", tag: "tasks", summary: "List tasks", query: z.object({ status: csv(TaskStatus), agentId: z.string().optional(), goalId: z.string().optional(), projectId: ID.optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const s = c.get("deps").services;
-    return c.json({ tasks: await s.tasks.list(scope, { status: query.status, assigneeAgentId: query.agentId, goalId: query.goalId, limit: query.limit }), counts: await s.tasks.counts(scope) });
+    return c.json({ tasks: await s.tasks.list(scope, { status: query.status, assigneeAgentId: query.agentId, goalId: query.goalId, projectId: query.projectId, limit: query.limit }), counts: await s.tasks.counts(scope) });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/tasks", tag: "tasks", summary: "Create a task (optionally start a run for it immediately)", body: z.object({ title: z.string().min(1).max(300), description: z.string().max(20000).optional(), priority: TaskPriority.optional(), assigneeAgentId: ID.nullable().optional(), goalId: ID.nullable().optional(), projectId: ID.nullable().optional(), parentTaskId: ID.nullable().optional(), dueAt: z.iso.datetime().optional(), start: z.boolean().optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
@@ -159,10 +183,20 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     if (!conversation) throw new HttpError(404, "not_found");
     const agentId = body.agentId ?? conversation.agentId ?? (await s.agents.byKind(scope, "orchestrator"))?.id;
     if (!agentId) throw new HttpError(422, "no_agent", "No orchestrator agent available");
-    const message = await s.conversations.addMessage(scope, { conversationId: conversation.id, role: "user", content: body.content });
-    const run = await launchRun(s, deps.workflows, scope, { agentId, conversationId: conversation.id, instruction: body.content, projectId: conversation.projectId, kind: "chat" });
+    // The message is stored as pending and only settled once the run exists. If the run cannot start the
+    // message is kept — the person did write it — but marked failed, so the transcript never implies that
+    // work began when nothing was ever launched.
+    const message = await s.conversations.addMessage(scope, { conversationId: conversation.id, role: "user", content: body.content, status: "pending" });
+    let run;
+    try {
+      run = await launchRun(s, deps.workflows, scope, { agentId, conversationId: conversation.id, instruction: body.content, projectId: conversation.projectId, kind: "chat" });
+    } catch (e) {
+      await s.conversations.updateMessage(scope, message.id, { status: "failed" });
+      throw e;
+    }
+    await s.conversations.updateMessage(scope, message.id, { status: "complete" });
     if (!conversation.title) await s.conversations.setTitle(scope, conversation.id, body.content.slice(0, 80));
-    return c.json({ message, run }, 201);
+    return c.json({ message: { ...message, status: "complete" }, run }, 201);
   });
 
   // ---- approvals ----

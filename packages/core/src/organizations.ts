@@ -79,12 +79,18 @@ export class OrganizationService {
   async acceptInvitation(userId: string, token: string) {
     const hash = hashToken(token);
     return this.db.transaction(async (tx) => {
-      const [inv] = await tx.select().from(invitations).where(and(eq(invitations.tokenHash, hash), isNull(invitations.acceptedAt), gt(invitations.expiresAt, new Date()))).limit(1);
-      if (!inv) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
       const [u] = await tx.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-      if (!u || u.email.toLowerCase() !== inv.email) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
+      if (!u) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
+      // Claim the invitation with a conditional UPDATE so two concurrent accepts cannot both succeed; the
+      // predicate is re-checked after the row lock, so the loser sees no row and is rejected.
+      const [inv] = await tx
+        .update(invitations)
+        .set({ acceptedAt: new Date() })
+        .where(and(eq(invitations.tokenHash, hash), isNull(invitations.acceptedAt), gt(invitations.expiresAt, new Date())))
+        .returning();
+      if (!inv) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
+      if (u.email.toLowerCase() !== inv.email) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
       await tx.insert(memberships).values({ organizationId: inv.organizationId, userId, role: inv.role }).onConflictDoUpdate({ target: [memberships.organizationId, memberships.userId], set: { role: inv.role } });
-      await tx.update(invitations).set({ acceptedAt: new Date() }).where(eq(invitations.id, inv.id));
       await tx.insert(auditLog).values({ organizationId: inv.organizationId, actor: { type: "user", userId }, action: "invitation.accepted", target: inv.id, metadata: { role: inv.role } });
       return { organizationId: inv.organizationId, role: inv.role as Role };
     });
