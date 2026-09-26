@@ -10,6 +10,7 @@ import {
   suppressionList,
   users,
   type Db,
+  type DbOrTx,
 } from "@steward/db";
 import { AuthError } from "./auth.js";
 
@@ -87,6 +88,18 @@ export const EXPORT_EXCLUSIONS: Array<{ table: string; reason: string }> = [
   { table: "sessions", reason: "Contains session token hashes. Exporting them would expose your own sessions." },
   { table: "email_verifications", reason: "Contains one-time token hashes that could still be valid." },
 ];
+
+/**
+ * Progress of a long-running privacy job. Large tenants can outlive one request, so the unit of work is
+ * a table: whatever is already listed in `completed` is not re-read or re-deleted by a retry.
+ */
+export interface PrivacyJobProgress {
+  phase: string;
+  completed: string[];
+  pending: string[];
+  rows: number;
+  updatedAt: string;
+}
 
 export class PrivacyError extends Error {
   constructor(readonly code: "last_owner" | "not_found" | "invalid_confirmation" | "invalid_token", message: string) {
@@ -190,15 +203,23 @@ export class PrivacyService {
    * Builds a machine-readable archive of everything the caller may export for an organization.
    * Uses a whitelist of table names (never user input) with parameterized values.
    */
-  async exportOrganization(organizationId: string): Promise<ExportArchive> {
+  async exportOrganization(organizationId: string, opts: { skipTables?: string[]; onProgress?: (progress: PrivacyJobProgress) => Promise<void> | void } = {}): Promise<ExportArchive> {
     const data: Record<string, unknown[]> = {};
     const included: Record<string, number> = {};
     const excluded = new Set(EXPORT_EXCLUSIONS.map((e) => e.table));
-    for (const { table, column } of await tenantTables(this.db)) {
-      if (excluded.has(table)) continue;
+    const already = new Set(opts.skipTables ?? []);
+    // One table is one unit of work: a large tenant can outlive a single request, so the caller can pass
+    // back the tables it already received and resume instead of re-reading everything from the start.
+    const tables = (await tenantTables(this.db)).filter((t) => !excluded.has(t.table) && !already.has(t.table));
+    const completed: string[] = [...already];
+    let rowsSoFar = 0;
+    for (const { table, column } of tables) {
       const rows = (await this.db.execute(sql`select * from ${sql.identifier(table)} where ${sql.identifier(column)} = ${organizationId}`)).rows as unknown[];
       included[table] = rows.length;
       data[table] = rows;
+      completed.push(table);
+      rowsSoFar += rows.length;
+      await opts.onProgress?.({ phase: "exporting", completed: [...completed], pending: tables.slice(completed.length - already.size).map((t) => t.table), rows: rowsSoFar, updatedAt: new Date().toISOString() });
     }
     // Rows the organization owns that are not scoped by company.
     const orgMembers = (await this.db.execute(sql`select m.*, u.email, u.name from memberships m join users u on u.id = m.user_id where m.organization_id = ${organizationId}`)).rows as unknown[];
@@ -255,38 +276,46 @@ export class PrivacyService {
    * Deletes an organization and everything in it, except suppression records (kept to honor
    * opt-outs) and the privacy-request log (kept as proof of compliance).
    */
-  async deleteOrganization(organizationId: string, actorUserId: string) {
-    const [membership] = await this.db
-      .select({ role: memberships.role })
-      .from(memberships)
-      .where(and(eq(memberships.organizationId, organizationId), eq(memberships.userId, actorUserId)))
-      .limit(1);
-    if (!membership || membership.role !== "owner") throw new PrivacyError("not_found", "Organization not found or you are not its owner");
+  async deleteOrganization(organizationId: string, actorUserId: string, exec?: DbOrTx) {
+    // A deletion is all-or-nothing. Running the ~60 statements that clear a tenant one at a time meant a
+    // failure half-way left an unopenable, half-erased organization behind. The whole job now runs inside a
+    // single transaction, so a crash rolls back to a complete organization and a retry starts cleanly —
+    // which is what makes the job safely resumable rather than merely re-runnable.
+    const run = async (tx: DbOrTx) => {
+      const [membership] = await tx
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(and(eq(memberships.organizationId, organizationId), eq(memberships.userId, actorUserId)))
+        .limit(1);
+      if (!membership || membership.role !== "owner") throw new PrivacyError("not_found", "Organization not found or you are not its owner");
 
-    const deleted: Record<string, number> = {};
-    const retained = new Set(RETAINED_ON_ORG_DELETE);
-    // Companies first: every other tenant table hangs off a company, and the FK cascades take care
-    // of rows that are scoped by company rather than organization.
-    const companies = (await this.db.execute(sql`delete from "companies" where "organization_id" = ${organizationId}`)).rowCount ?? 0;
-    deleted.companies = companies;
-    for (const { table, column } of await tenantTables(this.db)) {
-      if (retained.has(table) || table === "companies") continue;
-      const res = await this.db.execute(sql`delete from ${sql.identifier(table)} where ${sql.identifier(column)} = ${organizationId}`);
-      deleted[table] = res.rowCount ?? 0;
-    }
-    for (const table of ["invitations", "memberships"]) {
-      const res = await this.db.execute(sql`delete from ${sql.identifier(table)} where "organization_id" = ${organizationId}`);
-      deleted[table] = res.rowCount ?? 0;
-    }
-    // Any remaining rows that kept a company reference (ON DELETE set null) are cleared, then the org.
-    await this.db.execute(sql`delete from "privacy_requests" where "organization_id" = ${organizationId}`);
-    await this.db.execute(sql`delete from "organizations" where "id" = ${organizationId}`);
-    return { organizationId, deleted, retained: RETAINED_ON_ORG_DELETE };
+      const deleted: Record<string, number> = {};
+      const retained = new Set(RETAINED_ON_ORG_DELETE);
+      // Companies first: every other tenant table hangs off a company, and the FK cascades take care
+      // of rows that are scoped by company rather than organization.
+      const companies = (await tx.execute(sql`delete from "companies" where "organization_id" = ${organizationId}`)).rowCount ?? 0;
+      deleted.companies = companies;
+      for (const { table, column } of await tenantTables(tx as Db)) {
+        if (retained.has(table) || table === "companies") continue;
+        const res = await tx.execute(sql`delete from ${sql.identifier(table)} where ${sql.identifier(column)} = ${organizationId}`);
+        deleted[table] = res.rowCount ?? 0;
+      }
+      for (const table of ["invitations", "memberships"]) {
+        const res = await tx.execute(sql`delete from ${sql.identifier(table)} where "organization_id" = ${organizationId}`);
+        deleted[table] = res.rowCount ?? 0;
+      }
+      // Any remaining rows that kept a company reference (ON DELETE set null) are cleared, then the org.
+      await tx.execute(sql`delete from "privacy_requests" where "organization_id" = ${organizationId}`);
+      await tx.execute(sql`delete from "organizations" where "id" = ${organizationId}`);
+      return { organizationId, deleted, retained: RETAINED_ON_ORG_DELETE };
+    };
+    return exec ? run(exec) : this.db.transaction(run);
   }
 
   /**
    * Deletes a user account. Organizations the user solely owns are deleted with it; organizations
    * with other members and other owners are refused so a team cannot be destroyed by accident.
+   * The refusal is checked before anything is removed, and the removal itself is one transaction.
    */
   async deleteAccount(userId: string) {
     const [user] = await this.db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
@@ -309,28 +338,49 @@ export class PrivacyService {
         blocked.push({ organizationId, name: org?.name ?? organizationId });
         continue;
       }
-      await this.deleteOrganization(organizationId, userId);
+      // Collected here; actually removed below, together, in one transaction.
       removed.push(organizationId);
     }
     if (blocked.length) {
       throw new PrivacyError("last_owner", `You are the only owner of ${blocked.map((b) => `"${b.name}"`).join(", ")}. Transfer ownership to another member or delete the organization first, then delete your account.`);
     }
 
-    await this.recordRequest({ userId: null, email: user.email, kind: "deletion", status: "fulfilled", details: "Account deletion performed in-app (self-service).", resolutionNote: `Organizations deleted: ${removed.length}. Suppression records retained to honor opt-outs.` });
-    await this.db.delete(users).where(eq(users.id, userId));
+    // One transaction across every organization and the account itself: a failure cannot leave the person
+    // locked out of an account that still holds data, nor leave a deleted account inside a live organization.
+    await this.db.transaction(async (tx) => {
+      for (const organizationId of removed) await this.deleteOrganization(organizationId, userId, tx);
+      await tx.insert(privacyRequests).values({
+        userId: null,
+        organizationId: null,
+        email: user.email.toLowerCase(),
+        kind: "deletion",
+        status: "fulfilled",
+        details: "Account deletion performed in-app (self-service).",
+        resolutionNote: `Organizations deleted: ${removed.length}. Suppression records retained to honor opt-outs.`,
+        fulfilledAt: new Date(),
+      });
+      await tx.delete(users).where(eq(users.id, userId));
+    });
     return { deletedOrganizations: removed, retained: ["suppression_list", "privacy_requests"] };
   }
 
   // ---------- suppression and consent ----------
 
+  /**
+   * Records an opt-out. Suppression, the contact flag and the consent record must agree: if any of them
+   * fails the whole thing rolls back and the caller is told, because a half-recorded opt-out is one that
+   * says "unsubscribed" to the person and "send to them" to the sender.
+   */
   async suppress(input: { organizationId: string; companyId: string; channel: "email" | "sms" | "social"; address: string; reason: string }) {
     const address = input.address.trim();
-    await this.db.insert(suppressionList).values({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address, reason: input.reason }).onConflictDoNothing();
-    if (input.channel === "email") {
-      await this.db.update(contacts).set({ optedOutAt: new Date() }).where(and(eq(contacts.companyId, input.companyId), sql`lower(${contacts.email}) = ${address.toLowerCase()}`));
-    }
-    await this.revokeConsent({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address, reason: input.reason, source: "inbound" });
-    return true;
+    return this.db.transaction(async (tx) => {
+      await tx.insert(suppressionList).values({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address, reason: input.reason }).onConflictDoNothing();
+      if (input.channel === "email") {
+        await tx.update(contacts).set({ optedOutAt: new Date() }).where(and(eq(contacts.companyId, input.companyId), sql`lower(${contacts.email}) = ${address.toLowerCase()}`));
+      }
+      await this.revokeConsent({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address, reason: input.reason, source: "inbound" }, tx);
+      return true;
+    });
   }
 
   async isSuppressed(companyId: string, channel: string, address: string) {
@@ -358,15 +408,38 @@ export class PrivacyService {
     return row!;
   }
 
-  async revokeConsent(input: { organizationId: string; companyId: string; channel: string; address: string; reason: string; source: string }) {
-    await this.db
+  /**
+   * Revokes consent. This deliberately propagates failures: the previous version swallowed them, so a
+   * database problem left the person marked as consented while the product told them they were opted out.
+   */
+  async revokeConsent(input: { organizationId: string; companyId: string; channel: string; address: string; reason: string; source: string }, exec: DbOrTx = this.db) {
+    await exec
       .insert(messagingConsents)
       .values({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address: input.address.trim(), status: "revoked", source: input.source, evidence: input.reason, revokedAt: new Date() })
       .onConflictDoUpdate({
         target: [messagingConsents.companyId, messagingConsents.channel, messagingConsents.address],
         set: { status: "revoked", evidence: input.reason, revokedAt: new Date(), updatedAt: new Date() },
-      })
-      .catch(() => undefined);
+      });
+  }
+
+  /** Persists job progress on the request row so a large export or deletion can be resumed by a retry. */
+  async setProgress(requestId: string, progress: PrivacyJobProgress) {
+    const [row] = await this.db
+      .update(privacyRequests)
+      .set({ progress: progress as unknown as Record<string, unknown>, updatedAt: new Date() })
+      .where(eq(privacyRequests.id, requestId))
+      .returning({ id: privacyRequests.id, progress: privacyRequests.progress });
+    return row ?? null;
+  }
+
+  /** Closes a request with its outcome, keeping the progress the job reported. */
+  async finishRequest(requestId: string, input: { status: "fulfilled" | "refused"; resolutionNote: string; progress?: PrivacyJobProgress }) {
+    const [row] = await this.db
+      .update(privacyRequests)
+      .set({ status: input.status, resolutionNote: input.resolutionNote, fulfilledAt: input.status === "fulfilled" ? new Date() : null, updatedAt: new Date(), ...(input.progress ? { progress: input.progress as unknown as Record<string, unknown> } : {}) })
+      .where(eq(privacyRequests.id, requestId))
+      .returning();
+    return row ?? null;
   }
 
   /** Consent state for a specific address: null means "no record", which SMS treats as no consent. */
