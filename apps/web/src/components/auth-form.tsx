@@ -95,7 +95,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
         <fieldset className="space-y-3">
           <legend className="label mb-2">Before you create your account</legend>
           <label className="flex items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} aria-describedby="clickwrap-hint" />
+            <input id="agreements" name="agreements" type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} aria-describedby="clickwrap-hint" required />
             <span>
               I agree to the{" "}
               {agreements.map((a, i) => (

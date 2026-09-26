@@ -175,15 +175,21 @@ export class AuthService {
   }
 
   async consumeEmailToken(token: string, purpose: "verify_email" | "reset_password") {
-    const [row] = await this.db
-      .select()
-      .from(emailVerifications)
-      .where(and(eq(emailVerifications.tokenHash, hashToken(token)), eq(emailVerifications.purpose, purpose), isNull(emailVerifications.usedAt), gt(emailVerifications.expiresAt, new Date())))
-      .limit(1);
-    if (!row) throw new AuthError("expired", "This link is invalid or has expired");
-    await this.db.update(emailVerifications).set({ usedAt: new Date() }).where(eq(emailVerifications.id, row.id));
-    if (purpose === "verify_email") await this.db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, row.userId));
-    return row.userId;
+    const hash = hashToken(token);
+    // Consuming a one-time token must be a single atomic decision. The previous select-then-update let two
+    // concurrent requests both observe `usedAt IS NULL` and both proceed, so a link that must work once could
+    // mint two password resets or two verified sessions. A conditional UPDATE re-checks its predicate after
+    // taking the row lock, so exactly one caller ever sees a row.
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(emailVerifications)
+        .set({ usedAt: new Date() })
+        .where(and(eq(emailVerifications.tokenHash, hash), eq(emailVerifications.purpose, purpose), isNull(emailVerifications.usedAt), gt(emailVerifications.expiresAt, new Date())))
+        .returning();
+      if (!row) throw new AuthError("expired", "This link is invalid or has expired");
+      if (purpose === "verify_email") await tx.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, row.userId));
+      return row.userId;
+    });
   }
 
   async resetPassword(userId: string, newPassword: string) {

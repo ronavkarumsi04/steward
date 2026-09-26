@@ -59,7 +59,9 @@ export class SignalService {
         customerRef: input.customerRef?.slice(0, 500) ?? null,
         data: input.data ?? {},
         occurredAt: input.occurredAt ?? new Date(),
-      }).onConflictDoNothing({ target: [businessSignals.provider, businessSignals.externalId] }).returning();
+        // Deduplication is scoped to the company: the same external id from another tenant is a different
+        // signal, and must never be swallowed by this one's uniqueness.
+      }).onConflictDoNothing({ target: [businessSignals.companyId, businessSignals.provider, businessSignals.externalId] }).returning();
       const signal = rows[0] ?? (await tx.select().from(businessSignals).where(scoped(scope, { organizationId: businessSignals.organizationId, companyId: businessSignals.companyId }, eq(businessSignals.provider, input.provider), eq(businessSignals.externalId, input.externalId))).limit(1))[0];
       if (!signal) throw new Error("Signal ingestion failed");
       if (rows[0]) await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "signal.received", actor: scope.actor, payload: { signalId: signal.id, provider: signal.provider, kind: signal.kind, title: signal.title, severity: signal.severity, projectId: signal.projectId }, correlation: { signalId: signal.id, ...(signal.projectId ? { projectId: signal.projectId } : {}) } });

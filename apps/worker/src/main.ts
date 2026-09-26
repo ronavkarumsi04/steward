@@ -1,14 +1,14 @@
 import "dotenv/config";
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { NativeConnection, Runtime, Worker, DefaultLogger, type LogLevel } from "@temporalio/worker";
 import { AgentServiceFactory } from "@steward/agents";
 import { createCoreContext, internalServiceToken, loadConfig, type ApprovalSignal } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandbox";
-import { WorkflowClient, connectTemporal, temporalConfigFromEnv } from "@steward/workflows";
+import { WorkflowClient, connectTemporal, temporalConfigFromEnv, temporalTlsMaterial } from "@steward/workflows";
 import { createActivities } from "./activities.js";
 import { HttpCompanionBridge } from "./companion-bridge.js";
+import { startReconcileJob } from "./reconcile-job.js";
 import { startRetentionJob } from "./retention-job.js";
 
 const require = createRequire(import.meta.url);
@@ -23,18 +23,20 @@ function sandboxFromEnv(env: NodeJS.ProcessEnv): SandboxProvider | undefined {
   return new LocalDockerSandboxProvider();
 }
 
-async function nativeTls(cfg: ReturnType<typeof temporalConfigFromEnv>) {
-  if (cfg.tls?.clientCertPath && cfg.tls.clientKeyPath) {
-      return { clientCertPair: { crt: await readFile(cfg.tls.clientCertPath), key: await readFile(cfg.tls.clientKeyPath) }, serverRootCACertificate: cfg.tls.serverRootCACertPath ? await readFile(cfg.tls.serverRootCACertPath) : undefined };
-  }
-  return cfg.apiKey?.trim() ? true : undefined;
-}
-
 async function main() {
   const config = loadConfig();
   const core = createCoreContext(config, "worker");
   const log = core.log;
   const temporal = temporalConfigFromEnv();
+
+  // The worker is nothing without Temporal, so a deployment that disabled it should say so and stop rather
+  // than retry a connection that will never succeed. The parsing itself is shared with the API and the
+  // embedded runtime, so all three agree on what the environment means.
+  if ((process.env.TEMPORAL_DISABLED ?? "").trim() === "true") {
+    log.warn("TEMPORAL_DISABLED=true: the worker has no task queue to serve; exiting");
+    await core.pool.end();
+    return;
+  }
 
   if (process.env.RUN_MIGRATIONS_ON_START !== "false") {
     await runMigrations();
@@ -63,7 +65,7 @@ async function main() {
   });
   const activities = createActivities({ core, factory, sandbox, approvalSignal });
 
-  const connection = await NativeConnection.connect({ address: temporal.address, tls: await nativeTls(temporal), apiKey: temporal.apiKey });
+  const connection = await NativeConnection.connect({ address: temporal.address, tls: await temporalTlsMaterial(temporal), apiKey: temporal.apiKey });
   const worker = await Worker.create({
     connection,
     namespace: temporal.namespace,
@@ -85,6 +87,10 @@ async function main() {
   // Enforces the published retention windows (expired sessions and tokens, old activity events and
   // webhook logs) without needing an external scheduler.
   startRetentionJob(core.db, log);
+
+  // Repairs the states a distributed failure can leave behind: launches that never started, runs that stopped
+  // moving, approvals whose run already finished, and tasks waiting on an approval that no longer exists.
+  startReconcileJob(core.db, log, { start: (input) => workflows.startRun(input) });
 
   log.info({ taskQueue: temporal.taskQueue, namespace: temporal.namespace, address: temporal.address, sandbox: !!sandbox }, "steward worker ready");
   await worker.run();

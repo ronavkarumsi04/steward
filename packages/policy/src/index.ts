@@ -151,3 +151,5 @@ export function isQuietHours(now: Date, quiet: { start: string; end: string } | 
   const end = toMin(quiet.end);
   return start <= end ? cur >= start && cur < end : cur >= start || cur < end;
 }
+
+export { assessApprovalPayload, canonicalJson, needsFreshApproval, payloadFingerprint, type ApprovalPayloadAssessment } from "./approval.js";

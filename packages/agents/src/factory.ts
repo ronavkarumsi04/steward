@@ -48,7 +48,7 @@ export class AgentServiceFactory {
     this.conversations = new ConversationService(db);
     this.integrations = new IntegrationService(db, crypto, { apiUrl: config.apiUrl, oauthClient: (p) => oauthClientFromEnv(p, this.env) });
     this.growth = new GrowthService(db);
-    this.providers = new ProviderCredentialService(db, crypto);
+    this.providers = new ProviderCredentialService(db, crypto, this.o.core.log);
     this.events = new EventService(db);
     this.signals = new SignalService(db);
     this.companion = new CompanionService(db);

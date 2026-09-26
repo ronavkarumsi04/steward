@@ -110,6 +110,33 @@ export const RunStatus = z.enum([
 ]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
+/** A run that has reached one of these is finished: its result and cost are final. */
+export const RUN_TERMINAL_STATUSES: RunStatus[] = ["succeeded", "failed", "cancelled"];
+
+export function isTerminalRunStatus(status: RunStatus): boolean {
+  return RUN_TERMINAL_STATUSES.includes(status);
+}
+
+/**
+ * Whether a run may move from one status to another. Deliberately narrow: it rejects the transitions that
+ * are always wrong (re-opening a finished run, and pretending a queued run jumped straight to a result),
+ * while leaving the execution phases themselves free to interleave — the runtime legitimately goes
+ * executing → waiting_approval → executing, and verifying → needs_review → executing after a human redirect.
+ */
+export function canTransitionRun(from: RunStatus, to: RunStatus): boolean {
+  if (from === to) return true; // idempotent re-writes are normal (activity retries)
+  if (isTerminalRunStatus(from)) return false; // a finished run stays finished
+  if (isTerminalRunStatus(to)) return true;
+  if (from === "queued") return true; // first marker: the workflow attaches and starts working
+  // A run cannot claim an outcome before it has recorded any work at all.
+  if (from === "needs_review" && to === "queued") return false;
+  return true;
+}
+
+export function assertRunTransition(from: RunStatus, to: RunStatus): void {
+  if (!canTransitionRun(from, to)) throw new Error(`Illegal run transition ${from} → ${to}: a finished run cannot leave ${from}`);
+}
+
 export const StepKind = z.enum([
   "context",
   "plan",
@@ -253,9 +280,11 @@ export const EventType = z.enum([
   "task.completed",
   "run.created",
   "run.status",
+  "run.status_rejected",
   "run.step",
   "run.tool_call",
   "run.completed",
+  "run.reconciled",
   "approval.requested",
   "approval.resolved",
   "approval.expired",
@@ -336,3 +365,26 @@ export const Paginated = <T extends z.ZodTypeAny>(item: T) =>
 
 export const RISK_ORDER: Record<RiskLevel, number> = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
 export const TIER_ORDER: Record<QualityTier, number> = { economy: 0, standard: 1, premium: 2, frontier: 3 };
+
+/**
+ * How a run's verification was reached. Distinct from `passed` on purpose: "the reviewer said no" and
+ * "we could not review at all" are different facts, and only one of them means the work was checked.
+ * `unverified` must route to `needs_review`, never to success.
+ */
+export const VerificationVerdict = z.enum(["passed", "failed", "unverified"]);
+export type VerificationVerdict = z.infer<typeof VerificationVerdict>;
+
+/**
+ * Normalizes a verification record into a verdict, defensively: `passed` is returned only when the
+ * record explicitly says so. A contradictory record (verdict "passed" with `passed: false`) and a
+ * record with no verdict at all both fall back to the boolean, which can only ever downgrade.
+ */
+export function verificationVerdict(v: { passed?: boolean | null; verdict?: VerificationVerdict | null } | null | undefined): VerificationVerdict {
+  if (!v) return "unverified";
+  if (v.verdict === "unverified") return "unverified";
+  if (v.verdict === "failed") return "failed";
+  if (v.passed === true) return "passed";
+  if (v.passed === false) return "failed";
+  // A verdict of "passed" without `passed: true` grants nothing: there is no evidence to rest on.
+  return "unverified";
+}

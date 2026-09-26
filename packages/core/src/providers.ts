@@ -31,7 +31,12 @@ const SECRET_CONFIG_KEYS = ["serviceAccountJson", "secretAccessKey", "sessionTok
  * `resolveForGateway`, which is used inside the worker/API process, never serialized to clients.
  */
 export class ProviderCredentialService {
-  constructor(private readonly db: Db, private readonly crypto: EnvelopeCrypto) {}
+  constructor(
+    private readonly db: Db,
+    private readonly crypto: EnvelopeCrypto,
+    /** Optional structured logger; used to surface telemetry failures that must not be swallowed. */
+    private readonly log?: { warn: (obj: unknown, msg?: string) => void },
+  ) {}
 
   private aad(orgId: string, id: string) {
     return `provider_credential:${orgId}:${id}`;
@@ -93,8 +98,15 @@ export class ProviderCredentialService {
       }
       set.status = "unverified";
     }
-    const [saved] = await this.db.update(providerCredentials).set(set).where(eq(providerCredentials.id, id)).returning();
-    return this.view(saved!);
+    // Scoped in the write itself, not only in the read above it: a credential id from another organization
+    // must be unwritable even if a future caller skips the lookup.
+    const [saved] = await this.db
+      .update(providerCredentials)
+      .set(set)
+      .where(and(eq(providerCredentials.id, id), eq(providerCredentials.organizationId, scope.organizationId)))
+      .returning();
+    if (!saved) throw new Error(`Provider credential ${id} not found in this organization`);
+    return this.view(saved);
   }
 
   async delete(scope: TenantScope, id: string) {
@@ -182,7 +194,16 @@ export class ProviderCredentialService {
       }
       if (scope.companyId && rec.costUsd > 0 && opts.budgets) await opts.budgets.charge(scope, "ai", rec.costUsd, { refType: "ai_call", refId: rec.context?.runId });
     });
-    return new AIGateway({ loadCredentials: () => this.resolveForGateway(scope), recordUsage: record, companionBridge: opts.bridge });
+    return new AIGateway({
+      loadCredentials: () => this.resolveForGateway(scope),
+      recordUsage: record,
+      companionBridge: opts.bridge,
+      // Telemetry failures are reported rather than swallowed, and never attributed to the model call: a
+      // successful response whose usage row did not persist is a bookkeeping problem (and unrecorded spend),
+      // not an AI failure.
+      onTelemetryError: ({ stage, error, record: rec }) =>
+        this.log?.warn({ stage, err: error instanceof Error ? error.message : String(error), runId: rec?.context?.runId, provider: rec?.provider, model: rec?.model, costUsd: rec?.costUsd, costEstimated: rec?.costEstimated }, "usage recording failed; spend may be under-recorded"),
+    });
   }
 
   async routingPolicy(scope: TenantScope, purpose: string): Promise<RoutingPolicy> {

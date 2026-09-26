@@ -451,6 +451,9 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     expect(final).toContain("Positioning saved");
     const verification = await rt.verify(runId, ctx, final);
     expect(verification.passed).toBe(true);
+    // The verdict is explicit, so "the reviewer approved" is distinguishable from "verification crashed".
+    expect(verification.verdict).toBe("passed");
+    expect(verification.score).toBe(92);
     await rt.finalize(runId, { status: "succeeded", finalText: final, verification });
 
     // Wire-level assertions on what the runtime sent.

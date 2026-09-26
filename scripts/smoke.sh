@@ -11,8 +11,12 @@ J='-H content-type:application/json -H x-steward-csrf:1'
 req() { curl -sS -b /tmp/steward.cookies -c /tmp/steward.cookies $J "$@"; }
 rm -f /tmp/steward.cookies
 
+# Registration is clickwrap-gated, so ask the API which contract documents are current rather than
+# hard-coding versions here: a document revision then cannot turn this smoke test into a false failure.
+ACCEPTED=$(req "$API/v1/legal/documents" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(json.dumps([{"document":a["document"],"version":a["version"]} for a in d["requiredAgreements"]]))')
+
 echo "== register"
-REG=$(req -X POST "$API/v1/auth/register" -d "{\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery\",\"name\":\"Smoke\"}")
+REG=$(req -X POST "$API/v1/auth/register" -d "{\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery\",\"name\":\"Smoke\",\"accepted\":$ACCEPTED}")
 ORG=$(echo "$REG" | python3 -c 'import sys,json;print(json.load(sys.stdin)["organization"]["id"])')
 echo "org=$ORG"
 

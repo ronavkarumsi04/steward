@@ -30,12 +30,9 @@ export interface ApiRuntime {
   close(): Promise<void>;
 }
 
-/** How long to wait for Temporal before giving up and serving without workflow support. */
-const TEMPORAL_CONNECT_TIMEOUT_MS = Number(process.env.TEMPORAL_CONNECT_TIMEOUT_MS ?? 10_000);
-
-async function connectTemporalWithTimeout(timeoutMs: number): Promise<WorkflowClient | null> {
+async function connectTemporalWithTimeout(env: NodeJS.ProcessEnv, timeoutMs: number): Promise<WorkflowClient | null> {
   const { WorkflowClient, connectTemporal, temporalConfigFromEnv } = await import("@steward/workflows");
-  const temporal = temporalConfigFromEnv();
+  const temporal = temporalConfigFromEnv(env);
   const client = await Promise.race([
     connectTemporal(temporal),
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs).unref()),
@@ -60,9 +57,10 @@ export async function createApiRuntime(options: RuntimeOptions = {}): Promise<Ap
   }
 
   let workflows: WorkflowClient | null = null;
-  if (env.TEMPORAL_DISABLED !== "true") {
+  if ((env.TEMPORAL_DISABLED ?? "").trim() !== "true") {
     try {
-      workflows = await connectTemporalWithTimeout(TEMPORAL_CONNECT_TIMEOUT_MS);
+      const { temporalConnectTimeoutMs } = await import("@steward/workflows");
+      workflows = await connectTemporalWithTimeout(env, temporalConnectTimeoutMs(env));
       log.info({ address: env.TEMPORAL_ADDRESS, namespace: env.TEMPORAL_NAMESPACE }, "temporal connected");
     } catch (e) {
       log.error({ err: e instanceof Error ? e.message : String(e) }, "temporal unavailable; runs cannot be started until it is reachable");

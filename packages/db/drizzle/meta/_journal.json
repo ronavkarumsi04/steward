@@ -64,6 +64,13 @@
       "when": 1790304000000,
       "tag": "0008_legal_consent_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790390400000,
+      "tag": "0009_tenant_invariants",
+      "breakpoints": true
     }
   ]
 }

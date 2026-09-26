@@ -1,0 +1,167 @@
+/**
+ * Reconciliation and run-lifecycle tests against a real PostgreSQL (DATABASE_URL). Skipped when the database
+ * is unreachable so unit-only runs still pass.
+ *
+ * These cover the failures that only appear when something else failed first: a launch lost to a Temporal
+ * outage, a run that stopped moving, an approval whose run already finished, and a task parked waiting for an
+ * approval that no longer exists. They also pin the run state machine, because the reconciliation path depends
+ * on a finished run staying finished.
+ */
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { createDb, type Db } from "@steward/db";
+import type { TenantScope } from "@steward/schema";
+import pg from "pg";
+import { AuthService } from "./auth.js";
+import { CompanyService } from "./companies.js";
+import { ApprovalService } from "./approvals.js";
+import { ReconcileService } from "./reconcile.js";
+import { AgentService, RunService, TaskService } from "./work.js";
+
+const url = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
+let available = false;
+let db: Db;
+let pool: pg.Pool;
+const uniq = () => Math.random().toString(36).slice(2, 10);
+
+beforeAll(async () => {
+  try {
+    const probe = new pg.Pool({ connectionString: url, connectionTimeoutMillis: 1500 });
+    await probe.query("select 1");
+    await probe.end();
+    available = true;
+  } catch {
+    available = false;
+    return;
+  }
+  ({ db, pool } = createDb(url));
+});
+afterAll(async () => {
+  await pool?.end();
+});
+
+const d = (name: string, fn: () => Promise<void>) =>
+  it(name, async () => {
+    if (!available) {
+      console.warn(`skipped (no database at ${url}): ${name}`);
+      return;
+    }
+    await fn();
+  });
+
+/** A registered owner with a company (which seeds the default agents) and its tenant scope. */
+async function tenant() {
+  const auth = new AuthService(db);
+  const reg = await auth.register({ email: `r-${uniq()}@example.com`, password: "correct horse battery", name: "Owner" });
+  const orgScope: TenantScope = { organizationId: reg.organization.id, userId: reg.user.id, role: "owner", actor: { type: "user", userId: reg.user.id } };
+  const company = await new CompanyService(db).create(orgScope, { name: `Reconcile ${uniq()}` });
+  const scope: TenantScope = { ...orgScope, companyId: company.id };
+  const agent = (await new AgentService(db).list(scope)).find((a) => a.kind === "orchestrator")!;
+  return { scope, agentId: agent.id, userId: reg.user.id };
+}
+
+async function backdate(runId: string, interval: string) {
+  await db.execute(sql.raw(`update agent_runs set created_at = now() - interval '${interval}', updated_at = now() - interval '${interval}' where id = '${runId}'`));
+}
+
+describe("run state machine", () => {
+  d("refuses to reopen a finished run and keeps the durable status", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Finish" } });
+    expect(await runs.setStatus(scope, run.id, "executing")).not.toBeNull();
+    expect((await runs.setStatus(scope, run.id, "succeeded", { result: { summary: "done" } }))?.status).toBe("succeeded");
+
+    // A late activity trying to rewrite the outcome is refused, and the run keeps its real result.
+    expect(await runs.setStatus(scope, run.id, "failed", { error: "late failure" })).toBeNull();
+    const after = await runs.get(scope, run.id);
+    expect(after?.status).toBe("succeeded");
+    expect(after?.error).toBeNull();
+
+    // Idempotent re-writes of the same status stay allowed: activity retries are normal.
+    expect((await runs.setStatus(scope, run.id, "succeeded"))?.status).toBe("succeeded");
+  });
+});
+
+describe("reconciliation", () => {
+  d("starts a run whose launch was lost, instead of leaving it queued forever", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const runId = crypto.randomUUID();
+    const run = await runs.create(scope, { id: runId, workflowId: `run-${runId}`, agentId, trigger: { kind: "user", instruction: "Lost launch" } });
+    expect(run.status).toBe("queued");
+
+    const started: string[] = [];
+    const service = new ReconcileService(db, { start: async (input) => void started.push(input.runId) });
+    const report = await service.sweep({ queuedGraceMs: 0 });
+    expect(started).toContain(runId);
+    expect(report.startsRetried).toBeGreaterThanOrEqual(1);
+    expect((await runs.get(scope, runId))?.status).toBe("queued"); // still queued: the workflow owns it now
+  });
+
+  d("marks a stalled run for human review rather than leaving it 'executing'", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Stall" } });
+    await runs.setStatus(scope, run.id, "executing");
+    await backdate(run.id, "7 hours");
+
+    const report = await new ReconcileService(db, null).sweep({ staleAfterMs: 6 * 60 * 60 * 1000 });
+    expect(report.runsMarkedStale).toBeGreaterThanOrEqual(1);
+    const after = await runs.get(scope, run.id);
+    expect(after?.status).toBe("needs_review");
+    expect(after?.error).toContain("stalled");
+  });
+
+  d("never touches a run that is legitimately waiting for approval", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Wait" } });
+    await runs.setStatus(scope, run.id, "waiting_approval");
+    await backdate(run.id, "7 hours");
+
+    await new ReconcileService(db, null).sweep({ staleAfterMs: 6 * 60 * 60 * 1000 });
+    expect((await runs.get(scope, run.id))?.status).toBe("waiting_approval");
+  });
+
+  d("expires approvals whose run already finished", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const approvals = new ApprovalService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Approve then finish" } });
+    const approval = await approvals.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "x@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 3600, runId: run.id });
+    await runs.setStatus(scope, run.id, "executing");
+    await runs.setStatus(scope, run.id, "succeeded", { result: { summary: "done" } });
+
+    const report = await new ReconcileService(db, null).sweep();
+    expect(report.approvalsExpired).toBeGreaterThanOrEqual(1);
+    expect((await approvals.get(scope, approval.id))?.status).toBe("expired");
+  });
+
+  d("releases a task parked on an approval that no longer exists", async () => {
+    const { scope, agentId } = await tenant();
+    const tasks = new TaskService(db);
+    const runs = new RunService(db);
+    const task = await tasks.create(scope, { title: "Parked", assigneeAgentId: agentId });
+    const run = await runs.create(scope, { agentId, taskId: task.id, trigger: { kind: "task", instruction: "Parked work" } });
+    await tasks.update(scope, task.id, { status: "waiting_approval" });
+    await runs.setStatus(scope, run.id, "failed", { error: "provider outage" });
+
+    const report = await new ReconcileService(db, null).sweep();
+    expect(report.tasksReleased).toBeGreaterThanOrEqual(1);
+    expect((await tasks.get(scope, task.id))?.status).toBe("review");
+  });
+
+  d("fails a run that never had a workflow and can no longer be adopted", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Orphan" } });
+    await backdate(run.id, "2 days");
+
+    const report = await new ReconcileService(db, null).sweep({ giveUpAfterMs: 24 * 60 * 60 * 1000 });
+    expect(report.runsFailedWithoutWorkflow).toBeGreaterThanOrEqual(1);
+    const after = await runs.get(scope, run.id);
+    expect(after?.status).toBe("failed");
+    expect(after?.error).toContain("No workflow ever ran this run");
+  });
+});

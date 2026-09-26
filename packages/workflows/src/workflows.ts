@@ -1,4 +1,5 @@
 import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
+import { verificationVerdict } from "@steward/schema";
 import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
 
 const APPROVAL_TIMEOUT = "3 days";
@@ -48,8 +49,11 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
 
   const finish = async (outcome: Parameters<AgentActivities["finalize"]>[0]["outcome"]) => {
     phase = "finalizing";
-    await bookkeeping.finalize({ ...input, outcome });
-    return { status: outcome.status };
+    // The activity reports back the status the database holds. If the run was finished another way in the
+    // meantime (a founder cancelling mid-flight), the workflow reports that truthfully instead of the
+    // outcome it was aiming for.
+    const finalized = await bookkeeping.finalize({ ...input, outcome });
+    return { status: finalized?.status ?? outcome.status };
   };
 
   try {
@@ -75,7 +79,10 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
         case "done": {
           phase = "verifying";
           const verification = await model.verify({ ...input, ctx, finalText: outcome.finalText });
-          return finish({ status: verification.passed ? "succeeded" : "needs_review", finalText: outcome.finalText, verification });
+          // Only an explicit pass succeeds. `needs_review` covers both a reviewer who said no and a reviewer
+          // that never ran (`unverified`): work nobody reviewed must never be reported as finished.
+          const verdict = verificationVerdict(verification);
+          return finish({ status: verdict === "passed" ? "succeeded" : "needs_review", finalText: outcome.finalText, verification });
         }
         case "needs_approval": {
           phase = "waiting_approval";

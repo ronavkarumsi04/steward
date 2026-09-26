@@ -599,7 +599,9 @@ export const businessSignals = pgTable("business_signals", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [
-  uniqueIndex("business_signals_provider_external_idx").on(t.provider, t.externalId),
+  // Deduplication is per tenant: the same external id from two different companies must not collide
+  // (or, worse, let one company's signal block another's).
+  uniqueIndex("business_signals_company_provider_external_idx").on(t.companyId, t.provider, t.externalId),
   index("business_signals_company_state_idx").on(t.companyId, t.state, t.occurredAt),
   index("business_signals_project_idx").on(t.projectId, t.occurredAt),
 ]);
@@ -831,6 +833,12 @@ export const privacyRequests = pgTable("privacy_requests", {
   resolutionNote: text("resolution_note"),
   verifiedAt: ts("verified_at"),
   fulfilledAt: ts("fulfilled_at"),
+  /**
+   * Where a long-running job got to (phase, tables completed, rows handled). Large tenants can outlive a
+   * single request, so the export and the deletion write their checkpoint here and a retry resumes from it
+   * instead of starting over or, worse, claiming success for work that never happened.
+   */
+  progress: json<Record<string, unknown>>("progress"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [index("privacy_requests_status_idx").on(t.status, t.createdAt), index("privacy_requests_user_idx").on(t.userId, t.createdAt)]);

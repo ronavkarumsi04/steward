@@ -35,15 +35,33 @@ export function registerPrivacyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     async (c, { query }) => {
       const user = requireUser(c);
       const svc = new PrivacyService(c.get("deps").core.db);
-      const archive = query.organizationId ? await svc.exportOrganization(orgScope(c, query.organizationId).organizationId) : await svc.exportUser(user.id);
-      await svc.recordRequest({
+      // The request row is opened before the work starts and carries the progress of the export table by table,
+      // so a large tenant can resume (and an interrupted export leaves evidence of how far it got) instead of
+      // the run being invisible until it either finishes or vanishes.
+      const request = await svc.recordRequest({
         userId: user.id,
         organizationId: query.organizationId ?? null,
         email: user.email,
         kind: "export",
-        status: "fulfilled",
-        details: query.organizationId ? "Organization export downloaded from the app." : "Personal data export downloaded from the app.",
+        status: "open",
+        details: query.organizationId ? "Organization export started from the app." : "Personal data export started from the app.",
       });
+      // When the append-only progress implies a retry, the caller may name the tables it already received so
+      // the export resumes instead of starting over.
+      const skipTables = (c.req.query("skipTables") ?? "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const archive = query.organizationId
+        ? await svc.exportOrganization(orgScope(c, query.organizationId).organizationId, {
+            skipTables,
+            onProgress: async (progress) => {
+              await svc.setProgress(request.id, progress);
+            },
+          })
+        : await svc.exportUser(user.id);
+      const completed = Object.keys(archive.manifest.included).sort();
+      await svc.finishRequest(request.id, { status: "fulfilled", resolutionNote: `Exported ${archive.manifest.counts.tables} tables / ${archive.manifest.counts.rows} rows.`, progress: { phase: "complete", completed, pending: [], rows: archive.manifest.counts.rows, updatedAt: new Date().toISOString() } });
       const stamp = new Date().toISOString().slice(0, 10);
       const name = query.organizationId ? `steward-org-export-${stamp}.json` : `steward-account-export-${stamp}.json`;
       c.header("content-disposition", `attachment; filename="${name}"`);

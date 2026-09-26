@@ -38,8 +38,14 @@ export interface UsageRecord {
 export interface GatewayOptions {
   /** Loads enabled credentials for the calling tenant. */
   loadCredentials: () => Promise<ResolvedCredential[]>;
-  /** Persist usage rows (ai_calls). */
+  /** Persist usage rows (ai_calls). Failures here are telemetry failures, never provider failures. */
   recordUsage: (rec: UsageRecord) => Promise<void>;
+  /**
+   * Called when telemetry (usage recording) fails. A model that answered successfully must not be reported as
+   * a failed AI call because the ledger write failed — but a lost row also means unrecorded spend, so it is
+   * surfaced to the caller (logged, counted) rather than swallowed.
+   */
+  onTelemetryError?: (input: { stage: string; error: unknown; record?: UsageRecord }) => void;
   companionBridge?: CompanionBridge;
   /** Optional model-catalog cache keyed by credential id. */
   modelCache?: Map<string, { at: number; models: ModelInfo[] }>;
@@ -52,6 +58,19 @@ export interface GatewayCallOptions {
   policy: RoutingPolicy;
   purpose?: string;
   context?: Record<string, string | undefined>;
+}
+
+/**
+ * Records usage without letting a bookkeeping failure change the outcome of the provider call. The distinction
+ * matters: "the model failed" and "we failed to write down what the model cost" need different responses, and
+ * only the first should trigger a retry or fail a run.
+ */
+async function recordUsageSafely(opts: GatewayOptions, rec: UsageRecord): Promise<void> {
+  try {
+    await opts.recordUsage(rec);
+  } catch (error) {
+    opts.onTelemetryError?.({ stage: "record_usage", error, record: rec });
+  }
 }
 
 export function createAdapter(providerType: string, credential: ProviderCredential, bridge?: CompanionBridge): ProviderAdapter {
@@ -192,13 +211,13 @@ export class AIGateway {
         try {
           const { result, usage } = await fn(adapter, route, model);
           const { costUsd, estimated } = estimateCost(model, usage);
-          await this.opts.recordUsage({ credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt, routingReason: route.reason, context: opts.context });
+          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt, routingReason: route.reason, context: opts.context });
           this.markSuccess(cred.id);
           return Object.assign(result as object, { route }) as T & { route: RouteChoice };
         } catch (e) {
           const err = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
           lastErr = err;
-          await this.opts.recordUsage({ credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt, routingReason: route.reason, context: opts.context });
+          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt, routingReason: route.reason, context: opts.context });
           if (err.code === "invalid_request" || err.code === "content_filter" || err.code === "context_length") {
             // Not a provider health problem; move to the next route without penalizing.
             break;
@@ -246,7 +265,7 @@ export class AIGateway {
           if (ev.type === "done") {
             usage = ev.response.usage.inputTokens || ev.response.usage.outputTokens ? ev.response.usage : usage;
             const { costUsd, estimated } = estimateCost(model, usage);
-            await this.opts.recordUsage({ credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: 0, routingReason: route.reason, context: opts.context });
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: 0, routingReason: route.reason, context: opts.context });
             this.markSuccess(cred.id);
             yield { ...ev, response: { ...ev.response, usage }, route };
             return;
@@ -258,7 +277,7 @@ export class AIGateway {
       } catch (e) {
         const err = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
         lastErr = err;
-        await this.opts.recordUsage({ credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: 0, routingReason: route.reason, context: opts.context });
+        await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: 0, routingReason: route.reason, context: opts.context });
         if (!["invalid_request", "content_filter", "context_length"].includes(err.code)) this.markFailure(cred.id, err);
         if (emitted) {
           yield { type: "error", error: err, route };
@@ -284,7 +303,7 @@ export class AIGateway {
       try {
         const res = await adapter.embed({ ...req, model: c.model.id });
         const { costUsd, estimated } = estimateCost(c.model, res.usage);
-        await this.opts.recordUsage({ credentialId: cred.id, provider: c.provider, model: c.model.id, purpose: opts.purpose ?? "embedding", usage: res.usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: 0, routingReason: explicit ? "explicit selection" : "first available embedding model", context: opts.context });
+        await recordUsageSafely(this.opts, { credentialId: cred.id, provider: c.provider, model: c.model.id, purpose: opts.purpose ?? "embedding", usage: res.usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: 0, routingReason: explicit ? "explicit selection" : "first available embedding model", context: opts.context });
         return { ...res, route: { credentialId: cred.id, provider: c.provider, model: c.model.id, reason: "embedding" } };
       } catch (e) {
         lastErr = e instanceof ProviderError ? e : new ProviderError("unknown", String(e), c.provider, false);

@@ -70,7 +70,9 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     },
 
     async finalize(input) {
-      await runtimeFor(input).finalize(input.runId, input.outcome);
+      // Returns the status the database actually holds, which may differ from the outcome the workflow
+      // intended if the run was already finished another way (for example cancelled by its founder).
+      return runtimeFor(input).finalize(input.runId, input.outcome);
     },
 
     async markRunning(input) {

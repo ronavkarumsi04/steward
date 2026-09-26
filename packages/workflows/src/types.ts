@@ -52,6 +52,12 @@ export interface Verification {
   summary: string;
   unmet: string[];
   followUps: Array<{ title: string; assigneeKind: string }>;
+  /**
+   * How the verdict was reached. `unverified` means verification did not run or crashed, which must route
+   * to `needs_review` rather than success. Absent on records written before this field existed;
+   * `verificationVerdict` (from @steward/schema) derives the verdict from `passed` for those.
+   */
+  verdict?: "passed" | "failed" | "unverified";
 }
 
 export interface FinalizeInput {
@@ -67,7 +73,8 @@ export interface AgentActivities {
   plan(input: AgentRunInput & { ctx: RunContextBundle }): Promise<{ objective: string }>;
   iterate(input: AgentRunInput & { ctx: RunContextBundle; resume?: ApprovalResumption }): Promise<IterationOutcome>;
   verify(input: AgentRunInput & { ctx: RunContextBundle; finalText: string }): Promise<Verification>;
-  finalize(input: AgentRunInput & { outcome: FinalizeInput }): Promise<void>;
+  /** Returns the run status the database holds after finalizing, which may differ from `outcome.status`. */
+  finalize(input: AgentRunInput & { outcome: FinalizeInput }): Promise<{ status: string }>;
   markRunning(input: AgentRunInput & { workflowRunId: string }): Promise<void>;
   markApprovalExpired(input: AgentRunInput & { approvalId: string }): Promise<void>;
   /** Creates a run for a schedule tick; returns null when the schedule/agent is disabled or the company is paused. */

@@ -39,6 +39,24 @@ wait_http() { # url attempts
   echo "timeout waiting for $1"; return 1
 }
 
+# A smoke call must fail loudly. Parsing an error body with python yields a bare KeyError that hides what
+# the API actually said, which is how this step spent a CI run looking like a missing response field.
+api() { # METHOD path [json-body] -> prints the response body, exits non-zero on an error status
+  local method=$1 path=$2 body=${3:-} out status
+  if [ -n "$body" ]; then
+    out=$(curl "${J[@]}" -w '\n%{http_code}' -X "$method" "$API_URL$path" -d "$body")
+  else
+    out=$(curl "${J[@]}" -w '\n%{http_code}' -X "$method" "$API_URL$path")
+  fi
+  status=$(printf '%s' "$out" | tail -n1)
+  out=$(printf '%s' "$out" | sed '$d')
+  case "$status" in
+    2*) printf '%s' "$out" ;;
+    *) echo "FAIL $method $path -> HTTP $status"; echo "$out"; exit 1 ;;
+  esac
+}
+jqn() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)"; }
+
 step "infra (docker compose: postgres, redis, temporal)"
 docker compose up -d postgres redis temporal
 for _ in $(seq 1 60); do
@@ -90,12 +108,24 @@ step "auth + tenant smoke (register → org → company → task)"
 CK=$(mktemp)
 J=(-H content-type:application/json -H x-steward-csrf:1 -sS -b "$CK" -c "$CK")
 EMAIL="boot-$(date +%s)@example.com"
-ORG=$(curl "${J[@]}" -X POST "$API_URL/v1/auth/register" -d "{\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery\",\"name\":\"Boot\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["organization"]["id"])')
-CO=$(curl "${J[@]}" -X POST "$API_URL/v1/orgs/$ORG/companies" -d '{"name":"Boot Co","autonomyLevel":1,"profile":{"description":"boot validation","stage":"idea"}}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["company"]["id"])')
-curl "${J[@]}" -X POST "$API_URL/v1/companies/$CO/tasks" -d '{"title":"Boot task","priority":"medium"}' | python3 -c 'import sys,json;t=json.load(sys.stdin)["task"];print("task:",t["id"],t["status"])'
-curl "${J[@]}" "$API_URL/v1/companies/$CO" | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["agents"], "no seeded agents";print("agents:",[a["kind"] for a in d["agents"]])'
+# Registration is clickwrap-gated: it must record acceptance of the current contract documents. Ask the API
+# which versions are current instead of hard-coding them here, so revising a document cannot silently turn
+# this smoke test into a false failure (or, worse, hide a real one).
+ACCEPTED=$(api GET /v1/legal/documents | jqn 'json.dumps([{"document":d["document"],"version":d["version"]} for d in d["requiredAgreements"]])')
+[ -n "$ACCEPTED" ] || { echo "API reported no required agreements"; exit 1; }
+ORG=$(api POST /v1/auth/register "{\"email\":\"$EMAIL\",\"password\":\"correct-horse-battery\",\"name\":\"Boot\",\"accepted\":$ACCEPTED}" | jqn 'd["organization"]["id"]')
+[ -n "$ORG" ] || { echo "register returned no organization"; exit 1; }
+CO=$(api POST "/v1/orgs/$ORG/companies" '{"name":"Boot Co","autonomyLevel":1,"profile":{"description":"boot validation","stage":"idea"}}' | jqn 'd["company"]["id"]')
+[ -n "$CO" ] || { echo "company creation returned no company"; exit 1; }
+TASK=$(api POST "/v1/companies/$CO/tasks" '{"title":"Boot task","priority":"medium"}' | jqn 'd["task"]["id"] + " " + d["task"]["status"]')
+echo "task: $TASK"
+AGENTS=$(api GET "/v1/companies/$CO" | jqn '", ".join(a["kind"] for a in d["agents"])')
+[ -n "$AGENTS" ] || { echo "no seeded agents"; exit 1; }
+echo "agents: $AGENTS"
 # through the web proxy the session cookie must be first-party as well
-curl -sS -b "$CK" "$APP_URL/api/v1/auth/me" | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["user"]["email"], d;print("web proxy /api/v1 ok")'
+ME=$(curl -sS -b "$CK" "$APP_URL/api/v1/auth/me" | jqn 'str(d["user"]["email"])')
+[ -n "$ME" ] || { echo "web proxy /api/v1/auth/me returned no user"; exit 1; }
+echo "web proxy /api/v1 ok as $ME"
 rm -f "$CK"
 
 step "playwright golden path"
