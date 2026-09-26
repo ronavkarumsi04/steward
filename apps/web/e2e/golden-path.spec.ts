@@ -66,7 +66,14 @@ test("register → onboarding → dashboard → tasks → settings → providers
   // Company command palette and keyboard navigation are available throughout the operating shell.
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeVisible();
-  await expect(page.getByLabel("Search company pages")).toBeFocused();
+  const palette = page.getByLabel("Search or type a command");
+  await expect(palette).toBeFocused();
+  // A company with nothing waiting is told so, rather than shown a blank line that reads like a failed load.
+  await expect(page.getByText(/nothing awaiting a decision/)).toBeVisible();
+  // Typing narrows to the thing itself: a page name reaches its page from the keyboard.
+  await palette.fill("settings");
+  await expect(page.getByRole("option").first()).toContainText("Settings");
+  await palette.fill("");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeHidden();
   await page.keyboard.press("g");
@@ -97,6 +104,28 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByText("Draft positioning statement")).toBeVisible();
   await page.reload();
   await expect(page.getByText("Draft positioning statement")).toBeVisible();
+
+  // The palette is a work surface, not a menu. The task that was just created is reachable as work to start or
+  // hand over, and nothing runs until the founder reads what it would do and confirms it.
+  await page.keyboard.press("Control+k");
+  await page.getByLabel("Search or type a command").fill("positioning statement");
+  await expect(page.getByRole("option", { name: /Run “Draft positioning statement”/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /(Assign|Reassign) “Draft positioning statement”/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  // Choosing to run asks which agent first, and lists only agents that could actually do it.
+  await expect(page.getByLabel("Choose the agent")).toBeFocused();
+  await expect(page.getByRole("option", { name: /Run “Draft positioning statement” with / }).first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  // Then it states the consequences — the same reasons the decision surface gives — before anything starts.
+  await expect(page.getByRole("group", { name: /Start a run for “Draft positioning statement”/ })).toBeVisible();
+  await expect(page.getByText(/stops for approval wherever your policies require it/)).toBeVisible();
+  // Escape backs out one step at a time, and the run was never started.
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Choose the agent")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Search or type a command")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeHidden();
 
   // Runs: whichever deployment this is, the run surface has to stay honest. With Temporal connected (CI
   // starts one) the run is created and the inspector must describe it; on a checkout without Temporal the

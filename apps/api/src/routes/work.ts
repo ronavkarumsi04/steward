@@ -149,8 +149,14 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const run = await deps.services.runs.get(scope, param(c, "id"));
     if (!run) throw new HttpError(404, "not_found");
     const signalled = deps.workflows ? await deps.workflows.cancelRun(run.id, body.reason) : false;
-    if (!signalled && !["succeeded", "failed", "cancelled", "needs_review"].includes(run.status)) await deps.services.runs.setStatus(scope, run.id, "cancelled", { error: body.reason ?? "cancelled by user" });
-    return c.json({ ok: true, signalled });
+    // With no workflow to signal, a run in a cancellable state is stopped here and now. The two outcomes are
+    // not the same thing to the person who pressed the button, so the response says which one happened and
+    // what the run's status is as a result.
+    if (!signalled && !["succeeded", "failed", "cancelled", "needs_review"].includes(run.status)) {
+      const stopped = await deps.services.runs.setStatus(scope, run.id, "cancelled", { error: body.reason ?? "cancelled by user" });
+      return c.json({ ok: true, signalled, status: stopped?.status ?? run.status });
+    }
+    return c.json({ ok: true, signalled, status: run.status });
   });
 
   // ---- chat ----
