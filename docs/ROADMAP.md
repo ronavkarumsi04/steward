@@ -48,13 +48,14 @@ previously red `main` green: boot verification, all unit/integration suites, and
 
 ## P1 — perfect the existing product
 
-Verified by [PR #7](https://github.com/ronavkarumsi04/steward/pull/7) (merge `aa0c4f5`): `Lint, typecheck, test,
-boot verification` green, golden path re-run, panel checked in a real browser.
+Verified by [PR #7](https://github.com/ronavkarumsi04/steward/pull/7) (merge `aa0c4f5`) and
+[PR #9](https://github.com/ronavkarumsi04/steward/pull/9) (merge `c32d449`): `Lint, typecheck, test, boot
+verification` green on both merge commits, golden path re-run, pages checked in a real browser.
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | Founder Command Center: what needs you, ranked, with the reason | ✅ | ranked ownership queue (`lib/attention.ts`, 15 tests) + panel; `3f9b4b6` |
-| 2 | Run Inspector: what a run actually did, step by step, from durable rows | ⬜ | |
+| 2 | Run Inspector: what a run actually did, step by step, from durable rows | ✅ | timeline + verdict built only from stored rows (`lib/run-inspection.ts`, 28 tests); a run is a verified success only when its stored verification says `passed`; `e26ae98` |
 | 3 | Approvals UX: decide from the workspace with the policy reason in front of you | ⬜ | |
 | 4 | Command palette beyond navigation: run, cancel, approve, assign | ⬜ | exists for navigation only |
 | 5 | Agent evals: regression suites that score agents on real tasks | ⬜ | |
