@@ -8,7 +8,12 @@ async function register(page: Page) {
   await page.getByLabel("Your name").fill("E2E Founder");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Create account" }).click();
+  // Registration is clickwrap-gated: the submit button stays disabled until the current terms, privacy and
+  // acceptable-use documents are accepted, so a test that skips this would hang on a disabled button.
+  await page.getByRole("checkbox", { name: /I agree to the/i }).check();
+  const submit = page.getByRole("button", { name: "Create account" });
+  await expect(submit).toBeEnabled();
+  await submit.click();
   await page.waitForURL(/\/app(\/new)?$/);
   return email;
 }
