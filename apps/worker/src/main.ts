@@ -9,6 +9,7 @@ import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandb
 import { WorkflowClient, connectTemporal, temporalConfigFromEnv } from "@steward/workflows";
 import { createActivities } from "./activities.js";
 import { HttpCompanionBridge } from "./companion-bridge.js";
+import { startRetentionJob } from "./retention-job.js";
 
 const require = createRequire(import.meta.url);
 
@@ -80,6 +81,10 @@ async function main() {
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+  // Enforces the published retention windows (expired sessions and tokens, old activity events and
+  // webhook logs) without needing an external scheduler.
+  startRetentionJob(core.db, log);
 
   log.info({ taskQueue: temporal.taskQueue, namespace: temporal.namespace, address: temporal.address, sandbox: !!sandbox }, "steward worker ready");
   await worker.run();

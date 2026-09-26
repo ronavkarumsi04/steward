@@ -12,3 +12,5 @@ export * from "./integrations.js";
 export * from "./companion.js";
 export * from "./mailer.js";
 export * from "./growth.js";
+export * from "./privacy.js";
+export * from "./retention.js";

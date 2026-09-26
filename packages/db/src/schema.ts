@@ -29,6 +29,10 @@ export const users = pgTable("users", {
   name: text("name").notNull().default(""),
   avatarUrl: text("avatar_url"),
   isSuperadmin: boolean("is_superadmin").notNull().default(false),
+  // Optional marketing consent, kept separate from the contractual clickwrap: consent must be a
+  // distinct, freely given act, and it has to be withdrawable without affecting the account.
+  marketingOptInAt: ts("marketing_opt_in_at"),
+  marketingOptOutAt: ts("marketing_opt_out_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex("users_email_idx").on(sql`lower(${t.email})`)]);
@@ -573,7 +577,7 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
   payload: json<unknown>("payload"),
   error: text("error"),
   createdAt: createdAt(),
-}, (t) => [uniqueIndex("webhook_replay_idx").on(t.provider, t.externalId)]);
+}, (t) => [uniqueIndex("webhook_replay_idx").on(t.provider, t.externalId), index("webhook_deliveries_created_idx").on(t.createdAt)]);
 
 export const businessSignals = pgTable("business_signals", {
   id: id(),
@@ -626,7 +630,7 @@ export const events = pgTable("events", {
   payload: json<Record<string, unknown>>("payload").notNull().default({}),
   correlation: json<Record<string, string>>("correlation").notNull().default({}),
   createdAt: createdAt(),
-}, (t) => [index("events_company_seq_idx").on(t.companyId, t.seq), index("events_org_seq_idx").on(t.organizationId, t.seq)]);
+}, (t) => [index("events_company_seq_idx").on(t.companyId, t.seq), index("events_org_seq_idx").on(t.organizationId, t.seq), index("events_created_idx").on(t.createdAt)]);
 
 export const auditLog = pgTable("audit_log", {
   id: id(),
@@ -792,3 +796,61 @@ export const financialSnapshots = pgTable("financial_snapshots", {
   metrics: json<Record<string, number>>("metrics").notNull(),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex("fin_snap_idx").on(t.companyId, t.source, t.periodKey)]);
+
+// ---------- Legal agreements, consent and privacy requests ----------
+
+/**
+ * Evidence of clickwrap acceptance. One row per document version a user accepted, keeping the
+ * exact statement shown, the version, the timestamp, and the source (IP + user agent) so an
+ * acceptance can be proven later. Never updated or deleted while the account exists.
+ */
+export const agreements = pgTable("agreements", {
+  id: id(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  document: text("document").notNull(), // terms|privacy|acceptable-use
+  version: text("version").notNull(),
+  statement: text("statement").notNull(),
+  source: text("source").notNull().default("web"), // web|api|cli|migration
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  acceptedAt: ts("accepted_at").notNull().defaultNow(),
+}, (t) => [uniqueIndex("agreements_user_doc_version_idx").on(t.userId, t.document, t.version), index("agreements_user_idx").on(t.userId, t.document, t.acceptedAt)]);
+
+/**
+ * A logged, verifiable record of an access/export/correction/deletion request, including requests
+ * that arrive by email rather than through the app.
+ */
+export const privacyRequests = pgTable("privacy_requests", {
+  id: id(),
+  organizationId: text("organization_id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  email: text("email").notNull(),
+  kind: text("kind").notNull(), // access|export|correction|deletion|objection|opt_out
+  status: text("status").notNull().default("open"), // open|verified|fulfilled|refused
+  details: text("details").notNull().default(""),
+  resolutionNote: text("resolution_note"),
+  verifiedAt: ts("verified_at"),
+  fulfilledAt: ts("fulfilled_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("privacy_requests_status_idx").on(t.status, t.createdAt), index("privacy_requests_user_idx").on(t.userId, t.createdAt)]);
+
+/**
+ * Consent evidence per channel and address. An outbound SMS requires a granted, unrevoked consent
+ * record; an inbound STOP revokes it. Email consent is tracked the same way, with the suppression
+ * list acting as the hard block.
+ */
+export const messagingConsents = pgTable("messaging_consents", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull(),
+  channel: text("channel").notNull(), // sms|email
+  address: text("address").notNull(),
+  status: text("status").notNull(), // granted|revoked
+  source: text("source").notNull(), // web|agent|inbound|import|api
+  evidence: text("evidence").notNull().default(""),
+  grantedAt: ts("granted_at"),
+  revokedAt: ts("revoked_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("messaging_consents_address_idx").on(t.companyId, t.channel, sql`lower(${t.address})`), index("messaging_consents_status_idx").on(t.companyId, t.channel, t.status)]);

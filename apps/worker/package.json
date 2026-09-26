@@ -17,6 +17,7 @@
     "@steward/ai": "workspace:*",
     "@steward/core": "workspace:*",
     "@steward/db": "workspace:*",
+    "@steward/legal": "workspace:*",
     "@steward/sandbox": "workspace:*",
     "@steward/schema": "workspace:*",
     "@steward/tools": "workspace:*",

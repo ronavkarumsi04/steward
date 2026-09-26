@@ -80,6 +80,7 @@ export class AgentServiceFactory {
       search: searchProviderFromEnv(this.env),
       emailFrom: this.env.PLATFORM_EMAIL_FROM,
       appUrl: this.o.core.config.appUrl,
+      masterKey: this.o.core.config.masterKey,
     };
   }
 }

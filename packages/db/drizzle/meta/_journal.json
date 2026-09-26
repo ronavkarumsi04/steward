@@ -57,6 +57,13 @@
       "when": 1790205400000,
       "tag": "0007_company_playbooks",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790304000000,
+      "tag": "0008_legal_consent_privacy",
+      "breakpoints": true
     }
   ]
 }

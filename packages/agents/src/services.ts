@@ -36,4 +36,6 @@ export interface AgentServices {
   /** Operator-configured platform sender for transactional mail sent on behalf of a company. */
   emailFrom?: string;
   appUrl: string;
+  /** Deployment master key, used to sign unsubscribe links so they cannot be forged. */
+  masterKey: string;
 }

@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { generateToken, hashToken } from "@steward/crypto";
-import { emailVerifications, memberships, oauthIdentities, organizations, sessions, users, type Db } from "@steward/db";
+import { agreements, emailVerifications, memberships, oauthIdentities, organizations, sessions, users, type Db } from "@steward/db";
 import type { Role } from "@steward/schema";
 
 export class AuthError extends Error {
@@ -22,11 +22,22 @@ export interface SessionUser {
   isSuperadmin: boolean;
 }
 
+export interface RegisterAgreement {
+  document: string;
+  version: string;
+  statement: string;
+  source?: string;
+}
+
 export interface RegisterInput {
   email: string;
   password: string;
   name: string;
   orgName?: string;
+  /** Clickwrap acceptances recorded in the same transaction as the account, so the two cannot diverge. */
+  agreements?: RegisterAgreement[];
+  ip?: string | null;
+  userAgent?: string | null;
 }
 
 type Organization = typeof organizations.$inferSelect;
@@ -62,6 +73,24 @@ export class AuthService {
       const existing = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
       if (existing.length) throw new AuthError("email_taken", "An account with this email already exists");
       const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim() }).returning();
+      // Legal acceptance is evidence: it is written with the account, in the same transaction, so an
+      // account can never exist without a record of what the person agreed to.
+      if (input.agreements?.length) {
+        await tx
+          .insert(agreements)
+          .values(
+            input.agreements.map((a) => ({
+              userId: user!.id,
+              document: a.document,
+              version: a.version,
+              statement: a.statement,
+              source: a.source ?? "web",
+              ip: input.ip ?? null,
+              userAgent: input.userAgent?.slice(0, 300) ?? null,
+            })),
+          )
+          .onConflictDoNothing();
+      }
       if (input.personalOrganization === false) return { user: toSessionUser(user!), organization: null };
       const orgName = input.orgName?.trim() || `${input.name.trim() || email.split("@")[0]}'s workspace`;
       const org = await this.createOrganizationTx(tx, user!.id, orgName);

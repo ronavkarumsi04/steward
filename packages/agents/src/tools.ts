@@ -2,8 +2,10 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { outboundMessages, suppressionList } from "@steward/db";
 import { CompanyProfile } from "@steward/schema";
-import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
+import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, TwilioClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
+import { PrivacyService } from "@steward/core";
 import { ToolRegistry, defineTool, untrusted, webFetchTool, webSearchTool, type ToolContext, type ToolDefinition } from "@steward/tools";
+import { applyEmailCompliance, applySmsCompliance } from "./outbound.js";
 import type { AgentServices } from "./services.js";
 
 function svc(ctx: ToolContext): AgentServices {
@@ -301,8 +303,8 @@ async function checkOutbound(s: AgentServices, channel: string, recipient: strin
 
 const emailSend = defineTool({
   name: "email.send",
-  description: "Send an email through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Externally visible; subject to approval policy.",
-  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional(), campaignId: z.string().optional() }),
+  description: "Send an email through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Marketing email automatically gets a working unsubscribe link and List-Unsubscribe headers, and agent-authored mail carries an AI disclosure you can turn off. Externally visible; subject to approval policy.",
+  input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional(), campaignId: z.string().optional(), aiDisclosure: z.boolean().optional() }),
   risk: "HIGH",
   dimension: "email_send",
   sideEffects: "external",
@@ -328,14 +330,80 @@ const emailSend = defineTool({
     const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
     if (existing?.status === "sent") return { ok: true, content: `Email already sent (id ${existing.externalId}).` };
     const provider = emailProviderFor(integ.type, secret);
+    const company = await s.companies.get(s.scope);
+    // CAN-SPAM and the AI disclosure are applied here, not left to the model to remember.
+    const compliance = applyEmailCompliance({
+      appUrl: s.appUrl,
+      masterKey: s.masterKey,
+      organizationId: s.scope.organizationId,
+      companyId: s.scope.companyId!,
+      recipient: input.to,
+      companyName: company?.name ?? "the sending organization",
+      marketing: Boolean(input.campaignId),
+      aiDisclosure: input.aiDisclosure !== false,
+      text: input.text,
+      html: input.html,
+    });
     try {
-      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: input.text, html: input.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "" }, tags: messageTags });
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      const res = await provider.send({ from, to: [input.to], subject: input.subject, text: compliance.text, html: compliance.html, replyTo: input.replyTo, idempotencyKey: key, headers: { "X-Steward-Run": ctx.runId ?? "", ...compliance.headers }, tags: messageTags });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: compliance.text, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
       return { ok: true, content: `Email sent to ${input.to} via ${integ.type} (id ${res.id}).`, data: res };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: input.text, status: "failed", campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId: s.scope.companyId!, channel: "email", provider: integ.type, recipient: input.to, subject: input.subject, body: compliance.text, status: "failed", campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
       return fail(`Email send failed: ${msg}`);
+    }
+  },
+});
+
+const smsSend = defineTool({
+  name: "sms.send",
+  description: "Send an SMS through the company's connected Twilio number. Blocked unless the recipient has a recorded consent and has not opted out — SMS to a number without consent is unlawful in most places. Externally visible; subject to approval policy.",
+  input: z.object({ to: z.string().min(4).max(32), body: z.string().min(1).max(1600), campaignId: z.string().optional(), aiDisclosure: z.boolean().optional() }),
+  risk: "HIGH",
+  dimension: "customer_comms",
+  sideEffects: "external",
+  costCategory: "messaging",
+  preflight: async ({ to, body }, ctx) => {
+    const s = svc(ctx);
+    const integ = await s.integrations.findByType(s.scope, "twilio");
+    const consent = s.scope.companyId ? await new PrivacyService(s.db).consentStatus(s.scope.companyId, "sms", to) : null;
+    // Surfacing consent in the approval prompt matters: it is the fact a human must weigh before texting someone.
+    const consentNote = consent?.status === "granted" ? `consent on record (${consent.source}${consent.grantedAt ? `, ${new Date(consent.grantedAt).toISOString().slice(0, 10)}` : ""})` : consent?.status === "revoked" ? "consent was REVOKED — this send will be blocked" : "NO consent on record — this send will be blocked";
+    return {
+      summary: `Send SMS to ${to} (${consentNote}): ${body.slice(0, 80)}${body.length > 80 ? "…" : ""}`,
+      affectedSystem: integ?.type ?? "twilio (not connected)",
+      risk: "HIGH",
+      alternatives: ["Send email instead", "Draft the message for a human to send"],
+    };
+  },
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const integ = await s.integrations.findByType(s.scope, "twilio");
+    if (!integ) return fail("Twilio is not connected. Add your account SID, auth token and from number in Settings → Integrations.");
+    if (!(await validCampaign(s, input.campaignId))) return fail("Campaign not found in this company.");
+    const privacy = new PrivacyService(s.db);
+    const companyId = s.scope.companyId!;
+    const blocked = await checkOutbound(s, "sms", input.to);
+    if (blocked) return fail(blocked);
+    const consent = await privacy.consentStatus(companyId, "sms", input.to);
+    if (!consent || consent.status !== "granted") {
+      return fail(`No recorded consent to text ${input.to}${consent ? " (consent was revoked)" : ""}. Record consent first: ask the person to opt in, then add it in Growth → Contacts. Sending without it can breach the TCPA and similar laws.`);
+    }
+    const company = await s.companies.get(s.scope);
+    const body = applySmsCompliance({ companyName: company?.name ?? "the sending organization", aiDisclosure: input.aiDisclosure !== false, body: input.body, marketing: Boolean(input.campaignId) });
+    const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
+    const key = idempotencyKey("sms", ctx.runId, input.campaignId, input.to, input.body);
+    const [existing] = await s.db.select().from(outboundMessages).where(eq(outboundMessages.idempotencyKey, key)).limit(1);
+    if (existing?.status === "sent") return { ok: true, content: `SMS already sent (id ${existing.externalId}).` };
+    try {
+      const res = await new TwilioClient(secret).sendSms({ to: input.to, body });
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId, channel: "sms", provider: "twilio", recipient: input.to, body, status: "sent", externalId: res.id, campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key }).onConflictDoNothing();
+      return { ok: true, content: `SMS sent to ${input.to} via Twilio (id ${res.id}).`, data: res };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await s.db.insert(outboundMessages).values({ organizationId: s.scope.organizationId, companyId, channel: "sms", provider: "twilio", recipient: input.to, body, status: "failed", campaignId: input.campaignId, runId: ctx.runId, idempotencyKey: key, error: msg.slice(0, 500) }).onConflictDoNothing();
+      return fail(`SMS send failed: ${msg}`);
     }
   },
 });
@@ -910,7 +978,7 @@ const stripeCreateOffer = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
