@@ -91,7 +91,17 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval" className="nb-left-yellow">
-          <div className="space-y-3">{pending.map((a) => <ApprovalCard key={a.id} companyId={companyId} approval={a} onDecided={() => browserApi.get<RunDetail>(`/companies/${companyId}/runs/${run.id}`).then(setDetail)} />)}</div>
+          <div className="space-y-3">
+            {pending.map((a) => (
+              <ApprovalCard
+                key={a.id}
+                companyId={companyId}
+                approval={a}
+                run={run}
+                onDecided={() => browserApi.get<RunDetail>(`/companies/${companyId}/runs/${run.id}`).then(setDetail)}
+              />
+            ))}
+          </div>
         </Card>
       )}
 

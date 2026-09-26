@@ -4,7 +4,9 @@ import { AUTONOMY_LABELS } from "@steward/schema";
 import { serverApi, tryApi } from "@/lib/server";
 import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, Task, UsageRow } from "@/lib/types";
 import { buildAttentionQueue } from "@/lib/attention";
+import { mostUrgent } from "@/lib/approval-review";
 import { AttentionQueue } from "@/components/attention-queue";
+import { WorkspaceDecision } from "@/components/workspace-decision";
 import { Icon } from "@/components/icons";
 import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
@@ -61,6 +63,14 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     tasks: attentionTasks.tasks,
     budget: aiBudget ?? null,
   });
+  // One request is decided here, in the workspace, rather than one page away. Which one is a rule
+  // (`lib/approval-review.ts`): the request closest to lapsing, because that is the deadline that cannot move.
+  const decision = mostUrgent(approvals.approvals);
+  // Recent runs first (any status, so a run that already finished is found), then the stopped ones: the brief
+  // needs the run's real state to say whether a yes would resume anything.
+  const decisionRun = decision?.runId
+    ? runs.runs.find((r) => r.id === decision.runId) ?? attentionRuns.runs.find((r) => r.id === decision.runId) ?? null
+    : null;
 
   return (
     <div className="space-y-6">
@@ -87,6 +97,13 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
       </header>
 
       <AttentionQueue items={attention} />
+
+      <WorkspaceDecision
+        companyId={companyId}
+        approval={decision}
+        run={decisionRun}
+        remaining={Math.max(approvals.approvals.length - 1, 0)}
+      />
 
       <div className="nb-bento grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="nb-metric nb-accent-blue">

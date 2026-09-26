@@ -7,6 +7,10 @@ export interface ApprovalSignal {
   notify(workflowId: string, approvalId: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown> }): Promise<void>;
 }
 
+/** An approval row plus whether the workflow waiting on it actually took the decision: `true` delivered,
+ * `false` attempted or impossible and not delivered, `null` nothing was attached to deliver to. */
+export type ResolvedApproval = typeof approvals.$inferSelect & { signalDelivered: boolean | null };
+
 export class ApprovalService {
   constructor(private readonly db: Db, private readonly signal?: ApprovalSignal) {}
 
@@ -51,7 +55,16 @@ export class ApprovalService {
     });
   }
 
-  async resolve(scope: TenantScope, id: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown> }) {
+  /**
+   * Records a human decision and, best effort, wakes the workflow that was waiting for it.
+   *
+   * The row is committed first on purpose: a decision is durable the moment it is taken. Delivery to the
+   * workflow is then attempted separately, and its outcome is reported rather than thrown, because a
+   * connection to Temporal being down must not turn a recorded decision into an error the founder reads as
+   * "nothing happened" — the row has already changed, and a second attempt would be refused as not pending.
+   * An undelivered decision is written to the event stream so the run's stalled state is not silent.
+   */
+  async resolve(scope: TenantScope, id: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown> }): Promise<ResolvedApproval | null> {
     if (scope.actor.type !== "user") throw new Error("Only users can resolve approvals");
     const resolvedBy = scope.actor.userId;
     const a = await this.db.transaction(async (tx) => {
@@ -65,8 +78,29 @@ export class ApprovalService {
       await tx.insert(auditLog).values({ organizationId: scope.organizationId, companyId: scope.companyId, actor: scope.actor as Record<string, unknown>, action: `approval.${decision.status}`, target: id, metadata: { action: row.action, risk: row.risk } });
       return row;
     });
-    if (a?.workflowId && this.signal) await this.signal.notify(a.workflowId, id, decision);
-    return a;
+    if (!a) return null;
+    // Nothing was waiting on it: a decision can only ever be a record here.
+    if (!a.workflowId) return { ...a, signalDelivered: null };
+    const undelivered = async (error: string) => {
+      await emitEvent(this.db, {
+        organizationId: a.organizationId,
+        companyId: a.companyId,
+        type: "approval.signal_failed",
+        actor: { type: "system", component: "approvals" },
+        payload: { approvalId: a.id, status: a.status, workflowId: a.workflowId, error },
+        correlation: { runId: a.runId ?? "" },
+      }).catch(() => undefined);
+      return { ...a, signalDelivered: false };
+    };
+    // A workflow is attached but this deployment has no client to reach it (Temporal never connected). Saying
+    // nothing here would let the surface promise a resume that cannot happen.
+    if (!this.signal) return undelivered("no workflow client is configured in this deployment");
+    try {
+      await this.signal.notify(a.workflowId, id, decision);
+      return { ...a, signalDelivered: true };
+    } catch (e) {
+      return undelivered(e instanceof Error ? e.message : String(e));
+    }
   }
 
   /** Marks pending approvals past their expiry; the workflow's own timer handles resumption. */

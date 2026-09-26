@@ -76,6 +76,67 @@ export const PolicyDecision = z.object({
 });
 export type PolicyDecision = z.infer<typeof PolicyDecision>;
 
+/**
+ * Which rule stopped an action, as a code rather than a sentence.
+ *
+ * `evaluate()` writes its reasoning as prose because the audit trail is read by people. A decision surface
+ * has to do more than quote it: it labels the rule (a risk ceiling and a spend limit are different problems,
+ * with different fixes) and, from the code, can explain what the founder would have to change for the action
+ * to run unattended. These strings are the engine's own vocabulary, so the mapping is kept honest by a test
+ * in `@steward/policy` that evaluates the real engine across every level, dimension, risk and limit and
+ * asserts that nothing it can emit lands on `unknown`.
+ */
+export const PolicyReasonCode = z.enum([
+  "critical_risk",
+  "hourly_limit",
+  "daily_limit",
+  "per_action_cost",
+  "daily_budget",
+  "monthly_budget",
+  "quiet_hours",
+  "rule_requires_approval",
+  "risk_ceiling",
+  "payload_edited",
+  "payload_unchanged",
+  "allowed_by_policy",
+  "within_threshold",
+  "internal_action",
+  "outbound_paused",
+  "read_only",
+  "policy_denies",
+  "unknown",
+]);
+export type PolicyReasonCode = z.infer<typeof PolicyReasonCode>;
+
+/** Order matters: the first pattern that matches wins. */
+const POLICY_REASON_PATTERNS: ReadonlyArray<readonly [PolicyReasonCode, RegExp]> = [
+  ["outbound_paused", /^Outbound communications are paused/],
+  ["read_only", /^Company is in read-only mode/],
+  ["policy_denies", /^Policy denies .+ actions$/],
+  ["critical_risk", /^CRITICAL-risk actions always require human approval$/],
+  ["hourly_limit", /^Hourly limit of \d+ /],
+  ["daily_limit", /^Daily limit of \d+ /],
+  ["per_action_cost", /^Estimated cost \$[\d.]+ exceeds per-action limit /],
+  ["daily_budget", /^Daily .+ budget \$[\d.]+ would be exceeded$/],
+  ["monthly_budget", /^Monthly .+ budget \$[\d.]+ would be exceeded$/],
+  ["quiet_hours", /^Quiet hours are active/],
+  ["payload_edited", /^approver edited the payload/],
+  ["payload_unchanged", /^payload unchanged from the approved request$/],
+  ["rule_requires_approval", /^.+ actions require approval at autonomy level \d+$/],
+  ["within_threshold", /risk is within the auto-approve threshold \(/],
+  ["risk_ceiling", /^[A-Z]+ risk exceeds the auto-approve threshold \(/],
+  ["allowed_by_policy", /^Allowed by policy \(/],
+  ["internal_action", /^internal action without external side effects$/],
+];
+
+/** Classifies one policy sentence. Pass a whole reason only when it is a single sentence — a composite
+ * request reason mixes the agent's narrative with the policy line, so split it first. */
+export function classifyPolicyReason(reason: string): PolicyReasonCode {
+  const text = reason.trim();
+  for (const [code, pattern] of POLICY_REASON_PATTERNS) if (pattern.test(text)) return code;
+  return "unknown";
+}
+
 // ---------- Tools ----------
 export const CostCategory = z.enum(["none", "ai", "infra", "ads", "messaging", "payments"]);
 export const ToolManifest = z.object({
@@ -288,6 +349,7 @@ export const EventType = z.enum([
   "approval.requested",
   "approval.resolved",
   "approval.expired",
+  "approval.signal_failed",
   "budget.threshold",
   "budget.exhausted",
   "memory.written",

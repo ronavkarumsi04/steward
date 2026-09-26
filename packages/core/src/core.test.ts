@@ -132,9 +132,31 @@ describe("core services (postgres)", () => {
     await expect(approvals.resolve({ ...scope, actor: { type: "system", component: "t" } }, approval.id, { status: "approved" })).rejects.toThrow();
     const resolved = await approvals.resolve(scope, approval.id, { status: "approved", note: "ok" });
     expect(resolved?.status).toBe("approved");
+    expect(resolved?.signalDelivered).toBe(true);
     expect(signals).toEqual([`wf-1:${approval.id}`]);
     // Double-resolve is a no-op.
     expect(await approvals.resolve(scope, approval.id, { status: "denied" })).toBeNull();
+
+    // A decision is durable before it is delivered: an unreachable workflow must not turn a recorded
+    // decision into a thrown error, because the row has already changed and a retry would be refused.
+    const unreachable = new ApprovalService(db, { notify: async () => { throw new Error("temporal unavailable"); } });
+    const stranded = await unreachable.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "y@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 60, runId: run.id, workflowId: "wf-2" });
+    const undelivered = await unreachable.resolve(scope, stranded.id, { status: "approved" });
+    expect(undelivered?.status).toBe("approved");
+    expect(undelivered?.signalDelivered).toBe(false);
+    const failedEvent = (await events.since(scope, before)).find((e) => e.type === "approval.signal_failed");
+    expect(failedEvent?.payload).toMatchObject({ approvalId: stranded.id, workflowId: "wf-2", error: "temporal unavailable" });
+    // A request with no workflow is recorded, and says so rather than claiming the run was resumed.
+    const detached = await approvals.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "z@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 60 });
+    expect((await approvals.resolve(scope, detached.id, { status: "denied" }))?.signalDelivered).toBeNull();
+    // A workflow is attached but this deployment has no client to reach it: a promise of resumption here
+    // would be a lie, so it is reported as undelivered like any other failed hand-off.
+    const clientless = new ApprovalService(db);
+    const attached = await clientless.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "w@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 60, workflowId: "wf-3" });
+    const notDelivered = await clientless.resolve(scope, attached.id, { status: "approved" });
+    expect(notDelivered?.signalDelivered).toBe(false);
+    const clientlessEvent = (await events.since(scope, before)).filter((e) => e.type === "approval.signal_failed");
+    expect(clientlessEvent.map((e) => (e.payload as { error?: string }).error)).toContain("no workflow client is configured in this deployment");
 
     await runs.setStatus(scope, run.id, "succeeded", { result: { summary: "done" } });
     await tasks.update(scope, task.id, { status: "done" });

@@ -153,6 +153,25 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.goto(`${companyUrl}/agents`);
   await expect(page.getByText(/orchestrator|chief of staff/i).first()).toBeVisible();
 
+  // Approvals: a decision surface that answers why, what will execute and what it touches. A fresh company
+  // usually has nothing waiting (a run needs a model provider to reach a policy gate), so the branch that
+  // matters here is that the page states which of the two situations it is in rather than rendering a shell.
+  await page.goto(`${companyUrl}/approvals`);
+  await expect(page.getByRole("heading", { name: "Approvals", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Filter approvals" })).toBeVisible();
+  const waiting = page.locator("article[data-approval-status='pending']");
+  if (await waiting.count()) {
+    const first = waiting.first();
+    await expect(first.getByRole("heading", { name: /why you were asked/i })).toBeVisible();
+    await expect(first.getByRole("heading", { name: /what will execute/i })).toBeVisible();
+    await expect(first.getByRole("heading", { name: /blast radius/i })).toBeVisible();
+    await expect(first.getByText("System that changes")).toBeVisible();
+    await expect(first.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await expect(first.getByRole("button", { name: "Deny", exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByText(/No pending approvals\./)).toBeVisible();
+  }
+
   // Integrations are discoverable from the authenticated company workspace.
   await page.getByRole("link", { name: "Integrations" }).first().click();
   await page.waitForURL(/\/integrations/);
