@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { ToastProvider } from "@/components/feedback";
 import "./globals.css";
+
+/** Applies the persisted light/dark choice before first paint to avoid a flash of the wrong theme. */
+const THEME_INIT = `(function(){try{var t=localStorage.getItem("steward-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t;}catch(e){}})();`;
 
 const DESCRIPTION = "Self-hosted, open-source autonomous company operating system. Persistent AI agents plan and execute your business work behind approval gates, budgets, and a durable audit trail.";
 
@@ -28,7 +32,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen">{children}</body>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
+      <body className="min-h-screen">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { browserApi } from "@/lib/api";
 import type { Me } from "@/lib/types";
 import { Icon } from "./icons";
+import { ThemeToggle } from "./feedback";
 
 const ORG_LINKS = [
   ["providers", "Providers", Icon.Providers],
@@ -70,6 +71,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
 
         <div className="flex items-center gap-2 text-sm">
           <span className="hidden max-w-[16rem] truncate text-muted lg:inline" title={me.user?.email}>{me.user?.email}</span>
+          <ThemeToggle />
           <button className="btn btn-sm border-2 border-fg shadow-[3px_3px_0_0_#111]" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
             Sign out

@@ -7,16 +7,21 @@ import { ApiError, browserApi } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, Conversation, Message, Run } from "@/lib/types";
 import { Empty, StatusPill, Ago } from "./ui";
+import { useToast } from "./feedback";
 
 export function ConversationList({ companyId, conversations, activeId }: { companyId: string; conversations: Conversation[]; activeId?: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function create() {
     setBusy(true);
     try {
       const { conversation } = await browserApi.post<{ conversation: Conversation }>(`/companies/${companyId}/conversations`, { title: "" });
+      toast("ok", "Conversation created");
       router.push(`/app/c/${companyId}/chat/${conversation.id}`);
       router.refresh();
+    } catch (err) {
+      toast("err", err instanceof ApiError ? err.message : "Could not start a conversation");
     } finally {
       setBusy(false);
     }
@@ -50,6 +55,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const bottom = useRef<HTMLDivElement>(null);
   const { events } = useLiveEvents(companyId, { max: 100 });
   const tick = events.filter((e) => e.correlation.conversationId === conversation.id || (activeRun && e.correlation.runId === activeRun.id)).length;
@@ -87,7 +93,9 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
       setActiveRun(run);
       setText("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to send");
+      const msg = err instanceof ApiError ? err.message : "Failed to send";
+      setError(msg);
+      toast("err", msg);
     } finally {
       setBusy(false);
     }
@@ -107,7 +115,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
           </Link>
         )}
       </header>
-      <div className="flex-1 space-y-3 overflow-auto pr-1">
+      <div className="flex-1 space-y-3 overflow-auto pr-1" role="log" aria-label="Conversation messages" aria-live="polite">
         {messages.length === 0 && <Empty>Say hello. Ask for a plan, a research brief, or tell the agent what to build.</Empty>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-role={m.role}>
@@ -121,7 +129,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
           </div>
         ))}
         {activeRun && !["succeeded", "failed", "cancelled"].includes(activeRun.status) && (
-          <div className="flex justify-start"><div className="nb-panel-flat nb-left-blue px-3 py-2 text-sm text-muted">{agent?.name ?? "Agent"} is {activeRun.status.replace(/_/g, " ")}…</div></div>
+          <div className="flex justify-start" role="status"><div className="nb-panel-flat nb-left-blue px-3 py-2 text-sm text-muted">{agent?.name ?? "Agent"} is {activeRun.status.replace(/_/g, " ")}…</div></div>
         )}
         {activeRun?.status === "failed" && <p className="text-xs text-danger">Run failed: {activeRun.error ?? "see run details"}</p>}
         <div ref={bottom} />
