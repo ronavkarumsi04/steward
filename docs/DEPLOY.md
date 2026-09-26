@@ -115,6 +115,76 @@ Any piece can be swapped for a managed service by changing the URL in `.env` and
 
 `next.config.ts` disables Next's `standalone` output when `VERCEL=1` is present (Vercel produces its own serverless bundle) and keeps it for the Docker image. Security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options`) are set for every route.
 
+### 2.1 Single-project mode: the API served by the same deployment
+
+If you would rather not run a second host, set `EMBEDDED_API=true` on the Vercel project and the Next
+app serves the API itself from `apps/web/src/app/embedded-api/[...path]/route.ts`, which builds the same
+runtime the standalone server uses (`apps/api/src/runtime.ts`). The `/api/v1/*` rewrite then points inward,
+so the browser, cookies, and CSRF behaviour are identical to the split setup.
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `EMBEDDED_API` | `true` | Read **at build time** — it selects the internal rewrite. Changing it requires a redeploy. |
+| `API_URL` | omitted | Only used by the external-API rewrite and by `apps/api` for its own URLs. |
+| `DATABASE_URL` | `postgresql://…` | See 2.2. |
+| `DATABASE_POOL_MAX` | `2` | Each serverless instance holds its own pool; keep it small. |
+| `STEWARD_MASTER_KEY`, `SESSION_SECRET` | 32-byte random hex | Encrypts stored credentials and signs sessions. Generate per environment and keep them out of git. |
+| `APP_URL` | `https://app.example.com` | Also the only origin the API accepts for state-changing requests, so it must match the deployed URL exactly. |
+| `RUN_MIGRATIONS_ON_START` | `false` | Cold starts would otherwise race each other applying the same migration. Apply them from a shell instead. |
+| `TEMPORAL_DISABLED` | `true` unless you have Temporal | Without it the instance tries to reach a Temporal endpoint and waits for the connect timeout on every cold start. |
+
+The trade-offs are real: a serverless function is not a long-lived process, so the event stream falls
+back to 2-second polling (it is built for that — see `streamEvents` in `apps/api/src/routes/work.ts`), an
+SSE connection is closed when the function hits its duration limit and reconnects from its last event
+id, and agent runs need a real Temporal endpoint, which this mode does not provide.
+
+### 2.2 Managed Postgres (Supabase)
+
+The database is ordinary PostgreSQL. It needs the `vector` and `pgcrypto` extensions, which
+`runMigrations()` creates for you. Give the application its own role rather than using the provider's
+superuser:
+
+```sql
+create extension if not exists vector;
+create extension if not exists pgcrypto;
+create role steward_app login password '<generated>';
+grant create on database postgres to steward_app;   -- the migrator creates its own schema
+```
+
+Then apply the schema from the repository (this is also how you apply new migrations later):
+
+```bash
+DATABASE_URL='postgresql://steward_app.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?uselibpqcompat=true&sslmode=require' \
+  pnpm --filter @steward/db migrate
+```
+
+Two details worth knowing before they cost you an afternoon:
+
+- **Use the pooler host, not `db.<ref>.supabase.co`.** New Supabase projects resolve that name to an
+  IPv6 address only, and many build and serverless environments have no outbound IPv6.
+- **`sslmode=require` alone fails against the pooler** with `self-signed certificate in certificate
+  chain` — recent `pg` treats `require` as `verify-full`, and the pooler's CA is not in Node's trust
+  store. `uselibpqcompat=true&sslmode=require` keeps the connection encrypted with libpq's semantics.
+
+Because the tables are created by your own role, Supabase's Data API roles (`anon`, `authenticated`) get
+no privileges on them — verify, and enable row-level security as well, since table owners are unaffected
+by it and future migrations may run as a different role:
+
+```sql
+select c.relname, has_table_privilege('anon', c.oid, 'SELECT')
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r';
+
+do $$ declare t record;
+begin
+  for t in select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+           where n.nspname = 'public' and c.relkind = 'r'
+  loop execute format('alter table %I.%I enable row level security', t.nspname, t.relname); end loop;
+end $$;
+```
+
+Steward never uses the Data API, so RLS policies are unnecessary — the absence of grants is the control.
+
 ### Why the rewrite instead of calling the API directly?
 
 The browser only ever talks to `app.example.com`. Vercel forwards `/api/v1/*` to the API, so the session cookie the API sets is a first-party cookie on `app.example.com`, `SameSite=Lax` works, and there is no cross-origin CORS/credentials dance. SSE streams pass through Vercel's rewrite layer unbuffered.
