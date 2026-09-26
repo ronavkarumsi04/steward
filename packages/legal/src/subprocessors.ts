@@ -47,6 +47,45 @@ export const CUSTOMER_CONNECTED_SERVICES: CustomerConnectedService[] = [
   { name: "OpenAI, Anthropic, Google Gemini, Bedrock, Ollama, OpenRouter, and other model providers", category: "AI model inference", access: "Receive the prompts and content needed for each model call, using your own API key", contract: "Your own agreement with the provider, under your own API key" },
 ];
 
+/** Human names for the AWS regions managed Postgres providers actually publish. */
+const REGION_NAMES: Record<string, string> = {
+  "us-east-1": "United States (N. Virginia)",
+  "us-east-2": "United States (Ohio)",
+  "us-west-1": "United States (N. California)",
+  "us-west-2": "United States (Oregon)",
+  "eu-west-1": "Ireland",
+  "eu-west-2": "United Kingdom (London)",
+  "eu-central-1": "Germany (Frankfurt)",
+  "ap-southeast-1": "Singapore",
+  "ap-southeast-2": "Australia (Sydney)",
+  "ap-northeast-1": "Japan (Tokyo)",
+  "ap-south-1": "India (Mumbai)",
+  "sa-east-1": "Brazil (São Paulo)",
+};
+
+/**
+ * Names the database vendor from the connection string itself, so the published page cannot drift
+ * from what the deployment really connects to (a hand-maintained env var gets forgotten; a URL does
+ * not). Managed providers are recognised by hostname, and the region is read from the pooler host
+ * when present.
+ */
+function describeDatabase(url: string | undefined): { name: string; location: string } {
+  const fallback = { name: "Operator-managed PostgreSQL", location: "Operator-controlled infrastructure" };
+  if (!url) return fallback;
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return fallback;
+  }
+  const code = /aws-\d+-([a-z]{2}-[a-z]+-\d)/.exec(host)?.[1] ?? /(?:^|\.)([a-z]{2}-[a-z]+-\d)\./.exec(host)?.[1];
+  const region = code ? `${REGION_NAMES[code] ?? code} (${code})` : "United States";
+  if (host.includes("supabase")) return { name: "Supabase (managed PostgreSQL, AWS)", location: region };
+  if (host.includes("neon")) return { name: "Neon (managed PostgreSQL)", location: region };
+  if (host.includes("rds.amazonaws.com")) return { name: "Amazon RDS for PostgreSQL", location: region };
+  return { name: "Operator-managed PostgreSQL", location: host };
+}
+
 /**
  * Reads the deployment configuration and reports only what is actually in play.
  * Self-hosted operators should edit this file (or set the env vars below) so the page matches
@@ -56,8 +95,11 @@ export function subprocessorsFromEnv(env: NodeJS.ProcessEnv = process.env): Subp
   const onVercel = Boolean(env.VERCEL);
   const emailProvider = (env.PLATFORM_EMAIL_PROVIDER ?? "console").trim().toLowerCase();
   const temporalCloud = Boolean(env.TEMPORAL_API_KEY?.trim());
-  const managedDb = env.LEGAL_DATABASE_PROVIDER?.trim();
   const region = env.LEGAL_HOSTING_REGION?.trim() || "Region of the operator's choosing";
+  // Explicit override wins; otherwise the provider is read off the connection string.
+  const described = describeDatabase(env.DATABASE_URL);
+  const managedDb = env.LEGAL_DATABASE_PROVIDER?.trim() || described.name;
+  const dbRegion = env.LEGAL_HOSTING_REGION?.trim() || described.location;
 
   const list: Subprocessor[] = [
     {
@@ -71,10 +113,10 @@ export function subprocessorsFromEnv(env: NodeJS.ProcessEnv = process.env): Subp
     },
     {
       id: "database",
-      name: managedDb || "Operator-managed PostgreSQL",
+      name: managedDb,
       role: "Primary database: stores all organization data at rest",
       dataCategories: ["Everything described in the Privacy Policy, except artifact file bytes", "Encrypted credentials (ciphertext only)"],
-      location: region,
+      location: dbRegion,
       transferMechanism: "Standard Contractual Clauses (EU) / UK Addendum where the provider is outside the EEA/UK",
       status: "in use",
     },

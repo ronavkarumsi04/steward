@@ -182,4 +182,32 @@ describe("legal contact", () => {
     expect(withEntity.operator).toContain("Steward Labs, Inc.");
     expect(withEntity.legalEntityName).toBe("Steward Labs, Inc.");
   });
+
+  it("names the database vendor the deployment actually connects to", () => {
+    // A published subprocessor page that names the wrong vendor is worse than one that names none.
+    const hosted = subprocessorsFromEnv({
+      DATABASE_URL: "postgresql://app.pw@aws-0-us-east-1.pooler.supabase.com:5432/postgres",
+    } as NodeJS.ProcessEnv);
+    const db = hosted.find((s) => s.id === "database")!;
+    expect(db.name).toContain("Supabase");
+    expect(db.location).toContain("N. Virginia");
+    expect(db.location).toContain("us-east-1");
+
+    const selfHosted = subprocessorsFromEnv({ DATABASE_URL: "postgresql://app@db.internal:5432/steward" } as NodeJS.ProcessEnv);
+    const own = selfHosted.find((s) => s.id === "database")!;
+    expect(own.name).toBe("Operator-managed PostgreSQL");
+    expect(own.location).toBe("db.internal");
+
+    // An explicit override still wins, so operators can correct the description themselves.
+    const overridden = subprocessorsFromEnv({
+      DATABASE_URL: "postgresql://app@db.internal:5432/steward",
+      LEGAL_DATABASE_PROVIDER: "Acme Managed Postgres",
+    } as NodeJS.ProcessEnv);
+    expect(overridden.find((s) => s.id === "database")!.name).toBe("Acme Managed Postgres");
+  });
+
+  it("does not crash on a malformed connection string", () => {
+    const rows = subprocessorsFromEnv({ DATABASE_URL: "not a url" } as NodeJS.ProcessEnv);
+    expect(rows.find((s) => s.id === "database")!.name).toBe("Operator-managed PostgreSQL");
+  });
 });
