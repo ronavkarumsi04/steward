@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@steward/api": "workspace:*",
     "@steward/legal": "workspace:*",
     "@steward/schema": "workspace:*",
     "next": "16.3.5",

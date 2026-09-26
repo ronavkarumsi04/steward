@@ -117,6 +117,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@steward/api':
+        specifier: workspace:*
+        version: link:../api
       '@steward/legal':
         specifier: workspace:*
         version: link:../../packages/legal
