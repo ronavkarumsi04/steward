@@ -98,6 +98,34 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.reload();
   await expect(page.getByText("Draft positioning statement")).toBeVisible();
 
+  // Runs: whichever deployment this is, the run surface has to stay honest. With Temporal connected (CI
+  // starts one) the run is created and the inspector must describe it; on a checkout without Temporal the
+  // API refuses to start a run at all, and the list must stay empty rather than show invented work.
+  const companyId = companyUrl.split("/").pop()!;
+  const agentList = (await (await page.request.get(`/api/v1/companies/${companyId}/agents`)).json()) as { agents: Array<{ id: string }> };
+  const runResponse = await page.request.post(`/api/v1/companies/${companyId}/runs`, {
+    // Cookie-authenticated mutations are CSRF-gated on the Origin the browser itself would send.
+    headers: { origin: new URL(page.url()).origin },
+    data: { agentId: agentList.agents[0].id, instruction: "Draft the design partner email" },
+  });
+  const runBody = (await runResponse.json().catch(() => null)) as { message?: string } | null;
+  const runRecorded = runResponse.status() === 201 || /recorded as/i.test(runBody?.message ?? "");
+  if (runRecorded) {
+    await page.goto(`${companyUrl}/runs`);
+    await page.getByRole("link", { name: "Draft the design partner email" }).click();
+    await page.waitForURL(/\/runs\/[0-9a-f-]+$/);
+    await expect(page.getByRole("region", { name: "Run inspection" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Timeline/ })).toBeVisible();
+    // No model provider is configured here, so this run cannot be a verified success whatever path it took.
+    await expect(page.getByText("Succeeded, verified")).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Run inspection" })).toBeVisible();
+  } else {
+    expect(runResponse.status()).toBe(503);
+    await page.goto(`${companyUrl}/runs`);
+    await expect(page.getByText("No runs match.")).toBeVisible();
+  }
+
   // Growth: a lead is durable and visible in the customer pipeline.
   await page.goto(`${companyUrl}/growth`);
   await page.getByLabel("Lead title").fill("Pilot design partner");

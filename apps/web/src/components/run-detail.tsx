@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
+import { modelAttempts } from "@/lib/run-inspection";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
+import { RunTimeline } from "./run-timeline";
 import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
@@ -18,10 +20,15 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { events } = useLiveEvents(companyId, { max: 50 });
-  const relevant = events.filter((e) => e.correlation.runId === initial.run.id).length;
+  // The highest sequence number among events correlated with this run: a new one means a durable row
+  // changed, so the rows are read again. The status is read from a ref because the effect must not close
+  // over an old render's detail — a run that just finished would otherwise keep refetching.
+  const matchedSeq = events.reduce((max, e) => (e.correlation.runId === initial.run.id && e.seq > max ? e.seq : max), 0);
+  const statusRef = useRef(detail.run.status);
+  statusRef.current = detail.run.status;
 
   useEffect(() => {
-    if (relevant === 0 || TERMINAL.has(detail.run.status)) return;
+    if (matchedSeq === 0 || TERMINAL.has(statusRef.current)) return;
     let cancelled = false;
     browserApi.get<RunDetail>(`/companies/${companyId}/runs/${initial.run.id}`).then((d) => {
       if (!cancelled) setDetail(d);
@@ -29,7 +36,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
     return () => {
       cancelled = true;
     };
-  }, [relevant]);
+  }, [matchedSeq, companyId, initial.run.id]);
 
   async function cancel() {
     setBusy(true);
@@ -50,6 +57,12 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
   const pending = approvals.filter((a) => a.status === "pending");
   const modelCostUsd = aiCalls.reduce((sum, call) => sum + Number(call.costUsd || 0), 0);
   const modelErrors = aiCalls.filter((call) => call.status === "error").length;
+  const attempts = modelAttempts(aiCalls);
+  // A retry only reads as an attempt when the same step made more than one call.
+  const attemptLabel = (id: string) => {
+    const counted = attempts.get(id);
+    return counted && counted.of > 1 ? `attempt ${counted.attempt} of ${counted.of} · ` : "";
+  };
   const callsForStep = (stepId: string) => aiCalls.filter((call) => call.stepId === stepId);
 
   return (
@@ -73,6 +86,8 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
       </header>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
+
+      <RunTimeline detail={detail} companyId={companyId} />
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval" className="nb-left-yellow">
@@ -113,10 +128,10 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted"><span>{aiCalls.filter((call) => call.status === "ok").length} succeeded</span><span>· {modelErrors} errors</span><span>· {usd(modelCostUsd)} ledger cost</span></div>
                 <ol className="space-y-2">
-                  {aiCalls.map((call, index) => (
+                  {aiCalls.map((call) => (
                     <li key={call.id} className={`nb-panel-flat p-2.5 text-sm ${call.status === "error" ? "nb-left-red" : "nb-left-purple"}`}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="mono text-xs font-semibold text-accent">{call.provider}</span><span className="mono max-w-[22rem] truncate text-xs" title={call.model}>{call.model}</span><span className="pill text-muted">{call.purpose}</span></div><div className="mt-1 text-xs text-muted">attempt {index + 1} · {call.latencyMs}ms · {call.costEstimated ? "estimated " : ""}{usd(call.costUsd)}{call.retries ? ` · ${call.retries} retr${call.retries === 1 ? "y" : "ies"}` : ""}</div></div>
+                        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="mono text-xs font-semibold text-accent">{call.provider}</span><span className="mono max-w-[22rem] truncate text-xs" title={call.model}>{call.model}</span><span className="pill text-muted">{call.purpose}</span></div><div className="mt-1 text-xs text-muted">{attemptLabel(call.id)}{call.latencyMs}ms · {call.costEstimated ? "estimated " : ""}{usd(call.costUsd)}{call.retries ? ` · ${call.retries} retr${call.retries === 1 ? "y" : "ies"}` : ""}</div></div>
                         <StatusPill status={call.status} />
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-muted sm:grid-cols-4"><span>in {call.inputTokens.toLocaleString()}</span><span>out {call.outputTokens.toLocaleString()}</span><span>cached {call.cachedTokens.toLocaleString()}</span><span>reasoning {call.reasoningTokens.toLocaleString()}</span></div>
