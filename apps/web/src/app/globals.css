@@ -249,12 +249,18 @@
     border: 2px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: 4px 4px 0 var(--fg);
+    /* A surface states its own text colour. Accent classes set a fixed dark ink for their bright
+       backgrounds, and without this every panel nested inside one inherits that ink while sitting on a dark
+       panel — invisible text in dark mode. An element that is itself an accent still wins, because those
+       rules come later. */
+    color: var(--fg);
   }
 
   .card-inset {
     background: var(--panel-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
+    color: var(--fg);
   }
 
   .hairline {
@@ -338,6 +344,7 @@
     background: var(--panel);
     border: 2px solid var(--line);
     border-radius: var(--radius-md);
+    color: var(--fg);
   }
 
   .nb-accent-purple {

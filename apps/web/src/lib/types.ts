@@ -293,6 +293,12 @@ export interface Approval {
   resolvedAt: string | null;
   expiresAt: string;
   createdAt: string;
+  /** Which workflow will be woken by a decision. Null means nothing can be resumed. Optional because a
+   * surface that fetched the row before this field existed must not be read as "no workflow". */
+  workflowId?: string | null;
+  /** Present on the response to a decision, never on a stored row: whether the waiting workflow took it.
+   * `false` means the decision is recorded but nothing was resumed, which the surface must say plainly. */
+  signalDelivered?: boolean | null;
 }
 export interface RunDetail {
   run: Run;
