@@ -154,7 +154,9 @@ Agents can run code in Docker containers. In the `backend` profile the worker ha
 - set `SANDBOX_PROVIDER=none` (agents still plan, browse, call tools and integrations — they just can't execute arbitrary code), or
 - run a **separate** Docker host and point `SANDBOX_DOCKER_HOST=tcp://sandbox-host:2376` (with TLS) at it, then remove the socket mount from the `worker` service.
 
-See `docs/THREAT_MODEL.md` for the full trust boundaries.
+See `docs/THREAT_MODEL.md` for the full trust boundaries, and `docs/compliance/README.md` for the
+compliance artifacts this deployment is expected to have in place (incident response, vendor register,
+records of processing, admin access, backup/DR).
 
 ---
 
@@ -165,7 +167,18 @@ See `docs/THREAT_MODEL.md` for the full trust boundaries.
 - [ ] Invite yourself from a second address; the email arrives and the link registers + joins
 - [ ] "Forgot password" email arrives; the link resets and signs you in
 - [ ] `ALLOW_SIGNUP=false` in `.env`; `/register` shows the invitation-only card
-- [ ] Postgres backup cron in place; `.env` (master key) stored in a password manager
+- [ ] Postgres backup cron in place; `.env` (master key) stored in a password manager **separately from the backups**
+- [ ] `/legal` loads, and the Terms, Privacy, AUP and DPA render without unresolved `{{placeholders}}`
+- [ ] `LEGAL_*` variables set so the documents name the real operator, contact channel, hosting region and subprocessors
+- [ ] `/legal/subprocessors` lists only vendors this deployment actually uses
+- [ ] Registration requires the clickwrap and `agreements` rows are written with version, timestamp and IP
+- [ ] `/app/account` exports your own data and `/app/org/<id>/privacy` exports the organization's data (check the manifest lists the exclusions)
+- [ ] Deleting a test account removes it, keeps suppression records, and leaves a `privacy_requests` row
+- [ ] A marketing email sent through an integration carries a working one-click `List-Unsubscribe` and reaches `/unsubscribe/<token>`
+- [ ] SMS is blocked without a recorded consent, and replying STOP revokes it
+- [ ] The retention sweep logs on worker boot (expired sessions, tokens, invitations, events, webhook logs)
+- [ ] `docs/THIRD_PARTY_NOTICES.md` regenerated after any dependency change (`node scripts/generate-third-party-notices.mjs`)
+- [ ] Backup restored into a scratch database at least once; restore time recorded in `docs/compliance/BACKUP_AND_DR.md`
 - [ ] Provider keys added under **Org → Providers**; budgets set under **Org → Budgets**
 - [ ] `SANDBOX_PROVIDER` decided (§5)
 
