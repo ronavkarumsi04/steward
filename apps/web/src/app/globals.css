@@ -916,7 +916,9 @@
     position: fixed;
     inset-inline: 0;
     bottom: 0;
-    z-index: 100;
+    /* Above dialogs: an action taken from a dialog reports its result while the dialog is still open, and a
+       toast hidden behind it reads as nothing having happened. */
+    z-index: 200;
     display: flex;
     justify-content: center;
     padding: 0 1rem 1.25rem;

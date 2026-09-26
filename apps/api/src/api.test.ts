@@ -121,7 +121,7 @@ async function register(name = "Founder") {
   const body = (await res.json()) as { token: string; user: { id: string }; organization: { id: string } };
   const setCookie = res.headers.get("set-cookie") ?? "";
   const cookie = setCookie.split(";")[0] ?? "";
-  return { email, orgId: body.organization.id, userId: body.user.id, api: client(body.token), cookieApi: client("", cookie) };
+  return { email, orgId: body.organization.id, userId: body.user.id, api: client(body.token), cookieApi: client("", cookie), cookie };
 }
 
 /**
@@ -503,6 +503,29 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     expect(decided.status).toBe(200);
     expect(decided.body.approval.status).toBe("denied");
     expect((await api.json("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "approved" })).status).toBe(409);
+  });
+
+  d("cancelling without a workflow stops the run and says so, instead of reporting a signal", async () => {
+    // A deployment with no Temporal client is the case that used to look identical to a signal: the response
+    // said "requested" while the run had already been stopped here and now. The run is created through a
+    // deployment that can start it (the same database), then cancelled through one that cannot signal.
+    const noWorkflows = createApp({ core, auth: new AuthService(core.db), mailer, services, workflows: null, companionHub: new CompanionHub(), env: ENV }, null).app;
+    const { api, orgId, cookie } = await register();
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: `Stop Co ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+    const agents = await api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    const run = await api.json<{ run: { id: string } }>("POST", `/companies/${companyId}/runs`, { agentId: agents.body.agents[0]!.id, instruction: "Work that gets stopped." });
+    const stopped = await client("", cookie, () => noWorkflows).json<{ ok: boolean; signalled: boolean; status: string }>(
+      "POST",
+      `/companies/${companyId}/runs/${run.body.run.id}/cancel`,
+      { reason: "no longer wanted" },
+      { "x-steward-csrf": "1" },
+    );
+    expect(stopped.status).toBe(200);
+    expect(stopped.body).toMatchObject({ ok: true, signalled: false, status: "cancelled" });
+    const detail = await api.json<{ run: { status: string; error: string } }>("GET", `/companies/${companyId}/runs/${run.body.run.id}`);
+    expect(detail.body.run.status).toBe("cancelled");
+    expect(detail.body.run.error).toBe("no longer wanted");
   });
 });
 
