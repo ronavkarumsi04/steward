@@ -98,7 +98,7 @@ Key toggles:
 - [Deploying to production](docs/DEPLOY.md) (Vercel web + self-hosted backend)
 - [Architecture](docs/ARCHITECTURE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security policy](SECURITY.md)
 - [AI providers](docs/PROVIDERS.md) · [Integrations](docs/INTEGRATIONS.md) · [Local companion](apps/companion/README.md)
-- [MegaPlan](docs/MEGAPLAN.md) · [ADRs](docs/adr/) · [Research](docs/research/)
+- [Roadmap and current status](docs/ROADMAP.md) · [MegaPlan](docs/MEGAPLAN.md) · [ADRs](docs/adr/) · [Research](docs/research/)
 - [Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md)
 
 ## Status
