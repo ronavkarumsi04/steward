@@ -1,5 +1,7 @@
 "use client";
 
+import type { CSSProperties } from "react";
+
 /**
  * The run inspector's headline: one line for every durable row, in order, plus a verdict that says
  * whether the run is finished, what it is waiting on, and where it stopped. Rows are never reordered or
@@ -14,7 +16,9 @@ import {
   type TimelineEntry,
   type TimelineKind,
 } from "@/lib/run-inspection";
+import { timelineArrival } from "@/lib/arrivals";
 import type { RunDetail } from "@/lib/types";
+import { SettleBar } from "./motion";
 import { Empty, Pill, RiskPill, StatusPill, usd, type Tone } from "./ui";
 
 const OUTCOME: Record<RunOutcome, { label: string; tone: Tone; edge: string }> = {
@@ -43,6 +47,10 @@ export function RunTimeline({ detail, companyId }: { detail: RunDetail; companyI
   const outcome = OUTCOME[verdict.outcome];
   const slowestMs = inspection.slowest?.durationMs ?? 0;
   const blamed = verdict.blame?.entryId ?? null;
+  // Rows arrive in order and stop arriving early: an 18 ms step, capped at 240 ms, so a fifty-row run is fully
+  // on screen long before anyone has read the first three rows. One schedule for the whole list, computed by
+  // the tested plan function, held to the entrance band by `motion.test.ts`.
+  const arrival = timelineArrival(timeline.length);
 
   return (
     <section aria-label="Run inspection" className="space-y-4">
@@ -120,10 +128,10 @@ export function RunTimeline({ detail, companyId }: { detail: RunDetail; companyI
               <TimelineRow
                 key={entry.id}
                 entry={entry}
-                index={index}
                 slowestMs={slowestMs}
                 blamed={blamed === entry.id}
                 child={entry.stepId !== null}
+                delayMs={arrival.delayMs(index)}
               />
             ))}
           </ol>
@@ -133,16 +141,17 @@ export function RunTimeline({ detail, companyId }: { detail: RunDetail; companyI
   );
 }
 
-function TimelineRow({ entry, index, slowestMs, blamed, child }: { entry: TimelineEntry; index: number; slowestMs: number; blamed: boolean; child: boolean }) {
+function TimelineRow({ entry, slowestMs, blamed, child, delayMs }: { entry: TimelineEntry; slowestMs: number; blamed: boolean; child: boolean; delayMs: number }) {
   const kind = KIND[entry.kind];
   const pct = entry.durationMs != null && slowestMs > 0 ? Math.max(2, Math.round((entry.durationMs / slowestMs) * 100)) : null;
   const merged = entry.mergedIds.length > 1;
   return (
     <li
       id={anchorFor(entry.id)}
-      // Entrance stagger: transform/opacity only, capped so the last row is never late.
+      // Entrance stagger: transform + opacity only, on one computed schedule, capped so the last row is
+      // never late. `--enter-delay` rather than `animation-delay` so the stylesheet owns the animation.
       className={`rise-in nb-panel-flat scroll-mt-24 px-2.5 py-2 ${kind.edge} ${child ? "ml-3 sm:ml-5" : ""}`}
-      style={{ animationDelay: `${Math.min(index * 18, 240)}ms` }}
+      style={{ "--enter-delay": `${delayMs}ms` } as CSSProperties}
     >
       <div className="flex flex-wrap items-start gap-2">
         <span className="mono tnum w-14 shrink-0 pt-0.5 text-xs text-muted" title={new Date(entry.atMs).toLocaleString()}>
@@ -172,11 +181,7 @@ function TimelineRow({ entry, index, slowestMs, blamed, child }: { entry: Timeli
           <StatusPill status={entry.status} />
         </span>
       </div>
-      {pct != null && (
-        <span className="mt-2 block h-1 w-full rounded-full bg-[var(--panel-3)]" aria-hidden="true">
-          <span className="block h-1 rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
-        </span>
-      )}
+      {pct != null && <SettleBar value={pct / 100} className="mt-2" />}
       {entry.secondaryStatus && (
         <p className="mt-1 text-xs text-muted">the paired row recorded <span className="mono">{entry.secondaryStatus}</span></p>
       )}

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { CSSProperties } from "react";
 import { getMeOptional } from "@/lib/server";
 import { Icon } from "@/components/icons";
+import { landingArrival } from "@/lib/arrivals";
 
 const PILLARS = [
   [Icon.Agents, "Persistent agents", "Orchestrator, research, engineering, marketing, sales, support, finance and operations agents that plan and execute against your goals — on a schedule or on demand."],
@@ -14,12 +16,24 @@ const PILLARS = [
 
 const PIPELINE = ["Event", "Plan", "Policy", "Route", "Execute", "Verify", "Persist"];
 
+/** The page's arrival, from the house schedules. Asserted against the page band in `motion.test.ts`. */
+const ARRIVAL = landingArrival();
+
+/**
+ * The one ambient layer in the product, on the one surface a visitor sees once: a slow wash of light across
+ * the hero, meant to be felt rather than watched. It carries no information, sits under the text, and drifts
+ * at the ambient duration (18 s) — long enough that it reads as paper catching the light, not as animation.
+ */
+const AMBIENT_WASH =
+  "radial-gradient(70% 65% at 84% 6%, rgba(255,255,255,0.85), rgba(255,255,255,0) 62%), " +
+  "radial-gradient(55% 55% at 6% 96%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)";
+
 export default async function Landing() {
   const me = await getMeOptional();
   if (me.user) redirect("/app");
   return (
     <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-30 border-b-2 border-line bg-panel">
+      <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-line bg-panel">
         <nav className="mx-auto flex h-13 max-w-6xl items-center justify-between px-4 sm:px-6" aria-label="Primary">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             <Icon.Logo size={22} />
@@ -34,26 +48,37 @@ export default async function Landing() {
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-20 sm:px-6 md:pt-28">
         <section className="nb-hero rise-in mx-auto max-w-5xl text-left">
-          <span className="pill pill-accent mb-6">
-            <Icon.Sparkle size={14} />
-            Open source · Apache-2.0
-          </span>
-          <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-6xl">
-            An autonomous operating system for your company — that you actually control.
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted">
-            Describe a business. Steward builds a team of AI agents that research, build, ship and grow it — running unattended, pausing for your approval when it matters, and leaving a complete audit trail.
-          </p>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/register" className="btn btn-primary h-11 px-5 text-[15px]">
-              Create your first company
-              <Icon.ArrowRight size={16} />
-            </Link>
-            <a href="/api/v1/openapi.json" className="btn h-11 px-5 text-[15px]">API reference</a>
+          <span
+            aria-hidden="true"
+            className="ambient pointer-events-none absolute inset-0"
+            style={{ background: AMBIENT_WASH }}
+          />
+          <div className="relative">
+            <span className="pill pill-accent mb-6">
+              <Icon.Sparkle size={14} />
+              Open source · Apache-2.0
+            </span>
+            <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-6xl">
+              An autonomous operating system for your company — that you actually control.
+            </h1>
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted">
+              Describe a business. Steward builds a team of AI agents that research, build, ship and grow it — running unattended, pausing for your approval when it matters, and leaving a complete audit trail.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+              <Link href="/register" className="btn btn-primary h-11 px-5 text-[15px]">
+                Create your first company
+                <Icon.ArrowRight size={16} />
+              </Link>
+              <a href="/api/v1/openapi.json" className="btn h-11 px-5 text-[15px]">API reference</a>
+            </div>
           </div>
         </section>
 
-        <section className="rise-in-delayed mx-auto mt-12 max-w-5xl" aria-label="How a run flows">
+        <section
+          className="rise-in mx-auto mt-12 max-w-5xl"
+          aria-label="How a run flows"
+          style={{ "--enter-delay": `${ARRIVAL.delayMs(1)}ms` } as CSSProperties}
+        >
           <div className="card nb-left-purple flex flex-wrap items-center justify-center gap-y-3 px-4 py-4 sm:justify-between sm:px-6">
             {PIPELINE.map((step, i) => (
               <span key={step} className="flex items-center gap-2 text-sm">
@@ -65,7 +90,11 @@ export default async function Landing() {
           <p className="mt-3 text-center text-xs text-muted">Every step is recorded with its model, tool, cost and authorization — then persisted before the next event fires.</p>
         </section>
 
-        <section className="mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label="Capabilities">
+        <section
+          className="rise-in mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+          aria-label="Capabilities"
+          style={{ "--enter-delay": `${ARRIVAL.delayMs(2)}ms` } as CSSProperties}
+        >
           {PILLARS.map(([Glyph, title, body]) => (
             <article key={title} className="card nb-left-blue">
               <span className="nb-panel-flat mb-4 flex h-10 w-10 items-center justify-center p-0 text-accent">

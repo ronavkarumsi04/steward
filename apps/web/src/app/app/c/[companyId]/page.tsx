@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 import { AUTONOMY_LABELS } from "@steward/schema";
+import { workspaceArrival } from "@/lib/arrivals";
 import { serverApi, tryApi } from "@/lib/server";
 import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, Task, UsageRow } from "@/lib/types";
 import { buildAttentionQueue } from "@/lib/attention";
@@ -12,6 +14,15 @@ import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
 import { FounderStudio, type StudioSchedule } from "@/components/founder-studio";
 import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
+
+/**
+ * The page's arrival: seven sections, in the order a founder wants them, from one house schedule. Computed
+ * once here rather than typed per section, so `motion.test.ts` can hold the whole choreography to the page
+ * band and any change that makes the page arrive too fast or too slow is a failing test rather than a
+ * matter of taste.
+ */
+const ARRIVAL = workspaceArrival();
+const delay = (index: number) => ({ "--enter-delay": `${ARRIVAL.delayMs(index)}ms` }) as CSSProperties;
 
 export default async function CompanyOverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -74,7 +85,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-6">
-      <header className="nb-hero flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="nb-hero rise-in flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="nb-section-label mb-2">COMMAND CENTER</div>
           <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">{company.name}</h1>
@@ -96,16 +107,17 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         </dl>
       </header>
 
-      <AttentionQueue items={attention} />
+      <AttentionQueue items={attention} arriveAfterMs={ARRIVAL.delayMs(1)} />
 
       <WorkspaceDecision
         companyId={companyId}
         approval={decision}
         run={decisionRun}
         remaining={Math.max(approvals.approvals.length - 1, 0)}
+        arriveAfterMs={ARRIVAL.delayMs(2)}
       />
 
-      <div className="nb-bento grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="nb-bento rise-in grid gap-3 sm:grid-cols-2 xl:grid-cols-4" style={delay(3)}>
         <div className="nb-metric nb-accent-blue">
           <Stat label="Open tasks" value={openTasks} hint={`${taskCounts.done ?? 0} done`} href={`${base}/tasks`} />
         </div>
@@ -125,7 +137,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         </div>
       </div>
 
-      <section className="nb-panel-flat nb-accent-purple">
+      <section className="nb-panel-flat nb-accent-purple rise-in" style={delay(4)}>
         <FounderStudio
           companyId={companyId}
           organizationId={company.organizationId}
@@ -152,12 +164,12 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         />
       </section>
 
-      <section className="nb-panel-flat nb-accent-blue">
+      <section className="nb-panel-flat nb-accent-blue rise-in" style={delay(5)}>
         <div className="nb-section-label mb-3">MANUAL TASK LAUNCHER</div>
         <QuickStart companyId={companyId} agents={agents} />
       </section>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="rise-in grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" style={delay(6)}>
         <div className="nb-left-purple nb-accent-blue min-w-0">
           <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/activity`}>All activity <Icon.ChevronRight size={14} /></Link>}>
             <LiveFeed companyId={companyId} initial={events.events} />
@@ -196,7 +208,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
                 <ul className="-mx-2 text-sm">
                   {runs.runs.map((r) => (
                     <li key={r.id}>
-                      <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border-2 px-2 py-2 transition-colors duration-100 hover:nb-accent-purple">
+                      <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border-2 px-2 py-2 transition-colors duration-150 hover:nb-accent-purple">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium">{r.intent || agentName(agents, r.agentId)}</span>
                           <StatusPill status={r.status} />

@@ -17,6 +17,7 @@ It is an independent implementation. It does not use, copy, or depend on any pro
 | Reactions | Rules a founder writes over what Steward records — a failed payment, a bounced email, a finished task, an inbound webhook — so agents wake on what happened, not only on a schedule. One run per record, refused-by-rules written down with the reason, hourly ceilings and cooldowns per rule. |
 | Observability | Append-only event log per company streamed over SSE, run/step/tool-call timelines, token & cost accounting per provider/model/agent/company, audit log. |
 | Web | Next.js app: landing, sign-in/sign-up, onboarding, company workspace (overview, chat, tasks, runs, approvals, agents, knowledge, settings), org providers/integrations/members. |
+| Interface | One design system: named colour/radius/z tokens, three durations in declared bands, one house ease, and arrivals scheduled by a tested plan rather than typed per element. Settling values (a bar whose row stopped being the slowest) share one frame loop that lands exactly and then stops. Reduced motion is a real path, not a hammer. Read it live at `/app/design`. |
 | API | Hono REST API with OpenAPI document at `/v1/openapi.json`, cookie or bearer auth, CSRF protection, rate limiting. |
 
 ## Quick start (development)

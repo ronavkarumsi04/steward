@@ -46,6 +46,10 @@ Workflows are deterministic; all IO lives in activities with retry policies. A w
 
 The API writes to `events` (append-only, per-company sequence) and NOTIFYs via Postgres; `GET /companies/:id/events/stream` is an SSE endpoint with `Last-Event-ID` resume. The web app's live feed and run detail pages subscribe to it.
 
+## Interface
+
+The web app keeps its interface as a system rather than a set of habits (ADR-0015). Tokens — colour, radii, the three durations, the house ease and the named z-rungs — live in `apps/web/src/app/globals.css`; the numbers that describe motion live in `apps/web/src/lib/motion.ts`, and a unit test reads the stylesheet and fails if the two disagree. Arrivals are pure CSS (`.rise-in` plus an `--enter-delay` produced by `staggerPlan`) scheduled by the named plans in `apps/web/src/lib/arrivals.ts` — one for the landing page, one for the command center, one for a run's rows — each held to its band by `checkPlan`. Values that move after the page has arrived (a duration bar whose row stopped being the slowest) run on the single `requestAnimationFrame` loop in `lib/motion.ts` through the `SettleBar` component, land on exact values and then stop requesting frames. Reduced motion is a real path: values land on their first frame and arrivals are collapsed, never skipped. The system is readable at `/app/design`, which renders the real components and a live motion lab.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.

@@ -32,7 +32,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
+    <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
       <div className="mx-auto flex h-13 max-w-[1440px] items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Link

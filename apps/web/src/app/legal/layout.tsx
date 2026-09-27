@@ -11,7 +11,7 @@ export default async function LegalLayout({ children }: { children: ReactNode })
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-30 border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
+      <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
         <div className="mx-auto flex h-13 max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 font-black tracking-tight">
             <Icon.Logo size={22} />

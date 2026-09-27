@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { Icon } from "./icons";
 import type { AttentionItem, AttentionSeverity } from "@/lib/attention";
 import { Pill, ago, type Tone } from "./ui";
@@ -6,9 +7,10 @@ import { Pill, ago, type Tone } from "./ui";
 /**
  * "Needs you now" — the first thing on the command center, and the only part of it that is a to-do list.
  *
- * Motion is deliberately limited to the house `rise-in` entrance (opacity + 6px translate, `--dur-slow`,
+ * Motion is deliberately limited to the house `rise-in` entrance (opacity + 6px translate, `--dur-entrance`,
  * reduced-motion aware): nothing here loops, ticks, or animates while it is being read, because this panel is
- * read carefully and then acted on.
+ * read carefully and then acted on. Where it sits in the page's arrival is decided by the page
+ * (`lib/arrivals.ts`), not here, so one schedule describes the whole choreography.
  */
 const TONE: Record<AttentionSeverity, { label: string; wrap: string; pill: Tone }> = {
   blocking: { label: "Blocking", wrap: "nb-left-red", pill: "danger" },
@@ -16,11 +18,15 @@ const TONE: Record<AttentionSeverity, { label: string; wrap: string; pill: Tone 
   risk: { label: "Heads up", wrap: "nb-left-orange", pill: "neutral" },
 };
 
-export function AttentionQueue({ items }: { items: AttentionItem[] }) {
+export function AttentionQueue({ items, arriveAfterMs = 0 }: { items: AttentionItem[]; arriveAfterMs?: number }) {
   const decisions = items.filter((i) => i.severity !== "risk").length;
 
   return (
-    <section aria-labelledby="needs-you" className="nb-panel-flat nb-accent-purple rise-in">
+    <section
+      aria-labelledby="needs-you"
+      className="nb-panel-flat nb-accent-purple rise-in"
+      style={{ "--enter-delay": `${arriveAfterMs}ms` } as CSSProperties}
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 id="needs-you" className="nb-section-label">
           NEEDS YOU NOW
