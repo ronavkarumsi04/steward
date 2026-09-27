@@ -24,6 +24,28 @@ export async function register(page: Page): Promise<string> {
 }
 
 /**
+ * Create a company through the real onboarding, and return its id.
+ *
+ * Onboarding is three steps with server-side validation (the idea has to be a few words, the autonomy level has
+ * to be chosen), so a test that needs a company goes through the same flow a founder does rather than inserting
+ * rows behind the product's back.
+ */
+export async function createCompany(page: Page, name: string, idea = "A weekly analytics digest for small online stores."): Promise<string> {
+  await page.waitForURL(/\/app(\/new)?$/);
+  await page.getByLabel("Company name").fill(name);
+  await page.getByLabel("The idea, in your own words").fill(idea);
+  await page.getByLabel("Target customers (comma-separated)").fill("Shopify store owners, DTC marketers");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("radio").nth(1).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Create company" }).click();
+  await page.waitForURL(/\/app\/c\/([0-9a-f-]+)$/);
+  const id = /\/app\/c\/([0-9a-f-]+)$/.exec(page.url())?.[1];
+  if (!id) throw new Error(`Could not read the company id out of ${page.url()}`);
+  return id;
+}
+
+/**
  * Open the company command palette from the keyboard, and prove the shortcut works.
  *
  * The shortcut listener attaches when the shell hydrates, and after a hard reload that can lag the first paint

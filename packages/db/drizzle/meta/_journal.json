@@ -78,6 +78,13 @@
       "when": 1790476800000,
       "tag": "0010_reactions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790524800000,
+      "tag": "0011_sites",
+      "breakpoints": true
     }
   ]
 }

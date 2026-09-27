@@ -74,8 +74,21 @@ re-run green on the same commit, and `dca6e08` is green on the first attempt.
 
 ## P2 — build the product surface
 
-⬜ Site Studio / visual editor · ⬜ code IDE · ⬜ browser-use agents · ⬜ workflow builder ·
-⬜ MCP marketplace · ⬜ knowledge graph · ⬜ memory 2.0
+P2 is where Steward stops being a place work happens and starts being a place a business is *built*. Each row is a
+surface a founder owns, and every one of them has the same two requirements: the founder can see what they are
+approving before it happens, and nothing outbound happens without a run they can inspect. The order below is the
+order of leverage — a website is the first thing a company needs and the first thing an agent can be handed
+without becoming the only copy of it.
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| 1 | Site Studio / visual editor | ⬜ | in review: a company's website as a document it owns — pages of catalog-defined blocks (no markup field anywhere), a theme of named choices, a preview rendered by the same pure renderer that publishes, numbered versions with a digest and a download, and a publish that stores bytes while shipping stays a run; drafts may be unfinished, publishing names what is missing |
+| 2 | Code IDE: read, edit and run a company's code without leaving Steward | ⬜ | |
+| 3 | Browser-use agents: a real browser with the founder watching | ⬜ | |
+| 4 | Workflow builder: the reaction rules and schedules a founder draws instead of writes | ⬜ | |
+| 5 | MCP marketplace: install a server, see what it may do | ⬜ | |
+| 6 | Knowledge graph: what the company knows, as one thing | ⬜ | |
+| 7 | Memory 2.0: memory that earns its place and can be corrected | ⬜ | |
 
 ## P3 — platform
 
