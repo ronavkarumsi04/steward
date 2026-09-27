@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
@@ -34,6 +34,8 @@ export class AgentServiceFactory {
   readonly reactions: ReactionService;
   /** The company's own website: the draft, its versions, and the instruction that ships one. */
   readonly sites: SiteService;
+  /** The company's code: the repository read through its integration, and editing sessions a run commits. */
+  readonly code: CodeService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -56,6 +58,7 @@ export class AgentServiceFactory {
     this.signals = new SignalService(db);
     this.reactions = new ReactionService(db);
     this.sites = new SiteService(db);
+    this.code = new CodeService(db, this.integrations);
     this.companion = new CompanionService(db);
   }
 
@@ -82,6 +85,7 @@ export class AgentServiceFactory {
       events: this.events,
       reactions: this.reactions,
       sites: this.sites,
+      code: this.code,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),

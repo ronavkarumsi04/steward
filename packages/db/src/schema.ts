@@ -805,6 +805,51 @@ export const siteVersions = pgTable("site_versions", {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex("site_versions_number_idx").on(t.siteId, t.number), index("site_versions_company_idx").on(t.companyId, t.siteId, t.number)]);
 
+// ---------- Code ----------
+
+/**
+ * An editing session over a repository. Nothing here is committed: a session is a set of proposed file changes a
+ * founder builds in the IDE, and the commit is a run the session names.
+ */
+export const codeSessions = pgTable("code_sessions", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  /** `owner/repo`, the same spelling GitHub uses. */
+  repo: text("repo").notNull(),
+  baseRef: text("base_ref").notNull(),
+  branch: text("branch").notNull(),
+  title: text("title").notNull(),
+  /** `draft` or `discarded`. Whether it was applied is read from the run, never asserted here. */
+  state: text("state").notNull().default("draft"),
+  applyRunId: text("apply_run_id"),
+  createdBy: json<Record<string, unknown>>("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("code_sessions_company_idx").on(t.companyId, t.createdAt), index("code_sessions_run_idx").on(t.applyRunId)]);
+
+/**
+ * One proposed change to one file: the text as it is in the repository now, and the text it should have. A null
+ * `contents` means deletion and a null `original` means the file is new, which is why both are nullable rather
+ * than defaulted to "".
+ */
+export const codeChanges = pgTable("code_changes", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  sessionId: text("session_id").notNull().references(() => codeSessions.id, { onDelete: "cascade" }),
+  path: text("path").notNull(),
+  original: text("original"),
+  contents: text("contents"),
+  originalSha: text("original_sha"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  // One change per file per session: two proposals for the same path would mean the diff has two answers.
+  uniqueIndex("code_changes_path_idx").on(t.sessionId, t.path),
+  index("code_changes_company_idx").on(t.companyId, t.sessionId),
+]);
+
 // ---------- Business ----------
 export const contacts = pgTable("contacts", {
   id: id(),
