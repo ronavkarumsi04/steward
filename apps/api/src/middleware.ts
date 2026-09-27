@@ -30,9 +30,27 @@ export const securityHeaders: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.header("x-content-type-options", "nosniff");
   c.header("x-frame-options", "DENY");
   c.header("referrer-policy", "no-referrer");
-  c.header("cache-control", "no-store");
+  c.header("cache-control", cacheControl(c));
   c.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
 };
+
+/**
+ * `no-store` for everything, plus `no-transform` for an event stream — and the second half is not decoration.
+ *
+ * The web app proxies `/api/v1/*` to this server, and Next's production server runs the standard `compression`
+ * middleware over everything it serves. gzip is a *stream*: what it is handed is buffered until the encoder decides
+ * to emit, and nothing here ever flushes it, so a compressed SSE response reaches the browser only when the
+ * response ends — which for a live view is never. The symptom is the worst kind: the browser reports a 200, the
+ * page's `EventSource` fires `onopen`, and no event ever arrives, so a founder watching an agent sees a connection
+ * that is up and a screen that never moves.
+ *
+ * `no-transform` is the directive that forbids exactly that transformation, and `compression` honours it (it skips
+ * any response whose `Cache-Control` matches it). It is set from the response's own content type rather than on the
+ * stream route, so a future streamed endpoint cannot be added and quietly inherit the same silence.
+ */
+function cacheControl(c: Ctx): string {
+  return (c.res.headers.get("content-type") ?? "").startsWith("text/event-stream") ? "no-store, no-transform" : "no-store";
+}
 
 /** Loads the session from cookie or `Authorization: Bearer` and rotates the cookie when the core asks for it. */
 export const session: MiddlewareHandler<AppEnv> = async (c, next) => {

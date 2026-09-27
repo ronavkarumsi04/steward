@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createRequire } from "node:module";
 import { NativeConnection, Runtime, Worker, DefaultLogger, type LogLevel } from "@temporalio/worker";
 import { AgentServiceFactory } from "@steward/agents";
+import { browserProviderFromEnv } from "@steward/browser";
 import { createCoreContext, internalServiceToken, loadConfig, type ApprovalSignal } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandbox";
@@ -11,6 +12,7 @@ import { HttpCompanionBridge } from "./companion-bridge.js";
 import { startReactionsJob } from "./reactions-job.js";
 import { startReconcileJob } from "./reconcile-job.js";
 import { startRetentionJob } from "./retention-job.js";
+import { startBrowserJob } from "./browser-job.js";
 
 const require = createRequire(import.meta.url);
 
@@ -56,10 +58,19 @@ async function main() {
     },
   };
   const sandbox = sandboxFromEnv(process.env);
+
+  // The browser this worker may drive. `auto` means "whatever this machine actually has": a container without
+  // Chromium reports `none` and says why, and a stack that installed it needs no second env var to be allowed to
+  // use it. Resolved once at boot because the provider is a process-local cache of open pages.
+  const { provider: browser, mode: browserMode } = await browserProviderFromEnv(process.env);
+  const browserState = await browser.availability();
+  if (!browserState.available) log.warn({ provider: browser.name, mode: browserMode, reason: browserState.reason }, "this worker cannot open a browser; browsing agents will say so instead of clicking");
+
   const companionBridge = new HttpCompanionBridge(config.apiInternalUrl, internalServiceToken(config));
   const factory = new AgentServiceFactory({
     core,
     sandbox,
+    browser,
     approvalSignal,
     companionBridge,
     runWorkflowLauncher: { start: (input) => workflows.startRun(input) },
@@ -97,8 +108,13 @@ async function main() {
   // payment), so work can start from what happened rather than only from the clock.
   startReactionsJob(core.db, log, { start: (input) => workflows.startRun(input) });
 
-  log.info({ taskQueue: temporal.taskQueue, namespace: temporal.namespace, address: temporal.address, sandbox: !!sandbox }, "steward worker ready");
+  // Closes browser sessions nobody is driving and drops frames past the window, so a session that outlived its run
+  // stops claiming to be live and the images of past moments do not accumulate forever.
+  startBrowserJob(core.db, log, browser);
+
+  log.info({ taskQueue: temporal.taskQueue, namespace: temporal.namespace, address: temporal.address, sandbox: !!sandbox, browser: browser.name, browserMode }, "steward worker ready");
   await worker.run();
+  await browser.dispose().catch((err) => log.warn({ err }, "closing the browser failed"));
   await connection.close();
   await client.connection.close();
   await core.pool.end();

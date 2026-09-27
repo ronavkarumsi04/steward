@@ -93,7 +93,11 @@ describe("reconciliation", () => {
 
     const started: string[] = [];
     const service = new ReconcileService(db, { start: async (input) => void started.push(input.runId) });
-    const report = await service.sweep({ queuedGraceMs: 0 });
+    // The sweep is deployment-wide, and `limit` is a batch size rather than a filter: a development database
+    // accumulates hundreds of launches that were never started, so a sweep that asked for the default batch could
+    // legitimately not reach the run this test just made. Asking for a batch big enough to hold everything is what
+    // "assert on the run you created" means against a shared database, and the run is still the thing asserted.
+    const report = await service.sweep({ queuedGraceMs: 0, limit: 10_000 });
     expect(started).toContain(runId);
     expect(report.startsRetried).toBeGreaterThanOrEqual(1);
     expect((await runs.get(scope, runId))?.status).toBe("queued"); // still queued: the workflow owns it now

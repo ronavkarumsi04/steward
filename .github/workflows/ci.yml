@@ -59,13 +59,17 @@ jobs:
         env:
           DATABASE_URL: postgres://steward:steward@localhost:5432/steward
 
+      # Before the tests, not after: `@steward/browser` drives a real Chromium against a real page, and it skips
+      # itself when there is no browser — so installing later would turn the only test of the actual browser into a
+      # green no-op. The suite that claims "a page can be read" has to run with a page to read. Both packages pin
+      # Playwright 1.63.0, so this one installation serves the browser tests and the web end-to-end suite.
+      - name: Install Playwright browsers
+        run: pnpm --filter @steward/web exec playwright install --with-deps chromium
+
       - name: Unit and integration tests
         run: pnpm test
         env:
           DATABASE_URL: postgres://steward:steward@localhost:5432/steward
-
-      - name: Install Playwright browsers
-        run: pnpm --filter @steward/web exec playwright install --with-deps chromium
 
       - name: Boot verification (production build, crash recovery, golden path)
         run: SKIP_INSTALL=1 pnpm verify:boot

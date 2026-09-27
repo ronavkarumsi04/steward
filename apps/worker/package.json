@@ -15,6 +15,7 @@
   "dependencies": {
     "@steward/agents": "workspace:*",
     "@steward/ai": "workspace:*",
+    "@steward/browser": "workspace:*",
     "@steward/core": "workspace:*",
     "@steward/db": "workspace:*",
     "@steward/legal": "workspace:*",

@@ -178,6 +178,13 @@ export const Icon = {
       <path d="m15 7 5 5-5 5" />
     </Base>
   ),
+  Browser: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M3 8.5h18" />
+      <path d="M6.2 6.3h.01M8.6 6.3h.01M11 6.3h.01" />
+    </Base>
+  ),
   Sparkle: (p: IconProps) => (
     <Base {...p}>
       <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />

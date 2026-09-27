@@ -23,6 +23,7 @@
     "@hono/node-server": "2.1.1",
     "@steward/agents": "workspace:*",
     "@steward/ai": "workspace:*",
+    "@steward/browser": "workspace:*",
     "@steward/core": "workspace:*",
     "@steward/crypto": "workspace:*",
     "@steward/db": "workspace:*",

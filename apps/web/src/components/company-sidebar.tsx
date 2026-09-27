@@ -13,6 +13,8 @@ const GROUPS = [
       ["/projects", "Projects", Icon.Company],
       // The repository this company works in: read it, propose a change, hand the proposal to an agent.
       ["/code", "Code", Icon.Code],
+      // Pages an agent looks at while the founder watches — a competitor, a directory, a signup flow.
+      ["/browser", "Browser", Icon.Browser],
       ["/signals", "Signals", Icon.Signals],
       ["/chat", "Chat", Icon.Chat],
     ],
