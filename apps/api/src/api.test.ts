@@ -73,10 +73,28 @@ afterAll(async () => {
   await closedCore?.pool.end();
 });
 
-const d = (name: string, fn: () => Promise<void>) => it(name, async () => {
-  if (!available) return;
-  await fn();
-});
+/**
+ * The budget for a test in this file, and why it is not the 5 s default.
+ *
+ * Every test here is an integration test: it boots the app against a real Postgres, and most of them drive
+ * HTTP, webhooks, an in-process agent runtime or a stub provider. At the default 5 s the suite stopped
+ * measuring the product and started measuring the runner — a case that takes four seconds on a laptop crossed
+ * five on a loaded CI box and turned a working suite red. The budget is a hang guard, so it is generous on
+ * purpose, and the one test that genuinely costs seconds states its own.
+ */
+const TEST_BUDGET_MS = 30_000;
+/** Seven scripted backends, driven end to end through the runtime the worker uses, judged on recorded rows. */
+const EVAL_SUITE_BUDGET_MS = 120_000;
+
+const d = (name: string, fn: () => Promise<void>, timeoutMs = TEST_BUDGET_MS) =>
+  it(
+    name,
+    async () => {
+      if (!available) return;
+      await fn();
+    },
+    timeoutMs,
+  );
 
 interface Client {
   token: string;
@@ -680,7 +698,7 @@ describe("agent evals (scripted backends, in-process runtime)", () => {
       await Promise.all(providers.map((p) => p.close()));
       await Promise.all(sinks.map((s) => s.close()));
     }
-  });
+  }, EVAL_SUITE_BUDGET_MS);
 });
 
 /**
