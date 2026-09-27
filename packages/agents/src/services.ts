@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BudgetService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, TaskService, EventService } from "@steward/core";
+import type { AgentService, ApprovalService, BudgetService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, TaskService, EventService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -29,6 +29,8 @@ export interface AgentServices {
   growth: GrowthService;
   providers: ProviderCredentialService;
   events: EventService;
+  /** The rules that decide which recorded events wake an agent, and the ledger of what they did. */
+  reactions: ReactionService;
   /** Starts an already-persisted run as a durable workflow. Present in worker runtimes. */
   runWorkflowLauncher?: RunWorkflowLauncher;
   sandbox?: SandboxProvider;

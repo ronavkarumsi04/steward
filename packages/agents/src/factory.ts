@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, RunService, SignalService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BudgetService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
@@ -31,6 +31,7 @@ export class AgentServiceFactory {
   readonly providers: ProviderCredentialService;
   readonly events: EventService;
   readonly signals: SignalService;
+  readonly reactions: ReactionService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -51,6 +52,7 @@ export class AgentServiceFactory {
     this.providers = new ProviderCredentialService(db, crypto, this.o.core.log);
     this.events = new EventService(db);
     this.signals = new SignalService(db);
+    this.reactions = new ReactionService(db);
     this.companion = new CompanionService(db);
   }
 
@@ -75,6 +77,7 @@ export class AgentServiceFactory {
       growth: this.growth,
       providers: this.providers,
       events: this.events,
+      reactions: this.reactions,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),

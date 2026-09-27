@@ -14,6 +14,7 @@ It is an independent implementation. It does not use, copy, or depend on any pro
 | AI providers | Bring-your-own-key for 25+ provider families (OpenAI, Anthropic, Gemini, Vertex, Bedrock, Azure OpenAI, xAI, Mistral, Cohere, DeepSeek, Groq, Cerebras, Together, Fireworks, OpenRouter, Perplexity, Cloudflare Workers AI, NVIDIA NIM, SambaNova, Hugging Face, Ollama, LM Studio, vLLM, llama.cpp, LiteLLM, any OpenAI-compatible endpoint) plus a **local companion** that runs your own Codex CLI login without ever sending it to the server. |
 | Policy | Autonomy levels 0–4, risk classification per tool, approval gates for critical actions, budgets per category, content/secret filtering, sandboxed code execution. |
 | Integrations | GitHub, Slack, Discord, Twilio, X, Stripe, Neon, Vercel, Render, Resend/Postmark/SendGrid/SMTP, Google, generic REST — with OAuth or API-key auth, encrypted at rest. |
+| Reactions | Rules a founder writes over what Steward records — a failed payment, a bounced email, a finished task, an inbound webhook — so agents wake on what happened, not only on a schedule. One run per record, refused-by-rules written down with the reason, hourly ceilings and cooldowns per rule. |
 | Observability | Append-only event log per company streamed over SSE, run/step/tool-call timelines, token & cost accounting per provider/model/agent/company, audit log. |
 | Web | Next.js app: landing, sign-in/sign-up, onboarding, company workspace (overview, chat, tasks, runs, approvals, agents, knowledge, settings), org providers/integrations/members. |
 | API | Hono REST API with OpenAPI document at `/v1/openapi.json`, cookie or bearer auth, CSRF protection, rate limiting. |
@@ -61,7 +62,7 @@ pnpm verify:boot                            # clean install → production build
 ```
 apps/
   api/          Hono API (auth, orgs, companies, tasks, runs, approvals, providers, integrations, companion hub, SSE)
-  worker/       Temporal worker: agent run / schedule / housekeeping workflows and activities
+  worker/       Temporal worker: agent run / schedule / housekeeping workflows, activities, reaction sweep
   web/          Next.js 16 app (React 19)
   companion/    steward-companion CLI: pairs a user's machine and runs the official Codex CLI locally
 packages/

@@ -8,6 +8,7 @@ import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandb
 import { WorkflowClient, connectTemporal, temporalConfigFromEnv, temporalTlsMaterial } from "@steward/workflows";
 import { createActivities } from "./activities.js";
 import { HttpCompanionBridge } from "./companion-bridge.js";
+import { startReactionsJob } from "./reactions-job.js";
 import { startReconcileJob } from "./reconcile-job.js";
 import { startRetentionJob } from "./retention-job.js";
 
@@ -91,6 +92,10 @@ async function main() {
   // Repairs the states a distributed failure can leave behind: launches that never started, runs that stopped
   // moving, approvals whose run already finished, and tasks waiting on an approval that no longer exists.
   startReconcileJob(core.db, log, { start: (input) => workflows.startRun(input) });
+
+  // Answers the rules a founder wrote over recorded events (a finished task, an inbound webhook, a failed
+  // payment), so work can start from what happened rather than only from the clock.
+  startReactionsJob(core.db, log, { start: (input) => workflows.startRun(input) });
 
   log.info({ taskQueue: temporal.taskQueue, namespace: temporal.namespace, address: temporal.address, sandbox: !!sandbox }, "steward worker ready");
   await worker.run();

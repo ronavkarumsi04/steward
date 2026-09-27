@@ -366,6 +366,11 @@ export const EventType = z.enum([
   "message.created",
   "deployment.status",
   "schedule.fired",
+  "reaction.fired",
+  "reaction.skipped",
+  "reaction.created",
+  "reaction.updated",
+  "reaction.deleted",
   "agent.updated",
   "audit",
 ]);
