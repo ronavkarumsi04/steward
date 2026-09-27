@@ -18,6 +18,7 @@ import { CompanionHub } from "./companion-hub.js";
 import { runEvalSuite, SCRIPT_FOR_BACKEND } from "./test/eval-harness.js";
 import { startSmtpSink, type SmtpSink } from "./test/smtp-sink.js";
 import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
+import { startFakeGitHub } from "@steward/core/test/fake-github";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 const ENV: NodeJS.ProcessEnv = {
@@ -133,6 +134,10 @@ function client(token = "", cookie = "", target: () => typeof app = () => app): 
  * acceptance became optional, these registrations would still pass but the explicit test below would fail.
  */
 const CLICKWRAP = REQUIRED_AGREEMENTS.map((document) => ({ document, version: REQUIRED_VERSIONS[document] }));
+
+/** The two texts the code IDE's cases read from the local GitHub server. */
+const README_TEXT = "# Northwind\n\nWeekly revenue reports.\n";
+const APP_TEXT = "export const revenue = (cents: number) => cents / 100;\n";
 
 async function register(name = "Founder") {
   const email = `${name.toLowerCase()}-${uniq()}@example.com`;
@@ -1138,6 +1143,188 @@ describe("site studio", () => {
     expect((await api.call("POST", `/companies/${companyId}/site/versions/no-such-version/ship`, { agentId })).status).toBe(404);
   });
 
+});
+
+/**
+ * The code IDE over HTTP.
+ *
+ * The repository is a *local server that answers like GitHub*, and the integration is pointed at it through its
+ * own `baseUrl` field — the seam GitHub Enterprise uses. So these cases exercise the real client over real HTTP:
+ * the encrypted token is decrypted and sent, the tree and the file come back the way GitHub sends them, and the
+ * refusals (binary, too big, no integration) are the ones a founder would actually meet.
+ *
+ * Committing is not tested here because this API does not commit: applying a session starts a run, and the run's
+ * outcome is what the product reports as applied.
+ */
+describe("code ide", () => {
+  async function workspace(files: Record<string, string> = { "README.md": "# Northwind\n\nWeekly revenue reports.\n", "src/app.ts": "export const revenue = (cents: number) => cents / 100;\n" }) {
+    // `binary` is the server's marker for a file with a NUL byte in it, which is how the binary refusal is tested.
+    const github = await startFakeGitHub({ files, binary: "logo.png" });
+    const founder = await register("Coder");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Code ${uniq()}`, autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const connected = await founder.api.json<{ integration: { id: string } }>("POST", `/orgs/${founder.orgId}/integrations`, {
+      type: "github",
+      label: "GitHub (local)",
+      companyId,
+      fields: { token: `ghp_${uniq()}`, baseUrl: github.url },
+    });
+    expect(connected.status).toBe(201);
+    const listed = await founder.api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    const agentId = listed.body.agents.find((agent) => agent.kind === "engineering")!.id;
+    return { ...founder, companyId, agentId, github };
+  }
+
+  type Read = { connected: boolean; integration: { id: string; label: string } | null; defaultRepo: string | null; sessions: Array<{ id: string; state: string; repo: string; branch: string; changeCount: number; pullUrl: string | null }>; canEdit: boolean; sandbox: { provider: string; runsCommands: boolean } };
+  const read = (api: ReturnType<typeof client>, companyId: string) => api.json<Read>("GET", `/companies/${companyId}/code`);
+
+  d("says what to connect instead of failing when source control is not connected, and reports no sandbox honestly", async () => {
+    const founder = await register("NoCode");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `No code ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+
+    const first = await read(founder.api, companyId);
+    expect(first.status).toBe(200);
+    expect(first.body.connected).toBe(false);
+    expect(first.body.integration).toBeNull();
+    expect(first.body.sessions).toEqual([]);
+    // The test stack has no sandbox provider, and the IDE says so rather than offering a button that cannot work.
+    expect(first.body.sandbox.runsCommands).toBe(first.body.sandbox.provider !== "none" && first.body.sandbox.provider !== "disabled");
+
+    const repos = await founder.api.json<{ error: { code: string; message: string } }>("GET", `/companies/${companyId}/code/repos`);
+    expect(repos.status).toBe(409);
+    expect(repos.body.error.code).toBe("code_no_integration");
+    expect(repos.body.error.message).toMatch(/Connect GitHub/);
+    expect((await founder.api.call("GET", `/companies/${companyId}/code/tree?repo=northwind/analytics&ref=main`)).status).toBe(409);
+  });
+
+  d("reads a real repository: tree, file, branches — and refuses what it cannot show", async () => {
+    const { api, companyId, github } = await workspace({ "README.md": README_TEXT, "src/app.ts": APP_TEXT, "logo.png": "" });
+    const code = await read(api, companyId);
+    expect(code.body.connected).toBe(true);
+
+    const repos = await api.json<{ repos: Array<{ fullName: string; defaultBranch: string }> }>("GET", `/companies/${companyId}/code/repos`);
+    expect(repos.body.repos.map((repo) => repo.fullName)).toContain("northwind/analytics");
+
+    const tree = await api.json<{ entries: Array<{ path: string; size: number | null }>; truncated: boolean; defaultBranch: string }>("GET", `/companies/${companyId}/code/tree?repo=northwind/analytics&ref=main`);
+    expect(tree.body.entries.map((entry) => entry.path)).toEqual(["README.md", "logo.png", "src/app.ts"]);
+    expect(tree.body.truncated).toBe(false);
+
+    const file = await api.json<{ contents: string; bytes: number }>("GET", `/companies/${companyId}/code/file?repo=northwind/analytics&ref=main&path=src/app.ts`);
+    expect(file.body.contents).toBe(APP_TEXT);
+
+    const branches = await api.json<{ defaultBranch: string; branches: Array<{ name: string; protected: boolean }> }>("GET", `/companies/${companyId}/code/branches?repo=northwind/analytics`);
+    expect(branches.body.defaultBranch).toBe("main");
+    expect(branches.body.branches.map((branch) => branch.name)).toContain("feature/one");
+
+    // A binary file is refused with a reason a founder can act on, and never sent to the editor.
+    const binary = await api.json<{ error: { code: string; message: string } }>("GET", `/companies/${companyId}/code/file?repo=northwind/analytics&ref=main&path=logo.png`);
+    expect(binary.status).toBe(422);
+    expect(binary.body.error.code).toBe("code_refused");
+    expect(binary.body.error.message).toMatch(/not text/);
+
+    // A path that tries to leave the repository is refused before it is ever used.
+    expect((await api.call("GET", `/companies/${companyId}/code/file?repo=northwind/analytics&ref=main&path=../secrets`)).status).toBe(422);
+    // A ref that is not a branch name is refused rather than passed to git or to a URL.
+    expect((await api.call("GET", `/companies/${companyId}/code/tree?repo=northwind/analytics&ref=main%3B%20rm%20-rf`)).status).toBe(422);
+    await github.close();
+  });
+
+  d("stages a change, shows the diff it would commit, and withdraws it", async () => {
+    const { api, companyId, github } = await workspace();
+    const created = await api.json<{ session: { id: string; branch: string; baseRef: string; state: string } }>("POST", `/companies/${companyId}/code/sessions`, { repo: "northwind/analytics", baseRef: "main", title: "Add a net helper" });
+    expect(created.status).toBe(201);
+    expect(created.body.session.branch).toBe("steward/add-a-net-helper");
+    const sessionId = created.body.session.id;
+
+    const staged = await api.json<{ changes: Array<{ path: string; kind: string; summary: string; diff: { added: number } }> }>("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "src/app.ts", contents: `${APP_TEXT}export const net = (cents: number) => cents;\n` });
+    expect(staged.status).toBe(200);
+    expect(staged.body.changes).toHaveLength(1);
+    expect(staged.body.changes[0]!.kind).toBe("modified");
+    expect(staged.body.changes[0]!.diff.added).toBe(1);
+
+    const detail = await api.json<{ session: { state: string; changeCount: number }; changes: unknown[]; patch: string; digest: string }>("GET", `/companies/${companyId}/code/sessions/${sessionId}`);
+    expect(detail.body.session.state).toBe("draft");
+    expect(detail.body.session.changeCount).toBe(1);
+    expect(detail.body.patch).toContain("--- a/src/app.ts\n");
+    expect(detail.body.patch).toContain("+export const net = (cents: number) => cents;\n");
+    expect(detail.body.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    // A change that says exactly what is already there is not a change.
+    const same = await api.json<{ changes: unknown[] }>("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "src/app.ts", contents: APP_TEXT });
+    expect(same.body.changes).toEqual([]);
+
+    // A binary proposal is refused: this editor does not write files it cannot show.
+    const binary = await api.json<{ error: { message: string } }>("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "logo.png", contents: "PNG\u0000" });
+    expect(binary.status).toBe(422);
+    expect(binary.body.error.message).toMatch(/not text/);
+
+    // Withdrawing leaves the session with nothing to commit.
+    await api.json("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "README.md", contents: "# Northwind\n" });
+    const withdrawn = await api.json<{ changes: unknown[] }>("DELETE", `/companies/${companyId}/code/sessions/${sessionId}/changes?path=README.md`);
+    expect(withdrawn.body.changes).toEqual([]);
+
+    const discarded = await api.json<{ session: { state: string } }>("POST", `/companies/${companyId}/code/sessions/${sessionId}/discard`);
+    expect(discarded.body.session.state).toBe("discarded");
+    expect((await api.call("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "README.md", contents: "x" })).status).toBe(422);
+    expect((await read(api, companyId)).body.sessions[0]!.state).toBe("discarded");
+    await github.close();
+  });
+
+  d("applies a session as a run, and reports applied only when the run says so", async () => {
+    const { api, companyId, agentId, orgId, userId, github } = await workspace();
+    const created = await api.json<{ session: { id: string; branch: string; title: string } }>("POST", `/companies/${companyId}/code/sessions`, { repo: "northwind/analytics", baseRef: "main", title: "Add a net helper" });
+    const sessionId = created.body.session.id;
+    await api.json("PUT", `/companies/${companyId}/code/sessions/${sessionId}/changes`, { path: "src/net.ts", contents: "export const net = (cents: number) => cents;\n" });
+
+    const applied = await api.json<{ status: string; reason: string | null; instruction: string; digest: string; run: { id: string; trigger: { instruction: string } } }>("POST", `/companies/${companyId}/code/sessions/${sessionId}/apply`, { agentId });
+    expect(applied.status).toBe(201);
+    expect(applied.body.status).toBe("started");
+    expect(applied.body.reason).toBeNull();
+    expect(applied.body.instruction).toContain("Branch: steward/add-a-net-helper");
+    expect(applied.body.instruction).toContain("Never commit to main directly");
+    // The instruction the founder was shown is the instruction the run holds, byte for byte.
+    expect(applied.body.run.trigger.instruction).toBe(applied.body.instruction);
+    expect(temporalCalls.some((call) => call.op === "startRun" && (call.args[0] as { runId: string }).runId === applied.body.run.id)).toBe(true);
+    // The proposed files are an artifact of the run, so what was approved can be read back later.
+    const bundle = await core.pool.query<{ content: string; metadata: Record<string, unknown> }>("select content, metadata from artifacts where run_id = $1 and kind = 'code_change'", [applied.body.run.id]);
+    expect((JSON.parse(bundle.rows[0]!.content) as { files: unknown[] }).files).toEqual([{ path: "src/net.ts", contents: "export const net = (cents: number) => cents;\n" }]);
+    expect(bundle.rows[0]?.metadata.branch).toBe("steward/add-a-net-helper");
+
+    // A session that is already being applied is frozen rather than applied twice.
+    const conflict = await api.json<{ error: { code: string; message: string } }>("POST", `/companies/${companyId}/code/sessions/${sessionId}/apply`, { agentId });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error.code).toBe("code_conflict");
+    expect((await read(api, companyId)).body.sessions[0]!.state).toBe("running");
+
+    // The state is the run's: a succeeded run is an applied session, and its pull request is linked.
+    const scope: TenantScope = { organizationId: orgId, companyId, userId, role: "owner", actor: { type: "user", userId } };
+    await services.runs.setStatus(scope, applied.body.run.id, "succeeded");
+    await services.runs.addArtifact(scope, { runId: applied.body.run.id, kind: "pull_request", title: "Add a net helper", url: "https://github.com/northwind/analytics/pull/1", metadata: { number: 1 } });
+    const after = await read(api, companyId);
+    expect(after.body.sessions[0]!.state).toBe("applied");
+    expect(after.body.sessions[0]!.pullUrl).toBe("https://github.com/northwind/analytics/pull/1");
+
+    const detail = await api.json<{ pullRequests: Array<{ url: string; number: number }> }>("GET", `/companies/${companyId}/code/sessions/${sessionId}`);
+    expect(detail.body.pullRequests).toEqual([{ title: "Add a net helper", url: "https://github.com/northwind/analytics/pull/1", number: 1 }]);
+    await github.close();
+  });
+
+  d("keeps a company's code workspace out of another company's reach", async () => {
+    const owner = await workspace();
+    const stranger = await register("Stranger");
+    const strangerCo = await stranger.api.json<{ company: { id: string } }>("POST", `/orgs/${stranger.orgId}/companies`, { name: `Other ${uniq()}`, autonomyLevel: 2 });
+    const strangerCompanyId = strangerCo.body.company.id;
+    const created = await owner.api.json<{ session: { id: string } }>("POST", `/companies/${owner.companyId}/code/sessions`, { repo: "northwind/analytics", baseRef: "main", title: "Mine" });
+    const sessionId = created.body.session.id;
+
+    // A company id the caller cannot see is a 404, and a session of another company is never readable.
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/code`)).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/code/tree?repo=northwind/analytics&ref=main`)).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/code/sessions/${sessionId}`)).status).toBe(404);
+    expect((await stranger.api.call("PUT", `/companies/${strangerCompanyId}/code/sessions/${sessionId}/changes`, { path: "README.md", contents: "x" })).status).toBe(404);
+    await owner.github.close();
+  });
 });
 
 describe("openapi + health", () => {

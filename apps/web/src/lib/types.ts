@@ -691,3 +691,114 @@ export interface SiteShipResult {
   instruction: string;
   run: { id: string; status: string } | null;
 }
+
+/* ------------------------------------------------------------------------------------------------ code IDE */
+
+export interface DiffHunk {
+  beforeStart: number;
+  beforeCount: number;
+  afterStart: number;
+  afterCount: number;
+  /** ` ` unchanged, `-` removed, `+` added. Each line keeps its own terminator, so CRLF diffs as CRLF. */
+  lines: string[];
+}
+
+export interface FileDiff {
+  path: string;
+  added: number;
+  removed: number;
+  hunks: DiffHunk[];
+}
+
+export type CodeChangeKind = "added" | "modified" | "deleted";
+
+export interface CodeChangeView {
+  path: string;
+  original: string | null;
+  contents: string | null;
+  originalSha: string | null;
+  diff: FileDiff;
+  summary: string;
+  kind: CodeChangeKind;
+}
+
+export type CodeSessionState = "draft" | "running" | "applied" | "failed" | "discarded";
+
+export interface CodeSessionView {
+  id: string;
+  repo: string;
+  baseRef: string;
+  branch: string;
+  title: string;
+  state: CodeSessionState;
+  applyRunId: string | null;
+  runError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  changeCount: number;
+  pullUrl: string | null;
+}
+
+export interface CodeWorkspaceRead {
+  connected: boolean;
+  integration: { id: string; label: string } | null;
+  defaultRepo: string | null;
+  sessions: CodeSessionView[];
+  /** The enabled agents a session can be handed to. An apply is a run, so it needs a real agent. */
+  agents: Array<{ id: string; kind: string; name: string }>;
+  canEdit: boolean;
+  sandbox: { provider: string; runsCommands: boolean };
+}
+
+export interface CodeRepoOption {
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  url: string;
+  description: string | null;
+  pushedAt: string | null;
+}
+
+export interface CodeTreeEntry {
+  path: string;
+  size: number | null;
+}
+
+export interface CodeTreeRead {
+  repo: string;
+  ref: string;
+  defaultBranch: string;
+  url: string;
+  sha: string;
+  truncated: boolean;
+  entries: CodeTreeEntry[];
+}
+
+export interface CodeFileRead {
+  path: string;
+  ref: string;
+  contents: string;
+  sha: string;
+  bytes: number;
+}
+
+export interface CodeBranchesRead {
+  defaultBranch: string;
+  branches: Array<{ name: string; protected: boolean }>;
+}
+
+export interface CodeSessionRead {
+  session: CodeSessionView | null;
+  changes: CodeChangeView[];
+  patch: string;
+  digest: string;
+  pullRequests: Array<{ title: string; url: string | null; number: number | null }>;
+}
+
+export interface CodeApplyResult {
+  status: "started" | "queued" | "failed";
+  reason: string | null;
+  instruction: string;
+  digest: string;
+  run: { id: string; status: string } | null;
+}

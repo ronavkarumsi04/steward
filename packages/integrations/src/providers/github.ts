@@ -6,7 +6,10 @@ export const githubDefinition: IntegrationDefinition = {
   category: "source_control",
   authKind: "oauth2",
   oauth: { authorizeUrl: "https://github.com/login/oauth/authorize", tokenUrl: "https://github.com/login/oauth/access_token", scopes: ["repo", "read:user", "user:email"], pkce: false, clientAuth: "body" },
-  fields: [{ key: "token", label: "Personal access token (fine-grained; Contents + Pull requests: read/write)", secret: true, placeholder: "github_pat_…", help: "Used when OAuth is not configured." }],
+  fields: [
+    { key: "token", label: "Personal access token (fine-grained; Contents + Pull requests: read/write)", secret: true, placeholder: "github_pat_…", help: "Used when OAuth is not configured." },
+    { key: "baseUrl", label: "API base URL", secret: false, placeholder: "https://api.github.com", help: "Only for GitHub Enterprise: the REST API root, for example https://github.example.com/api/v3" },
+  ],
   docsUrl: "https://docs.github.com/en/rest",
   actions: [
     { name: "list_repos", description: "List repositories", risk: "LOW", externallyVisible: false },
@@ -28,8 +31,23 @@ export interface RepoRef {
 
 export class GitHubClient {
   private readonly base: string;
-  constructor(private readonly secret: IntegrationSecret, baseUrl = "https://api.github.com") {
-    this.base = baseUrl.replace(/\/$/, "");
+  /**
+   * `baseUrl` comes from the integration's own configuration when it is set, which is what makes GitHub
+   * Enterprise work — and what lets the test suite point a real client at a local server that answers like
+   * GitHub does, instead of mocking the client away.
+   */
+  constructor(private readonly secret: IntegrationSecret, baseUrl?: string) {
+    const configured = baseUrl ?? secret.fields?.baseUrl ?? "https://api.github.com";
+    // A base URL is configuration, not content: an http(s) one or nothing. A typo has to fail where it is used
+    // rather than quietly talking to github.com.
+    let parsed: URL;
+    try {
+      parsed = new URL(configured);
+    } catch {
+      throw new Error(`The GitHub API base URL is not a URL: ${configured}`);
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error(`The GitHub API base URL must be http or https, not ${parsed.protocol}`);
+    this.base = configured.replace(/\/$/, "");
   }
   static fromSecret(s: IntegrationSecret, baseUrl?: string) {
     return new GitHubClient(s, baseUrl);
@@ -49,6 +67,16 @@ export class GitHubClient {
   }
   listRepos(opts: { perPage?: number; affiliation?: string } = {}) {
     return this.req<Array<{ full_name: string; private: boolean; default_branch: string; html_url: string; description: string | null; pushed_at: string }>>(`/user/repos?per_page=${opts.perPage ?? 50}&sort=pushed&affiliation=${opts.affiliation ?? "owner,collaborator,organization_member"}`);
+  }
+  /**
+   * The repository's tree at a ref, recursively. One request rather than a request per directory, which is what
+   * makes browsing a real repository feel like a file browser instead of a sequence of round trips.
+   */
+  listTree(r: RepoRef, ref: string): Promise<{ sha: string; truncated: boolean; tree: Array<{ path: string; mode: string; type: "blob" | "tree" | "commit"; size?: number; sha: string }> }> {
+    return this.req(`/repos/${r.owner}/${r.repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+  }
+  listBranches(r: RepoRef, opts: { perPage?: number } = {}) {
+    return this.req<Array<{ name: string; protected: boolean; commit: { sha: string } }>>(`/repos/${r.owner}/${r.repo}/branches?per_page=${opts.perPage ?? 60}`);
   }
   getRepo(r: RepoRef) {
     return this.req<{ full_name: string; default_branch: string; private: boolean; html_url: string; clone_url: string }>(`/repos/${r.owner}/${r.repo}`);

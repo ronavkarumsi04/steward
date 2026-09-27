@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { AuthError, SiteError, type EventBus } from "@steward/core";
+import { AuthError, CodeError, SiteError, type EventBus } from "@steward/core";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
 import { csrf, rateLimit, requestId, securityHeaders, session } from "./middleware.js";
@@ -14,6 +14,7 @@ import { registerProviderRoutes } from "./routes/providers.js";
 import { registerWorkRoutes } from "./routes/work.js";
 import { registerReactionRoutes } from "./routes/reactions.js";
 import { registerSiteRoutes } from "./routes/site.js";
+import { registerCodeRoutes } from "./routes/code.js";
 import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/signals.js";
 
 export const API_VERSION = "0.1.0";
@@ -68,6 +69,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerSignalRoutes(v1, registry);
   registerReactionRoutes(v1, registry);
   registerSiteRoutes(v1, registry);
+  registerCodeRoutes(v1, registry);
   registerProviderRoutes(v1, registry);
   registerCompanionRoutes(v1, registry);
 
@@ -83,6 +85,11 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
       return c.json({ error: { code: err.code, message: err.message, requestId: rid } }, status);
     }
     if (err instanceof TenantError) return c.json({ error: { code: "tenant_scope", message: err.message, requestId: rid } }, 400);
+    if (err instanceof CodeError) {
+      // A refused edit or a missing session says what to do about it, in the same shape as a site refusal.
+      const status = err.code === "not_found" ? 404 : err.code === "conflict" || err.code === "no_integration" ? 409 : err.code === "provider" ? 502 : 422;
+      return c.json({ error: { code: `code_${err.code}`, message: err.message, details: err.problems.length ? { problems: err.problems } : undefined, requestId: rid } }, status);
+    }
     if (err instanceof SiteError) {
       // A refused save or publish carries the list of what is wrong, because that list is what the studio shows.
       const status = err.code === "not_found" ? 404 : err.code === "stale" ? 409 : 422;

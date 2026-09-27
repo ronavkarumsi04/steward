@@ -17,3 +17,5 @@ export * from "./privacy.js";
 export * from "./retention.js";
 export * from "./reconcile.js";
 export * from "./sites.js";
+export * from "./diff.js";
+export * from "./code.js";
