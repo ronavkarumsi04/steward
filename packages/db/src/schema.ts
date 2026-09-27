@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   bigserial,
   boolean,
   index,
@@ -104,6 +105,9 @@ export const companies = pgTable("companies", {
   status: text("status").notNull().default("active"), // active|paused|archived
   autonomyLevel: integer("autonomy_level").notNull().default(2),
   outboundPaused: boolean("outbound_paused").notNull().default(false),
+  // Superseded by the builtin `signal_review` reaction rule (migration 0010 back-filled it from this column).
+  // Kept because migrations are additive: the column is the record of what the company had switched on, while
+  // `reaction_rules` is the one place that now decides whether a signal wakes an agent.
   signalAutoReview: boolean("signal_auto_review").notNull().default(false),
   timezone: text("timezone").notNull().default("UTC"),
   quietHours: json<{ start: string; end: string } | null>("quiet_hours"),
@@ -606,6 +610,76 @@ export const businessSignals = pgTable("business_signals", {
   index("business_signals_project_idx").on(t.projectId, t.occurredAt),
 ]);
 
+// ---------- Reactions ----------
+/**
+ * A founder's standing answer to "when this is recorded, that agent does this". One row per rule, so the
+ * rule that caused a run is a row rather than a sentence in a prompt: it can be paused, capped, and pointed
+ * at from the run it produced.
+ */
+export const reactionRules = pgTable("reaction_rules", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  source: text("source").notNull(), // signal | event
+  /** Signal kinds (payment.completed) or recorded event types (task.completed) this rule answers to. */
+  matchKinds: json<string[]>("match_kinds").notNull().default([]),
+  matchSeverities: json<string[]>("match_severities").notNull().default([]),
+  /** Optional narrowing to one project; null means the whole company. */
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  /** What the agent is asked to do. The event's evidence is appended by the engine, never invented. */
+  instruction: text("instruction").notNull(),
+  /** Ceiling on runs this rule may start per rolling hour. Zero means the rule is paused by its cap. */
+  maxRunsPerHour: integer("max_runs_per_hour").notNull().default(6),
+  cooldownMinutes: integer("cooldown_minutes").notNull().default(0),
+  /** Set by the default Senior-review rule so the Signals setting can find it again. */
+  builtin: text("builtin"), // signal_review | null
+  lastFiredAt: ts("last_fired_at"),
+  fireCount: integer("fire_count").notNull().default(0),
+  createdBy: json<Record<string, unknown>>("created_by").notNull().default({}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  index("reaction_rules_company_idx").on(t.companyId, t.enabled),
+  uniqueIndex("reaction_rules_builtin_idx").on(t.companyId, t.builtin),
+]);
+
+/**
+ * The ledger of what a reaction did, and — just as importantly — why it did nothing. One row per rule per
+ * source record: the unique index is the one-fire guarantee, so a webhook redelivery, a replayed sweep, or
+ * two workers racing can never start the same work twice.
+ */
+export const reactionFires = pgTable("reaction_fires", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  // Kept when the rule is deleted: the ledger is the record of what the system did, and "this rule started these
+  // runs" is history a founder may need long after they stopped wanting the rule.
+  ruleId: text("rule_id").references(() => reactionRules.id, { onDelete: "set null" }),
+  agentId: text("agent_id"),
+  runId: text("run_id").references(() => agentRuns.id, { onDelete: "set null" }),
+  status: text("status").notNull(), // started | queued | skipped | failed
+  reason: text("reason"),
+  source: text("source").notNull(), // signal | event
+  sourceId: text("source_id").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  severity: text("severity"),
+  projectId: text("project_id"),
+  detail: json<Record<string, unknown>>("detail").notNull().default({}),
+  createdAt: createdAt(),
+}, (t) => [
+  // One *fire* per record, forever: a status that started (or tried to start) work is claimed. A refusal is
+  // deliberately outside this index — see the comment on `reaction_fires_skips_idx`.
+  uniqueIndex("reaction_fires_once_idx").on(t.companyId, t.ruleId, t.source, t.sourceId).where(sql`${t.status} <> 'skipped'`),
+  // At most one refusal per record per rule: a refusal records why nothing ran *then* and is updated if the
+  // record is offered again, because a refusal must not consume a record the way a fire does.
+  uniqueIndex("reaction_fires_skips_idx").on(t.companyId, t.ruleId, t.source, t.sourceId).where(sql`${t.status} = 'skipped'`),
+  index("reaction_fires_company_idx").on(t.companyId, t.createdAt),
+  index("reaction_fires_rule_idx").on(t.ruleId, t.status, t.createdAt),
+]);
+
 // ---------- Companion devices ----------
 export const companionDevices = pgTable("companion_devices", {
   id: id(),
@@ -633,6 +707,17 @@ export const events = pgTable("events", {
   correlation: json<Record<string, string>>("correlation").notNull().default({}),
   createdAt: createdAt(),
 }, (t) => [index("events_company_seq_idx").on(t.companyId, t.seq), index("events_org_seq_idx").on(t.organizationId, t.seq), index("events_created_idx").on(t.createdAt)]);
+
+/**
+ * Where a deployment-wide sweep got to in a log that is append-only and shared by every tenant. The event
+ * log is the source of truth; this is only a bookmark, so losing it re-reads a window rather than losing or
+ * repeating work (the reaction ledger refuses duplicates either way).
+ */
+export const workerCursors = pgTable("worker_cursors", {
+  name: text("name").primaryKey(),
+  seq: bigint("seq", { mode: "number" }).notNull().default(0),
+  updatedAt: updatedAt(),
+});
 
 export const auditLog = pgTable("audit_log", {
   id: id(),

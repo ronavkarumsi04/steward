@@ -65,6 +65,7 @@ export function SignalInbox({ companyId, initial, projects, autoReviewImportant,
           <div className="max-w-2xl">
             <div className="flex items-center gap-2"><span className="font-semibold">Reactive Autopilot</span><Pill tone={autoReview ? "ok" : "neutral"}>{autoReview ? "Important signals auto-reviewed" : "Manual review"}</Pill></div>
             <p className="mt-1 text-sm leading-6 text-muted">When enabled, new payments, payment failures/refunds, subscription cancellations, bounces, spam complaints, and inbound email can wake the Chief of Staff. Opens, clicks, and deliveries stay inbox-only. External actions still use the normal budgets and approval gates.</p>
+            <p className="mt-1 text-xs text-faint">This switch is the built-in <a className="underline" href="#reactions">“Review important signals” rule</a> in Reactions below — edit it there, or turn it off in either place.</p>
           </div>
           <button className="btn btn-sm" disabled={!canManageAutoReview || busy !== null} onClick={toggleAutoReview}>{busy === "auto-review" ? "Updating…" : autoReview ? "Turn off auto-review" : "Auto-review important signals"}</button>
         </div>

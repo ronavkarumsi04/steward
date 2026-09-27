@@ -683,6 +683,227 @@ describe("agent evals (scripted backends, in-process runtime)", () => {
   });
 });
 
+/**
+ * Event-driven reactions over HTTP: the signed webhook, the rule the founder wrote, the run that follows, the
+ * ledger that refuses to repeat it, and the sweep that answers records nobody pushed.
+ *
+ * These cases exist because the interesting failures are at the seams — a signature that verifies but a rule
+ * that never sees the signal, a redelivery that starts a second run, a person's explicit request being refused
+ * by a decision that has already been superseded. The engine's own gates are covered in `@steward/core`.
+ */
+describe("event-driven reactions", () => {
+  /** A founder, a company, and the company's Chief of Staff. */
+  async function reactor(opts: { autonomyLevel?: number } = {}) {
+    const founder = await register("Reactor");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Reactions ${uniq()}`, autonomyLevel: opts.autonomyLevel ?? 2, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const listed = await founder.api.json<{ agents: Array<{ id: string; kind: string; enabled: boolean }> }>("GET", `/companies/${companyId}/agents`);
+    const orchestrator = listed.body.agents.find((a) => a.kind === "orchestrator");
+    expect(orchestrator).toBeTruthy();
+    return { ...founder, companyId, agentId: orchestrator!.id };
+  }
+
+  /** Connects Stripe with a known signing secret and returns the integration id its webhook URL points at. */
+  async function connectStripe(api: ReturnType<typeof client>, orgId: string, companyId: string, secret: string) {
+    const connected = await api.json<{ integration: { id: string; webhookUrl: string | null } }>("POST", `/orgs/${orgId}/integrations`, { type: "stripe", label: "Stripe (test)", companyId, fields: { secretKey: "rk_test_123", webhookSecret: secret } });
+    expect(connected.status).toBe(201);
+    return connected.body.integration.id;
+  }
+
+  /** A real Stripe delivery: the signature covers `${t}.${body}`, and the body is signed byte for byte. */
+  const stripeDelivery = (integrationId: string, secret: string, eventId: string, type = "checkout.session.completed", object: Record<string, unknown> = {}) => {
+    const body = JSON.stringify({ id: eventId, type, created: Math.floor(Date.now() / 1000), data: { object: { id: `cs_${eventId}`, amount_total: 2500, currency: "usd", payment_status: "paid", customer_details: { email: `buyer-${eventId}@example.com` }, ...object } } });
+    const t = Math.floor(Date.now() / 1000);
+    const signature = `t=${t},v1=${createHmac("sha256", secret).update(`${t}.${body}`).digest("hex")}`;
+    // Webhooks are public routes outside /v1: the provider is not a signed-in client.
+    return app.request(`http://api.test/webhooks/stripe/${integrationId}`, { method: "POST", headers: { "content-type": "application/json", "stripe-signature": signature }, body });
+  };
+
+  d("starts the agent a founder asked for, exactly once per payment", async () => {
+    const { api, orgId, companyId, agentId } = await reactor();
+    const secret = `whsec_${uniq()}`;
+    const integrationId = await connectStripe(api, orgId, companyId, secret);
+    const instruction = "Look at what sold, update the project, and propose the next step.";
+    const created = await api.json<{ rule: { id: string; builtin: string | null; preview: { instruction: string } | null; matches7d: number } }>("POST", `/companies/${companyId}/reactions`, { agentId, name: "Review payments", source: "signal", matchKinds: ["payment.completed"], instruction });
+    expect(created.status).toBe(201);
+    const ruleId = created.body.rule.id;
+
+    const eventId = `evt_${uniq()}`;
+    const delivery = await stripeDelivery(integrationId, secret, eventId);
+    expect(delivery.status).toBe(200);
+    const delivered = (await delivery.json()) as { created: boolean; autoReviewRunId: string | null; reactions: Array<{ ruleId: string; status: string; runId: string | null }> };
+    expect(delivered.created).toBe(true);
+    expect(delivered.reactions).toEqual([expect.objectContaining({ ruleId, status: "started" })]);
+    expect(delivered.autoReviewRunId).toBe(delivered.reactions[0]!.runId);
+
+    // The run is durable and says which rule asked for it, what it was told, and which signal it came from.
+    const runs = await api.json<{ runs: Array<{ id: string; intent: string; trigger: Record<string, unknown>; status: string }> }>("GET", `/companies/${companyId}/runs?limit=20`);
+    expect(runs.body.runs).toHaveLength(1);
+    const run = runs.body.runs[0]!;
+    expect(run.trigger).toMatchObject({ kind: "event", reactionRuleId: ruleId });
+    expect(run.intent).toContain(instruction);
+    expect(run.intent).toContain("kind=payment.completed");
+    expect(temporalCalls.some((call) => call.op === "startRun" && (call.args[0] as { runId: string }).runId === run.id)).toBe(true);
+
+    // The ledger shows the fire, the rule counts it, and the rule can show a founder what it would send.
+    const listed = await api.json<{ rules: Array<{ id: string; fireCount: number; matches7d: number; preview: { instruction: string } | null }>; fires: Array<{ status: string; ruleId: string; runId: string | null; sourceKind: string }>; catalog: { signalKinds: string[]; eventTypes: string[] }; canManage: boolean }>("GET", `/companies/${companyId}/reactions`);
+    const rule = listed.body.rules.find((r) => r.id === ruleId)!;
+    expect(rule.fireCount).toBe(1);
+    expect(rule.matches7d).toBeGreaterThanOrEqual(1);
+    expect(rule.preview!.instruction.startsWith(instruction)).toBe(true);
+    expect(listed.body.fires).toEqual([expect.objectContaining({ status: "started", ruleId, runId: run.id, sourceKind: "payment.completed" })]);
+    expect(listed.body.catalog.signalKinds).toContain("email.opened");
+    expect(listed.body.catalog.eventTypes).toContain("integration.webhook");
+    expect(listed.body.canManage).toBe(true);
+
+    // A redelivery of the same event is the same event: the signature verifies, the signal is a duplicate, and
+    // nothing runs twice.
+    const replayed = await stripeDelivery(integrationId, secret, eventId);
+    expect(replayed.status).toBe(200);
+    const replay = (await replayed.json()) as { created: boolean; duplicate: boolean; reactions: unknown[] };
+    expect(replay.created).toBe(false);
+    expect(replay.duplicate).toBe(true);
+    expect(replay.reactions).toEqual([]);
+
+    // A different payment is a different record: the rule is not one-shot.
+    const another = await stripeDelivery(integrationId, secret, `evt_${uniq()}`);
+    expect((await another.json()) as { reactions: unknown[] }).toMatchObject({ reactions: [expect.objectContaining({ ruleId, status: "started" })] });
+    const runsAfter = await api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs?limit=20`);
+    expect(runsAfter.body.runs).toHaveLength(2);
+    const ledger = await api.json<{ fires: Array<{ status: string }> }>("GET", `/companies/${companyId}/reactions`);
+    expect(ledger.body.fires.map((f) => f.status)).toEqual(["started", "started"]);
+  });
+
+  d("leaves a signal nobody wrote a rule for in the inbox", async () => {
+    const { api, orgId, companyId } = await reactor();
+    const secret = `whsec_${uniq()}`;
+    const integrationId = await connectStripe(api, orgId, companyId, secret);
+
+    const delivery = await stripeDelivery(integrationId, secret, `evt_${uniq()}`);
+    expect(delivery.status).toBe(200);
+    const body = (await delivery.json()) as { created: boolean; autoReviewRunId: string | null; reactions: unknown[] };
+    expect(body.created).toBe(true);
+    expect(body.reactions).toEqual([]);
+    expect(body.autoReviewRunId).toBeNull();
+    const runs = await api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs?limit=20`);
+    expect(runs.body.runs).toHaveLength(0);
+    const signals = await api.json<{ signals: Array<{ state: string }> }>("GET", `/companies/${companyId}/signals`);
+    expect(signals.body.signals[0]!.state).toBe("unread");
+
+    // A rule with nothing to answer says exactly that instead of starting work against nothing.
+    const { agents: agentList } = (await api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`)).body;
+    const empty = await api.json<{ rule: { id: string } }>("POST", `/companies/${companyId}/reactions`, { agentId: agentList.find((a) => a.kind === "orchestrator")!.id, name: "Watch cancellations", source: "signal", matchKinds: ["subscription.cancelled"], instruction: "Check what was lost." });
+    const pressed = await api.json("POST", `/companies/${companyId}/reactions/${empty.body.rule.id}/run`);
+    expect(pressed.status).toBe(409);
+    expect(pressed.body).toMatchObject({ error: { code: "no_matching_record" } });
+  });
+
+  d("treats the Signals toggle as the builtin rule it is", async () => {
+    const { api, companyId } = await reactor();
+    const before = await api.json<{ settings: { autoReviewImportant: boolean }; ruleId: string | null }>("GET", `/companies/${companyId}/signals/settings`);
+    expect(before.body.settings.autoReviewImportant).toBe(false);
+    expect(before.body.ruleId).toBeNull();
+
+    const on = await api.json<{ settings: { autoReviewImportant: boolean }; ruleId: string | null }>("PATCH", `/companies/${companyId}/signals/settings`, { autoReviewImportant: true });
+    expect(on.body.settings.autoReviewImportant).toBe(true);
+    expect(on.body.ruleId).toBeTruthy();
+
+    // It is one editable rule, not a hidden switch: it appears in the rules list with its seven kinds.
+    const listed = await api.json<{ rules: Array<{ id: string; builtin: string | null; kinds: string[]; enabled: boolean }> }>("GET", `/companies/${companyId}/reactions`);
+    const builtin = listed.body.rules.find((r) => r.id === on.body.ruleId)!;
+    expect(builtin.builtin).toBe("signal_review");
+    expect(builtin.kinds).toContain("payment.failed");
+    expect(builtin.kinds).not.toContain("email.opened");
+    expect(builtin.enabled).toBe(true);
+
+    const off = await api.json<{ settings: { autoReviewImportant: boolean } }>("PATCH", `/companies/${companyId}/signals/settings`, { autoReviewImportant: false });
+    expect(off.body.settings.autoReviewImportant).toBe(false);
+    const after = await api.json<{ settings: { autoReviewImportant: boolean } }>("GET", `/companies/${companyId}/signals/settings`);
+    expect(after.body.settings.autoReviewImportant).toBe(false);
+    expect((await api.json("GET", `/companies/${companyId}/reactions`)).body).toMatchObject({ rules: [expect.objectContaining({ id: on.body.ruleId, enabled: false })] });
+  });
+
+  d("refuses a rule pointed at records Steward never keeps, and refuses a rule with no agent behind it", async () => {
+    const { api, companyId, agentId } = await reactor();
+    // Creating a rule is validated against the catalog itself, so a kind that is not recorded never becomes a
+    // rule in the first place.
+    const unknownKind = await api.json("POST", `/companies/${companyId}/reactions`, { agentId, name: "Watch steps", source: "event", matchKinds: ["run.step"], instruction: "Look at it." });
+    expect(unknownKind.status).toBe(422);
+    const unknownSignal = await api.json("POST", `/companies/${companyId}/reactions`, { agentId, name: "Watch nothing", source: "signal", matchKinds: ["payment.something"], instruction: "Look at it." });
+    expect(unknownSignal.status).toBe(422);
+    const noKinds = await api.json("POST", `/companies/${companyId}/reactions`, { agentId, name: "Watch everything", source: "signal", matchKinds: [], instruction: "Look at it." });
+    expect(noKinds.status).toBe(422);
+    const badAgent = await api.json("POST", `/companies/${companyId}/reactions`, { agentId: "agent_nope", name: "Nowhere", source: "signal", matchKinds: ["payment.completed"], instruction: "Look at it." });
+    expect(badAgent.status).toBe(404);
+
+    // Editing is validated against the catalog too, and says which kinds it does not know.
+    const rule = await api.json<{ rule: { id: string } }>("POST", `/companies/${companyId}/reactions`, { agentId, name: "Watch payments", source: "signal", matchKinds: ["payment.completed"], instruction: "Look at it." });
+    const edited = await api.json("PATCH", `/companies/${companyId}/reactions/${rule.body.rule.id}`, { matchKinds: ["payment.completed", "payment.imaginary"] });
+    expect(edited.status).toBe(422);
+    expect(edited.body).toMatchObject({ error: { code: "unknown_kinds" } });
+    expect((await api.json<{ rules: Array<{ kinds: string[] }> }>("GET", `/companies/${companyId}/reactions`)).body.rules[0]!.kinds).toEqual(["payment.completed"]);
+  });
+
+  d("answers a refusal when a person asks for it, and only then", async () => {
+    const { api, orgId, companyId, agentId } = await reactor();
+    const secret = `whsec_${uniq()}`;
+    const integrationId = await connectStripe(api, orgId, companyId, secret);
+    const rule = await api.json<{ rule: { id: string } }>("POST", `/companies/${companyId}/reactions`, { agentId, name: "Review payments", source: "signal", matchKinds: ["payment.completed"], instruction: "Look at what sold." });
+    const ruleId = rule.body.rule.id;
+
+    // Paused when the payment arrives: the ledger says so, and nothing ran.
+    await api.json("PATCH", `/companies/${companyId}/reactions/${ruleId}`, { enabled: false });
+    const delivery = await stripeDelivery(integrationId, secret, `evt_${uniq()}`);
+    const body = (await delivery.json()) as { reactions: Array<{ status: string; runId: string | null }> };
+    expect(body.reactions).toEqual([expect.objectContaining({ status: "skipped", runId: null })]);
+    expect((await api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs`)).body.runs).toHaveLength(0);
+
+    // Resumed, then run by hand against that same record: the refusal was a decision about then, not a claim.
+    await api.json("PATCH", `/companies/${companyId}/reactions/${ruleId}`, { enabled: true });
+    const asked = await api.json<{ decision: { status: string; runId: string | null }; run: { id: string; trigger: Record<string, unknown> } }>("POST", `/companies/${companyId}/reactions/${ruleId}/run`);
+    expect(asked.status).toBe(201);
+    expect(asked.body.decision.status).toBe("started");
+    expect(asked.body.run.trigger).toMatchObject({ reactionRuleId: ruleId });
+
+    // And now the record is spent: asking again cannot start a second run for it.
+    const twice = await api.json<{ decision: { status: string } }>("POST", `/companies/${companyId}/reactions/${ruleId}/run`);
+    expect(twice.body.decision.status).toBe("duplicate");
+    expect((await api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs`)).body.runs).toHaveLength(1);
+
+    // The ledger keeps both decisions, in order, so the story is readable.
+    const listed = await api.json<{ fires: Array<{ status: string; reason: string | null }> }>("GET", `/companies/${companyId}/reactions`);
+    expect(listed.body.fires.map((f) => f.status)).toEqual(["started", "skipped"]);
+    expect(listed.body.fires[1]!.reason).toContain("paused");
+  });
+
+  d("reacts to a recorded event through the sweep, and never to a reaction's own work", async () => {
+    const { api, orgId, companyId, agentId } = await reactor();
+    const rule = await api.json<{ rule: { id: string } }>("POST", `/companies/${companyId}/reactions`, { agentId, name: "Follow up finished work", source: "event", matchKinds: ["task.completed"], instruction: "Check whether the outcome needs a follow-up task." });
+    const taskRuleId = rule.body.rule.id;
+
+    const task = await api.json<{ task: { id: string } }>("POST", `/companies/${companyId}/tasks`, { title: "Ship the pricing page", description: "Bounded work", start: false });
+    await api.json("PATCH", `/companies/${companyId}/tasks/${task.body.task.id}`, { status: "done" });
+
+    const launcher = { start: async (input: { runId: string; scope: { organizationId: string; companyId: string } }) => (await fakeTemporal().startRun(input)) };
+    const swept = await services.reactions.sweep({ launcher });
+    expect(swept.considered).toBeGreaterThanOrEqual(1);
+
+    const runs = await api.json<{ runs: Array<{ id: string; trigger: Record<string, unknown> }> }>("GET", `/companies/${companyId}/runs?limit=20`);
+    const followUp = runs.body.runs.find((r) => (r.trigger as { reactionRuleId?: string }).reactionRuleId === taskRuleId);
+    expect(followUp).toBeTruthy();
+    expect(followUp!.trigger).toMatchObject({ kind: "event", sourceEventId: expect.any(String) });
+
+    // The sweep's own work is not a record to answer: a rule over finished runs does not answer the run a
+    // reaction started, so no pair of rules can hand work back and forth forever.
+    const watch = await api.json<{ rule: { id: string } }>("POST", `/companies/${companyId}/reactions`, { agentId, name: "Watch finished runs", source: "event", matchKinds: ["run.completed"], instruction: "Summarize the run." });
+    const scope: TenantScope = { organizationId: orgId, companyId, actor: { type: "system", component: "api-test" } };
+    await services.runs.setStatus(scope, followUp!.id, "succeeded");
+    const second = await services.reactions.sweep({ launcher });
+    expect(second.selfCaused).toBeGreaterThanOrEqual(1);
+    expect(await services.reactions.listFires(scope, { ruleId: watch.body.rule.id })).toHaveLength(0);
+  });
+});
+
 describe("openapi + health", () => {
   d("serves a valid OpenAPI document covering every registered route", async () => {
     const res = await app.request("http://api.test/v1/openapi.json");

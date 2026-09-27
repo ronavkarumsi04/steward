@@ -22,7 +22,7 @@ export function summarizeEvent(e: StewardEvent): string {
 export function eventCategory(e: StewardEvent): EventCategory {
   const type = e.type.toLowerCase();
   if (type.includes("tool") || type.startsWith("sandbox.")) return "tools";
-  if (type.startsWith("run.") || type.startsWith("schedule.") || type.startsWith("task.") || type.startsWith("ai.")) return "runs";
+  if (type.startsWith("run.") || type.startsWith("schedule.") || type.startsWith("task.") || type.startsWith("ai.") || type.startsWith("reaction.")) return "runs";
   if (["signal.", "integration.", "provider.", "deployment.", "campaign.", "lead.", "message.", "project.", "document."].some((prefix) => type.startsWith(prefix))) return "business";
   if (["approval.", "budget.", "policy.", "company.", "agent.", "audit."].some((prefix) => type.startsWith(prefix))) return "governance";
   return "other";

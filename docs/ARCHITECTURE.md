@@ -5,7 +5,7 @@
 | Service | Package | Role |
 | --- | --- | --- |
 | `api` | `apps/api` | Hono HTTP API. Auth, tenancy, CRUD, approvals, SSE event stream, provider/integration management, companion hub, OpenAPI. Starts Temporal workflows; never runs model calls itself (except provider "test credential"). |
-| `worker` | `apps/worker` | Temporal worker hosting workflows (`agentRun`, `schedule`, `housekeeping`) and activities (context build, plan, model call, tool exec, verify, persist). |
+| `worker` | `apps/worker` | Temporal worker hosting workflows (`agentRun`, `schedule`, `housekeeping`) and activities (context build, plan, model call, tool exec, verify, persist). Also runs the reaction sweep, which answers the rules founders wrote over recorded events without waiting for a schedule (ADR-0014). |
 | `web` | `apps/web` | Next.js 16 app. Server components call the API with the user's cookie; the browser calls `/api/v1/*` which the web server proxies to the API so cookies remain first-party. |
 | `companion` | `apps/companion` | Optional daemon on a user's machine that exposes the official Codex CLI to the org over an authenticated long-poll channel. |
 | Postgres (+pgvector) | | Authoritative state: tenants, work, runs, events, memory embeddings, usage. Temporal uses a separate database in the same instance. |
@@ -14,15 +14,16 @@
 
 ## Data model (core)
 
-`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
+`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `reaction_rules` → `reaction_fires`, `business_signals`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
 Org-level: `provider_credentials`, `provider_models`, `integrations`, `companion_devices`, `invitations`, `sessions`.
+Deployment-level: `worker_cursors` — a bookmark in the append-only event log for sweeps that are not tenant data.
 
 Every company-scoped table has both `organization_id` and `company_id`; repositories require a `TenantScope`.
 
 ## Run lifecycle
 
 ```
-POST /companies/:id/conversations/:cid/messages   (or task start / schedule fire / integration event)
+POST /companies/:id/conversations/:cid/messages   (or task start / schedule fire / a rule answering a recorded event)
   └─ api creates agent_run(status=queued) + event(run.queued), starts Temporal workflow agentRun(runId, scope)
        ├─ activity contextBuilder: company profile, goals, relevant memories (pgvector), recent events, task, policies, budgets
        ├─ activity planner: model call (structured output) → plan with steps and tool intents

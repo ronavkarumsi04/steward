@@ -177,6 +177,59 @@ export interface BusinessSignal {
   updatedAt: string;
 }
 
+export type ReactionSource = "signal" | "event";
+export type ReactionFireStatus = "started" | "queued" | "skipped" | "failed";
+
+/** The newest record a rule matches, turned into the exact text its run would receive. */
+export interface ReactionPreview {
+  candidate: { id: string; kind: string; title: string; severity: string; occurredAt: string | null; projectId: string | null };
+  instruction: string;
+}
+
+export interface ReactionRule {
+  id: string;
+  enabled: boolean;
+  name: string;
+  source: ReactionSource;
+  kinds: string[];
+  severities: string[];
+  projectId: string | null;
+  agentId: string;
+  instruction: string;
+  maxRunsPerHour: number;
+  cooldownMinutes: number;
+  /** The rule this company's Signals toggle owns, when it is a built-in. */
+  builtin: string | null;
+  lastFiredAt: string | null;
+  fireCount: number;
+  /** How many records of this rule's kinds the company has seen in the last seven days. */
+  matches7d: number;
+  preview: ReactionPreview | null;
+}
+
+export interface ReactionFire {
+  id: string;
+  /** Null once the rule it belonged to was deleted: the ledger outlives the rule. */
+  ruleId: string | null;
+  agentId: string | null;
+  runId: string | null;
+  status: ReactionFireStatus;
+  reason: string | null;
+  source: ReactionSource;
+  sourceId: string;
+  sourceKind: string;
+  severity: string | null;
+  projectId: string | null;
+  detail: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ReactionCatalog {
+  signalKinds: string[];
+  eventTypes: string[];
+  refusals: Record<string, string>;
+}
+
 export interface Task {
   id: string;
   title: string;

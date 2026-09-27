@@ -75,6 +75,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
             <StatusPill status={run.status} />
             <span>{agent?.name ?? "agent"} ({agent?.kind})</span>
             <span>· trigger {String(run.trigger.kind ?? "?")}</span>
+            {run.trigger.reactionRuleId ? <Link className="pill text-accent hover:underline" href={`/app/c/${companyId}/signals#reactions`}>a reaction rule</Link> : null}
             <span>· {run.iterations} iterations</span>
             <span>· {aiCalls.length} model attempts{modelErrors ? ` (${modelErrors} errors)` : ""}</span>
             <span>· {usd(run.costUsd)} · {run.inputTokens}/{run.outputTokens} tok</span>

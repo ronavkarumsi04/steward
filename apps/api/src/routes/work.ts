@@ -8,7 +8,7 @@ import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, Tas
 import { runWorkflowId, type WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
-import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus } from "@steward/core";
+import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus, type ReactionLauncher } from "@steward/core";
 
 const csv = <T extends z.ZodTypeAny>(inner: T) => z.string().optional().transform((v) => (v ? v.split(",").map((x) => inner.parse(x.trim())) : undefined));
 const limit = z.coerce.number().int().min(1).max(200).optional();
@@ -52,6 +52,14 @@ export async function launchRun(services: AgentServiceFactory, workflows: Workfl
     // caller is told the work is pending rather than that it began.
     throw new HttpError(503, "workflow_start_failed", `The run was recorded as ${run.id} but its workflow could not be started (${e instanceof Error ? e.message : String(e)}). It will be retried automatically.`);
   }
+}
+
+/**
+ * The workflow client in the shape the reaction engine needs, or null when Temporal is not connected.
+ * A null launcher is not a failure: the engine records the run and reconciliation starts it later.
+ */
+export function launcherFor(workflows: WorkflowClient | null): ReactionLauncher | null {
+  return workflows ? { start: (input) => workflows.startRun(input) } : null;
 }
 
 export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: EventBus | null) {

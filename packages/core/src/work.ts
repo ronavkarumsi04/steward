@@ -164,6 +164,13 @@ export interface RunTrigger {
   messageId?: string;
   sourceEventSeq?: number;
   sourceSignalId?: string;
+  /** The recorded event a reaction answered. */
+  sourceEventId?: string;
+  /**
+   * The rule that decided this run was wanted. Its presence is what marks a run (and the records it writes)
+   * as reaction work, which nothing reacts to.
+   */
+  reactionRuleId?: string;
 }
 
 export class RunService {
@@ -188,13 +195,16 @@ export class RunService {
    * recoverable: the row records the workflow that is supposed to drive it *before* the workflow is started, so
    * a run left behind by a Temporal outage can be found and started later instead of becoming an orphan.
    */
-  async create(scope: TenantScope, input: { id?: string; agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }) {
-    return this.db.transaction(async (tx) => {
-      await assertScopedProject(tx, scope, input.projectId);
-      const [r] = await tx.insert(agentRuns).values({ ...(input.id ? { id: input.id } : {}), organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
-      await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null, sourceSignalId: input.trigger.sourceSignalId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}), ...(input.trigger.sourceSignalId ? { signalId: input.trigger.sourceSignalId } : {}) } });
+  async create(scope: TenantScope, input: { id?: string; agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; trigger: RunTrigger; workflowId?: string }, tx?: DbOrTx) {
+    const write = async (t: DbOrTx) => {
+      await assertScopedProject(t, scope, input.projectId);
+      const [r] = await t.insert(agentRuns).values({ ...(input.id ? { id: input.id } : {}), organizationId: scope.organizationId, companyId: scope.companyId!, agentId: input.agentId, taskId: input.taskId ?? null, projectId: input.projectId ?? null, conversationId: input.conversationId ?? null, trigger: input.trigger as unknown as Record<string, unknown>, intent: input.trigger.instruction.slice(0, 2000), workflowId: input.workflowId ?? null, status: "queued" }).returning();
+      await emitEvent(t, { organizationId: scope.organizationId, companyId: scope.companyId, type: "run.created", actor: scope.actor, payload: { runId: r!.id, agentId: input.agentId, taskId: input.taskId ?? null, projectId: r!.projectId, trigger: input.trigger.kind, parentRunId: input.trigger.parentRunId ?? null, sourceSignalId: input.trigger.sourceSignalId ?? null, sourceEventId: input.trigger.sourceEventId ?? null, reactionRuleId: input.trigger.reactionRuleId ?? null }, correlation: { runId: r!.id, taskId: input.taskId ?? "", ...(r!.projectId ? { projectId: r!.projectId } : {}), ...(input.trigger.parentRunId ? { parentRunId: input.trigger.parentRunId } : {}), ...(input.trigger.sourceSignalId ? { signalId: input.trigger.sourceSignalId } : {}), ...(input.trigger.reactionRuleId ? { reactionRuleId: input.trigger.reactionRuleId } : {}) } });
       return r!;
-    });
+    };
+    // A caller that already holds a transaction (a reaction claiming its record and creating its run) joins it,
+    // so the claim and the run are one atomic decision rather than two writes that can disagree.
+    return tx ? write(tx) : this.db.transaction(write);
   }
 
   async attachWorkflow(scope: TenantScope, id: string, workflowId: string, workflowRunId?: string) {

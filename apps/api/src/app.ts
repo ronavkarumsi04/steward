@@ -12,6 +12,7 @@ import { registerPrivacyRoutes } from "./routes/privacy.js";
 import { registerCompanionRoutes } from "./routes/companion.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerWorkRoutes } from "./routes/work.js";
+import { registerReactionRoutes } from "./routes/reactions.js";
 import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/signals.js";
 
 export const API_VERSION = "0.1.0";
@@ -64,6 +65,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerCompanyRoutes(v1, registry);
   registerWorkRoutes(v1, registry, bus);
   registerSignalRoutes(v1, registry);
+  registerReactionRoutes(v1, registry);
   registerProviderRoutes(v1, registry);
   registerCompanionRoutes(v1, registry);
 
