@@ -158,7 +158,7 @@ async function register(name = "Founder") {
  */
 const temporalCalls: Array<{ op: string; args: unknown[] }> = [];
 function fakeTemporal(): WorkflowClient {
-  const double: Pick<WorkflowClient, "startRun" | "signalApproval" | "cancelRun" | "runStatus"> = {
+  const double: Pick<WorkflowClient, "startRun" | "signalApproval" | "cancelRun" | "runStatus" | "upsertSchedule" | "deleteSchedule" | "triggerSchedule"> = {
     async startRun(input) {
       temporalCalls.push({ op: "startRun", args: [input] });
       return { workflowId: `agent-run-${input.runId}`, workflowRunId: "fake-run" };
@@ -173,6 +173,18 @@ function fakeTemporal(): WorkflowClient {
     },
     async runStatus() {
       return null;
+    },
+    // A schedule is the one thing a workflow drawing registers with the engine, so the double answers for it
+    // too: without these a published schedule would be a row nothing ticks, and the test could not tell.
+    async upsertSchedule(input) {
+      temporalCalls.push({ op: "upsertSchedule", args: [input] });
+      return `schedule-${input.scheduleId}`;
+    },
+    async deleteSchedule(scheduleId) {
+      temporalCalls.push({ op: "deleteSchedule", args: [scheduleId] });
+    },
+    async triggerSchedule(scheduleId) {
+      temporalCalls.push({ op: "triggerSchedule", args: [scheduleId] });
     },
   };
   return double as WorkflowClient;
@@ -1526,6 +1538,151 @@ describe("browser sessions", () => {
     expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}`)).status).toBe(404);
     expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}/frame`)).status).toBe(404);
     expect((await stranger.api.call("POST", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}/stop`, {})).status).toBe(404);
+  });
+});
+
+describe("workflows", () => {
+  /**
+   * A drawing is only real if it lands on the rows the rest of the product already reads. These tests go through
+   * HTTP — one founder, one company, the real app — and then check the reaction surface for the row a drawing
+   * published, because "the workflow page says it is live" would be worth nothing on its own.
+   */
+  type Drawn = { id: string; name: string; enabled: boolean; draftIsLive: boolean; liveCount: number; revision: number; problems: Array<{ code: string; where: string; message: string }>; broken: Array<{ code: string }>; sentences: string[]; readings: Array<{ triggerId: string; kind: string; targetId: string | null; missing: boolean; drift: string[]; live: { id: string; instruction: string; cron?: string; timezone?: string; enabled: boolean } | null }> };
+  type ListBody = { workflows: Drawn[]; agents: Array<{ id: string; name: string; enabled: boolean }>; projects: Array<{ id: string }>; catalog: { nodeKinds: string[]; triggerSources: string[]; signalKinds: string[]; eventTypes: string[] }; engine: boolean; canManage: boolean };
+
+  async function drawable() {
+    const founder = await register("Drawer");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Draw ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+    const listed = await founder.api.json<{ agents: Array<{ id: string; kind: string; enabled: boolean }> }>("GET", `/companies/${companyId}/agents`);
+    const agentId = listed.body.agents.find((agent) => agent.enabled)!;
+    const api = client(founder.token, "", () => app);
+    const list = () => api.json<ListBody>("GET", `/companies/${companyId}/workflows`);
+    return { ...founder, companyId, agentId: agentId.id, agentName: agentId.kind, api, list };
+  }
+
+  const triggerNode = (over: Record<string, unknown> = {}) => ({ id: "t1", kind: "trigger", source: "signal", kinds: ["payment.completed"], cron: null, timezone: null, ...over });
+  const agentNode = (agentId: string, instruction = "Look at what sold and record the next step.") => ({ id: "a1", kind: "agent", agentId, instruction });
+  const limitNode = (over: Record<string, unknown> = {}) => ({ id: "l1", kind: "limit", maxRunsPerHour: 4, cooldownMinutes: 15, ...over });
+
+  d("offers the vocabulary it can actually carry out, and refuses a drawing it cannot", async () => {
+    const me = await drawable();
+    const workspace = await me.list();
+    expect(workspace.status).toBe(200);
+    expect(workspace.body.catalog.nodeKinds).toEqual(["trigger", "filter", "agent", "limit"]);
+    expect(workspace.body.catalog.triggerSources).toEqual(["signal", "event", "schedule"]);
+    expect(workspace.body.catalog.signalKinds).toContain("payment.completed");
+    expect(workspace.body.canManage).toBe(true);
+    expect(workspace.body.engine).toBe(true);
+
+    // An unfinished drawing is storable — a new workflow starts on a shape, not on a finished one — and is not
+    // publishable. The two gates are deliberately different, and the response says which problems are which.
+    const half = await me.api.json<{ workflow: Drawn }>("POST", `/companies/${me.companyId}/workflows`, { name: "Incomplete", nodes: [triggerNode()] });
+    expect(half.status).toBe(201);
+    expect(half.body.workflow.problems.map((problem) => problem.code)).toContain("no_agent");
+    expect(half.body.workflow.broken).toEqual([]);
+    const notYet = await me.api.json<{ error: { code: string; details: { problems: Array<{ code: string }> } } }>("POST", `/companies/${me.companyId}/workflows/${half.body.workflow.id}/publish`, {});
+    expect(notYet.status).toBe(422);
+    expect(notYet.body.error.code).toBe("workflow_invalid");
+    expect(notYet.body.error.details.problems.map((problem) => problem.code)).toContain("no_agent");
+    // The preview tells the same story without storing anything, which is what the builder calls as it is drawn.
+    const previewProblems = await me.api.json<{ problems: Array<{ code: string }>; targets: unknown[] }>("POST", `/companies/${me.companyId}/workflows/preview`, { name: "Incomplete", nodes: [triggerNode()] });
+    expect(previewProblems.body.problems.map((problem) => problem.code)).toContain("no_agent");
+    expect(previewProblems.body.targets).toEqual([]);
+
+    // A node kind this build does not have is refused rather than dropped.
+    expect((await me.api.call("POST", `/companies/${me.companyId}/workflows`, { name: "Forked", nodes: [triggerNode(), agentNode(me.agentId), { id: "b1", kind: "branch" }] })).status).toBe(422);
+    // And a cron the engine would reject never becomes a row.
+    const badCron = await me.api.json<{ error: { details: { problems: Array<{ code: string; message: string }> } } }>("POST", `/companies/${me.companyId}/workflows`, { name: "Never", nodes: [triggerNode({ source: "schedule", kinds: [], cron: "0 9 * *" }), agentNode(me.agentId)] });
+    expect(badCron.status).toBe(422);
+    expect(badCron.body.error.details.problems.some((problem) => problem.code === "cron_invalid")).toBe(true);
+  });
+
+  d("previews a drawing without saving anything, then publishes it into a rule the reaction surface shows", async () => {
+    const me = await drawable();
+    const nodes = [triggerNode({ kinds: ["payment.completed", "payment.failed"] }), { id: "f1", kind: "filter", severities: ["critical"], projectId: null }, agentNode(me.agentId, "Escalate to the founder."), limitNode()];
+
+    // The preview is the same function as the publish gate: it compiles, and it writes nothing.
+    const preview = await me.api.json<{ problems: unknown[]; sentences: string[]; targets: Array<{ kind: string; matchSeverities: string[]; maxRunsPerHour: number }> }>("POST", `/companies/${me.companyId}/workflows/preview`, { name: "Payments", nodes });
+    expect(preview.status).toBe(200);
+    expect(preview.body.problems).toEqual([]);
+    expect(preview.body.targets[0]).toMatchObject({ kind: "rule", matchSeverities: ["critical"], maxRunsPerHour: 4 });
+    expect(preview.body.sentences[0]).toContain("Escalate to the founder.");
+    expect((await me.list()).body.workflows).toEqual([]);
+
+    const created = await me.api.json<{ workflow: Drawn }>("POST", `/companies/${me.companyId}/workflows`, { name: "Payments", nodes });
+    expect(created.status).toBe(201);
+    expect(created.body.workflow.draftIsLive).toBe(false); // drawn, not running
+    const published = await me.api.json<{ workflow: Drawn; targets: Array<{ targetId: string }>; notices: string[] }>("POST", `/companies/${me.companyId}/workflows/${created.body.workflow.id}/publish`, {});
+    expect(published.status).toBe(200);
+    expect(published.body.notices).toEqual([]);
+    expect(published.body.workflow.draftIsLive).toBe(true);
+    expect(published.body.workflow.liveCount).toBe(1);
+
+    // The row the drawing published is the row the reactions surface reads — same id, same words.
+    const reactions = await me.api.json<{ rules: Array<{ id: string; name: string; kinds: string[]; severities: string[]; instruction: string; maxRunsPerHour: number; cooldownMinutes: number }> }>("GET", `/companies/${me.companyId}/reactions`);
+    const rule = reactions.body.rules.find((row) => row.id === published.body.targets[0]!.targetId)!;
+    expect(rule).toMatchObject({ name: "Payments", kinds: ["payment.completed", "payment.failed"], severities: ["critical"], instruction: "Escalate to the founder.", maxRunsPerHour: 4, cooldownMinutes: 15 });
+  });
+
+  d("says when the row behind a node was changed somewhere else, and stops everything when paused", async () => {
+    const me = await drawable();
+    const created = await me.api.json<{ workflow: Drawn }>("POST", `/companies/${me.companyId}/workflows`, { name: "Payments", nodes: [triggerNode(), agentNode(me.agentId, "Watch it.")] });
+    const published = await me.api.json<{ targets: Array<{ targetId: string }> }>("POST", `/companies/${me.companyId}/workflows/${created.body.workflow.id}/publish`, {});
+    const ruleId = published.body.targets[0]!.targetId;
+    expect((await me.list()).body.workflows[0]!.draftIsLive).toBe(true);
+
+    // Somebody edits the same rule on the reactions page. The row is the truth, and the drawing says so.
+    await me.api.json("PATCH", `/companies/${me.companyId}/reactions/${ruleId}`, { instruction: "Changed by hand." });
+    const drifted = (await me.list()).body.workflows[0]!;
+    expect(drifted.draftIsLive).toBe(false);
+    expect(drifted.readings[0]!.drift).toContain("its instruction was changed");
+    expect(drifted.readings[0]!.live!.instruction).toBe("Changed by hand.");
+
+    // Pausing is one write that pauses every row the drawing runs.
+    const paused = await me.api.json<{ workflow: Drawn }>("POST", `/companies/${me.companyId}/workflows/${created.body.workflow.id}/enabled`, { enabled: false });
+    expect(paused.status).toBe(200);
+    const rules = await me.api.json<{ rules: Array<{ id: string; enabled: boolean }> }>("GET", `/companies/${me.companyId}/reactions`);
+    expect(rules.body.rules.find((row) => row.id === ruleId)!.enabled).toBe(false);
+    expect(paused.body.workflow.enabled).toBe(false);
+  });
+
+  d("registers a drawn schedule with the engine, and takes it back when the drawing is deleted", async () => {
+    const me = await drawable();
+    const nodes = [triggerNode({ source: "schedule", kinds: [], cron: "0 9 * * 1-5", timezone: "Europe/London" }), agentNode(me.agentId, "Write the weekly digest.")];
+    const created = await me.api.json<{ workflow: Drawn }>("POST", `/companies/${me.companyId}/workflows`, { name: "Weekly digest", nodes });
+    temporalCalls.length = 0;
+    const published = await me.api.json<{ workflow: Drawn; targets: Array<{ targetId: string; kind: string }> }>("POST", `/companies/${me.companyId}/workflows/${created.body.workflow.id}/publish`, {});
+
+    // A schedule that is only a row and never registered is a schedule that looks configured and never fires.
+    const registered = temporalCalls.filter((call) => call.op === "upsertSchedule");
+    expect(registered).toHaveLength(1);
+    expect(registered[0]!.args[0]).toMatchObject({ cron: "0 9 * * 1-5", timezone: "Europe/London", enabled: true });
+    const scheduleId = published.body.targets[0]!.targetId;
+    expect(published.body.workflow.readings[0]!.live).toMatchObject({ cron: "0 9 * * 1-5", timezone: "Europe/London" });
+    // The row also carries the engine's own id, so a later pause updates the right schedule.
+    const schedules = await me.api.json<{ schedules: Array<{ id: string; temporalScheduleId: string | null }> }>("GET", `/companies/${me.companyId}/schedules`);
+    expect(schedules.body.schedules.find((row) => row.id === scheduleId)!.temporalScheduleId).toBe(`schedule-${scheduleId}`);
+
+    const removed = await me.api.json<{ removed: { rules: number; schedules: number } }>("DELETE", `/companies/${me.companyId}/workflows/${created.body.workflow.id}`);
+    expect(removed.body.removed).toEqual({ rules: 0, schedules: 1 });
+    expect(temporalCalls.some((call) => call.op === "deleteSchedule" && call.args[0] === scheduleId)).toBe(true);
+    expect((await me.list()).body.workflows).toEqual([]);
+  });
+
+  d("keeps one company's drawings, and the rules they publish, out of another's", async () => {
+    const owner = await drawable();
+    const stranger = await drawable();
+    const created = await owner.api.json<{ workflow: Drawn }>("POST", `/companies/${owner.companyId}/workflows`, { name: "Private", nodes: [triggerNode(), agentNode(owner.agentId, "Watch it.")] });
+    const published = await owner.api.json<{ targets: Array<{ targetId: string }> }>("POST", `/companies/${owner.companyId}/workflows/${created.body.workflow.id}/publish`, {});
+
+    // The stranger cannot read it, cannot publish it, and cannot delete a rule it does not own.
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/workflows`)).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${owner.companyId}/workflows/${created.body.workflow.id}/publish`, {})).status).toBe(404);
+    expect((await stranger.api.call("DELETE", `/companies/${owner.companyId}/workflows/${created.body.workflow.id}`)).status).toBe(404);
+    expect((await stranger.list()).body.workflows).toEqual([]);
+    // And the rule really belongs to the company that drew it.
+    expect((await stranger.api.call("PATCH", `/companies/${owner.companyId}/reactions/${published.body.targets[0]!.targetId}`, { enabled: false })).status).toBe(404);
   });
 });
 

@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService } from "@steward/core";
+import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -31,6 +31,12 @@ export interface AgentServices {
   events: EventService;
   /** The rules that decide which recorded events wake an agent, and the ledger of what they did. */
   reactions: ReactionService;
+  /**
+   * The drawings that publish those rules and the schedules beside them. Distinct from the workflow *engine*
+   * (`deps.workflows` in the API), which is what starts a run once a rule has one: this service composes the
+   * rows, the engine runs them.
+   */
+  workflows: WorkflowService;
   /** The company's website, so an agent can be handed a page without owning the only copy of it. */
   sites: SiteService;
   /** The company's code: an agent can be given a session to commit, and a founder can read what it changed. */

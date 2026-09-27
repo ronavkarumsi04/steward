@@ -15,6 +15,8 @@ const GROUPS = [
       ["/code", "Code", Icon.Code],
       // Pages an agent looks at while the founder watches — a competitor, a directory, a signup flow.
       ["/browser", "Browser", Icon.Browser],
+      // The standing work, drawn: the reaction rules and agent schedules above, as one picture.
+      ["/workflows", "Workflows", Icon.Workflow],
       ["/signals", "Signals", Icon.Signals],
       ["/chat", "Chat", Icon.Chat],
     ],

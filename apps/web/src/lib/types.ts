@@ -869,6 +869,148 @@ export interface BrowserRunResult {
   run: { id: string; status: string; agentId: string } | null;
 }
 
+// ---------- Workflows: the drawings a company's standing work is composed of ----------
+
+/**
+ * The vocabulary the API will accept, sent by the server rather than retyped here. A kind this build does not
+ * know is refused server-side, so the client never has to be right about what exists — it has to render what it
+ * was handed.
+ */
+export interface WorkflowCatalog {
+  nodeKinds: string[];
+  triggerSources: WorkflowTriggerSource[];
+  signalKinds: string[];
+  eventTypes: string[];
+  severities: string[];
+  limits: { nodes: number; triggers: number; kindsPerTrigger: number; nameChars: number; instructionChars: number; maxRunsPerHour: number; cooldownMinutes: number };
+}
+
+export type WorkflowTriggerSource = "signal" | "event" | "schedule";
+
+export interface WorkflowTriggerNode {
+  id: string;
+  kind: "trigger";
+  source: WorkflowTriggerSource;
+  /** Signal kinds or recorded event types. Always empty for a schedule. */
+  kinds: string[];
+  cron: string | null;
+  timezone: string | null;
+}
+
+export interface WorkflowFilterNode {
+  id: string;
+  kind: "filter";
+  severities: string[];
+  projectId: string | null;
+}
+
+export interface WorkflowAgentNode {
+  id: string;
+  kind: "agent";
+  agentId: string;
+  instruction: string;
+}
+
+export interface WorkflowLimitNode {
+  id: string;
+  kind: "limit";
+  maxRunsPerHour: number;
+  cooldownMinutes: number;
+}
+
+export type WorkflowNode = WorkflowTriggerNode | WorkflowFilterNode | WorkflowAgentNode | WorkflowLimitNode;
+
+/** A problem the server found in a drawing, and the node it belongs to. */
+export interface WorkflowProblem {
+  code: string;
+  where: string;
+  message: string;
+}
+
+/** The row a trigger compiles to — what would run, in the engine's own field names. */
+export interface WorkflowTarget {
+  triggerId: string;
+  kind: "rule" | "schedule";
+  name: string;
+  enabled: boolean;
+  agentId: string;
+  instruction: string;
+  source?: "signal" | "event";
+  matchKinds?: string[];
+  matchSeverities?: string[];
+  projectId?: string | null;
+  maxRunsPerHour?: number;
+  cooldownMinutes?: number;
+  cron?: string;
+  timezone?: string;
+}
+
+/** The row that is actually running behind a trigger, as it stands right now. */
+export interface WorkflowLiveRow {
+  id: string;
+  name: string;
+  enabled: boolean;
+  instruction: string;
+  agentId: string;
+  source?: string;
+  matchKinds?: string[];
+  matchSeverities?: string[];
+  projectId?: string | null;
+  maxRunsPerHour?: number;
+  cooldownMinutes?: number;
+  cron?: string;
+  timezone?: string;
+}
+
+export interface WorkflowReading {
+  triggerId: string;
+  kind: "rule" | "schedule";
+  targetId: string | null;
+  /** True when this trigger was published and the row behind it is gone. */
+  missing: boolean;
+  /** What changed in the live row without the drawing knowing, in a founder's words. */
+  drift: string[];
+  live: WorkflowLiveRow | null;
+  target: WorkflowTarget;
+}
+
+export interface WorkflowView {
+  id: string;
+  name: string;
+  enabled: boolean;
+  nodes: WorkflowNode[];
+  revision: number;
+  publishedAt: string | null;
+  updatedAt: string;
+  /** True when everything this drawing would run is exactly what is running. */
+  draftIsLive: boolean;
+  liveCount: number;
+  /** Everything to settle before this could run, unfinished items included. */
+  problems: WorkflowProblem[];
+  /** The subset that is wrong rather than undecided: a drawing cannot be stored with these either. */
+  broken: WorkflowProblem[];
+  sentences: string[];
+  staleTargets: Array<{ triggerId: string; kind: string; targetId: string; name: string }>;
+  readings: WorkflowReading[];
+}
+
+export interface WorkflowPreview {
+  problems: WorkflowProblem[];
+  broken: WorkflowProblem[];
+  sentences: string[];
+  targets: WorkflowTarget[];
+}
+
+export interface WorkflowWorkspaceRead {
+  workflows: WorkflowView[];
+  agents: Array<{ id: string; name: string; enabled: boolean }>;
+  projects: Array<{ id: string; name: string }>;
+  catalog: WorkflowCatalog;
+  /** Whether a schedule drawn here would actually tick: a deployment without an engine registers nothing. */
+  engine: boolean;
+  canManage: boolean;
+}
+
 export interface CodeApplyResult {
   status: "started" | "queued" | "failed";
   reason: string | null;

@@ -680,6 +680,55 @@ export const reactionFires = pgTable("reaction_fires", {
   index("reaction_fires_rule_idx").on(t.ruleId, t.status, t.createdAt),
 ]);
 
+// ---------- Workflows ----------
+
+/**
+ * A workflow: a drawing of the standing work a company does by itself, and the rows that carry it out.
+ *
+ * `nodes` is a draft. What runs is whatever the bindings below name, so editing a drawing changes nothing
+ * until it is published — the same draft/publish split a website has, for the same reason: a founder must be
+ * able to change their mind about unattended work without that change being the thing that happens.
+ */
+export const workflows = pgTable("workflows", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  /** The drawn graph: trigger nodes, an optional filter, one agent, an optional limit. Ordered as drawn. */
+  nodes: json<Array<Record<string, unknown>>>("nodes").notNull().default([]),
+  /** How many times this workflow has been published. Zero means it has never run anything. */
+  revision: integer("revision").notNull().default(0),
+  publishedAt: ts("published_at"),
+  createdBy: json<Record<string, unknown>>("created_by").notNull().default({}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("workflows_company_idx").on(t.companyId, t.enabled)]);
+
+/**
+ * What each trigger in a drawing published. The binding is how the surface can show a founder the live rule
+ * behind a node, notice that the rule was edited somewhere else, and know which rows are its own to remove.
+ * `target_id` deliberately has no foreign key: a row deleted by hand is exactly the state the workflow must be
+ * able to report instead of failing to read itself.
+ */
+export const workflowBindings = pgTable("workflow_bindings", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  workflowId: text("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  /** The trigger node's id inside the drawing, which is what survives an edit. */
+  triggerId: text("trigger_id").notNull(),
+  targetKind: text("target_kind").notNull(), // rule | schedule
+  targetId: text("target_id").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  // One row per trigger per workflow: republishing updates the row a trigger already owns rather than
+  // creating a second one, which is what keeps a rule's fire history attached to the rule a founder watches.
+  uniqueIndex("workflow_bindings_trigger_idx").on(t.workflowId, t.triggerId),
+  index("workflow_bindings_company_idx").on(t.companyId, t.targetKind, t.targetId),
+]);
+
 // ---------- Companion devices ----------
 export const companionDevices = pgTable("companion_devices", {
   id: id(),

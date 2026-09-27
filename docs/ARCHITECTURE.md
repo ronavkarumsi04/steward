@@ -74,6 +74,12 @@ Sessions are rows and pages are a cache: `browser_sessions` (one live session pe
 
 What the founder sees is the frame the browser produced, served as an image from the row with `nosniff` and a `sandbox` CSP, with the step log built from the same frames — so the picture and the log cannot disagree. `apps/web/src/components/browser-workspace.tsx` renders the live view, and the page subscribes to the five `browser.*` event types purely to know when to re-read those rows.
 
+## The workflow builder
+
+A company's standing work — the reaction rules of ADR-0014 and the agent schedules beside them — drawn as one picture (ADR-0019). `workflows` holds a draft graph and `workflow_bindings` holds one row per published trigger, naming the rule or schedule that carries it out; `packages/core/src/workflows.ts` is the whole of it. `compileWorkflow` is pure and turns a graph into the exact fields of `reaction_rules` and `agent_schedules`, so publishing is a transaction over rows the engine already fires — there is no second engine and no interpreter. `validateWorkflow` takes a stage: a draft may be unfinished (no instruction yet, no agent chosen, a project that was deleted) and may not be contradictory (a cron this deployment would reject, two triggers that would start two runs for one record, a cap on a schedule that has none). `WorkflowService.state` compiles the draft and reads the bound rows back into a `reading` per trigger — the row as it is, the row the drawing would write, and the fields that differ — which is how a rule edited on the Signals page shows up as a change rather than being overwritten.
+
+The surface is `/app/c/:companyId/workflows` (`apps/web/src/components/workflow-studio.tsx`): the canvas, the live preview (the same compile and validate functions, called on every keystroke), the rows each trigger is running right now, and one button that publishes. Saving writes the draft and nothing else; publishing is the only act that changes behaviour; pausing stops the drawing and every row it ran. Deleting a workflow deletes the rules and schedules it published, while `reaction_fires.rule_id` is `set null`, so the ledger of what those rules did survives them.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.

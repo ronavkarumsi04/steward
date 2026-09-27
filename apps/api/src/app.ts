@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { AuthError, BrowserError, CodeError, SiteError, type EventBus } from "@steward/core";
+import { AuthError, BrowserError, CodeError, SiteError, WorkflowError, type EventBus } from "@steward/core";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
 import { csrf, rateLimit, requestId, securityHeaders, session } from "./middleware.js";
@@ -16,6 +16,7 @@ import { registerReactionRoutes } from "./routes/reactions.js";
 import { registerSiteRoutes } from "./routes/site.js";
 import { registerCodeRoutes } from "./routes/code.js";
 import { registerBrowserRoutes } from "./routes/browser.js";
+import { registerWorkflowRoutes } from "./routes/workflows.js";
 import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/signals.js";
 
 export const API_VERSION = "0.1.0";
@@ -72,6 +73,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerSiteRoutes(v1, registry);
   registerCodeRoutes(v1, registry);
   registerBrowserRoutes(v1, registry);
+  registerWorkflowRoutes(v1, registry);
   registerProviderRoutes(v1, registry);
   registerCompanionRoutes(v1, registry);
 
@@ -97,6 +99,13 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
       // sentence the founder reads, and none of them is a 500.
       const status = err.code === "not_found" ? 404 : err.code === "no_provider" || err.code === "stopped" ? 409 : err.code === "provider" ? 502 : 422;
       return c.json({ error: { code: `browser_${err.code}`, message: err.message, requestId: rid } }, status);
+    }
+    if (err instanceof WorkflowError) {
+      // A drawing that cannot be carried out says which node is wrong, because that list is what the builder
+      // marks up — and a save that would overwrite somebody else's change is a conflict, not a bad request.
+      const status = err.code === "not_found" ? 404 : err.code === "stale" || err.code === "conflict" ? 409 : 422;
+      const problems = (err.details as { problems?: unknown }).problems;
+      return c.json({ error: { code: `workflow_${err.code}`, message: err.message, details: Array.isArray(problems) && problems.length ? { problems } : undefined, requestId: rid } }, status);
     }
     if (err instanceof SiteError) {
       // A refused save or publish carries the list of what is wrong, because that list is what the studio shows.

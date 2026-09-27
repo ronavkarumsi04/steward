@@ -9,6 +9,7 @@ export * from "./work.js";
 export * from "./events.js";
 export * from "./signals.js";
 export * from "./reactions.js";
+export * from "./workflows.js";
 export * from "./integrations.js";
 export * from "./companion.js";
 export * from "./mailer.js";
