@@ -586,3 +586,108 @@ export interface GrowthSnapshot {
   outbound: OutboundActivity[];
   campaigns: Campaign[];
 }
+
+/**
+ * The site studio's shapes, mirroring the API. The catalog is the server's own list of block kinds and fields —
+ * the editor is built from it rather than from a second copy of the model — so these types describe the shapes
+ * and never restate what the catalog already says.
+ */
+export type SiteFieldKind = "text" | "paragraph" | "link" | "image" | "email";
+
+export interface SiteField {
+  path: string;
+  label: string;
+  kind: SiteFieldKind;
+  max: number;
+  required?: boolean;
+  placeholder?: string;
+  hint?: string;
+}
+
+export interface SiteRepeat {
+  path: string;
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  item: { kind: "text"; label: string; max: number; required?: boolean } | { kind: "record"; label: string; fields: SiteField[] };
+}
+
+export interface SiteBlockSpec {
+  kind: string;
+  label: string;
+  hint: string;
+  fields: SiteField[];
+  repeats: SiteRepeat[];
+  preset: Record<string, unknown>;
+}
+
+export interface SiteTheme {
+  accent: string;
+  font: string;
+  radius: string;
+  dark: boolean;
+}
+
+export interface SiteBlock {
+  kind: string;
+  [key: string]: unknown;
+}
+
+export interface SitePage {
+  slug: string;
+  title: string;
+  description: string;
+  blocks: SiteBlock[];
+}
+
+export interface SiteModelShape {
+  name: string;
+  theme: SiteTheme;
+  pages: SitePage[];
+}
+
+export interface SiteSummary {
+  id: string;
+  name: string;
+  theme: SiteTheme;
+  revision: string;
+}
+
+export interface SiteVersionSummary {
+  id: string;
+  number: number;
+  digest: string;
+  bytes: number;
+  pageCount: number;
+  fileCount: number;
+  artifactId: string | null;
+  createdAt: string;
+}
+
+export interface SiteStudioRead {
+  site: SiteSummary | null;
+  model: SiteModelShape | null;
+  starter: SiteModelShape | null;
+  problems: string[];
+  catalog: SiteBlockSpec[];
+  versions: SiteVersionSummary[];
+  agents: Array<{ id: string; kind: string; name: string }>;
+  canEdit: boolean;
+}
+
+export interface SitePreview {
+  source: "draft" | "version";
+  slug: string;
+  html: string;
+  digest: string | null;
+  files: Array<{ path: string; bytes: number }> | null;
+  problems: string[];
+}
+
+export interface SiteShipResult {
+  status: "started" | "queued" | "failed";
+  reason: string | null;
+  instruction: string;
+  run: { id: string; status: string } | null;
+}

@@ -371,6 +371,10 @@ export const EventType = z.enum([
   "reaction.created",
   "reaction.updated",
   "reaction.deleted",
+  "site.updated",
+  "site.published",
+  "site.restored",
+  "site.ship_requested",
   "agent.updated",
   "audit",
 ]);
@@ -455,3 +459,6 @@ export function verificationVerdict(v: { passed?: boolean | null; verdict?: Veri
   // A verdict of "passed" without `passed: true` grants nothing: there is no evidence to rest on.
   return "unverified";
 }
+
+/** The site model — the company's own website as durable rows rather than generated markup (ADR-0016). */
+export * from "./site.js";

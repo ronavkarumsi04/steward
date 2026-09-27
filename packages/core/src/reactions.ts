@@ -193,6 +193,9 @@ export const REACTABLE_EVENT_TYPES = [
   "document.updated",
   "decision.recorded",
   "signal.received",
+  // A published site is a fact worth reacting to: "when the site changes, tell the marketing agent" is a rule
+  // over this record rather than a new mechanism.
+  "site.published",
 ] as const;
 
 const EVIDENCE_LIMIT = 4000;

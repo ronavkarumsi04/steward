@@ -751,6 +751,60 @@ export const artifacts = pgTable("artifacts", {
   createdAt: createdAt(),
 }, (t) => [index("artifacts_company_idx").on(t.companyId, t.createdAt), index("artifacts_project_idx").on(t.projectId, t.createdAt)]);
 
+// ---------- Sites ----------
+
+/** One site per company. Its content is pages; its history is versions. */
+export const sites = pgTable("sites", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  theme: json<Record<string, unknown>>("theme").notNull().default({}),
+  createdBy: json<Record<string, unknown>>("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("sites_company_idx").on(t.companyId), index("sites_org_idx").on(t.organizationId)]);
+
+/** A page: an address, a title, and the blocks that make it up, in order. */
+export const sitePages = pgTable("site_pages", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  blocks: json<unknown[]>("blocks").notNull().default([]),
+  position: integer("position").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  // Two pages of one site cannot share an address; the database says so rather than the renderer discovering it.
+  uniqueIndex("site_pages_slug_idx").on(t.siteId, t.slug),
+  index("site_pages_company_idx").on(t.companyId, t.position),
+]);
+
+/**
+ * A published version: the whole model, the files it rendered to, and the digest that makes the two provable.
+ * The model is stored rather than referenced, so a version can be rebuilt after the draft has moved on.
+ */
+export const siteVersions = pgTable("site_versions", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  number: integer("number").notNull(),
+  model: json<Record<string, unknown>>("model").notNull(),
+  files: json<unknown[]>("files").notNull(),
+  digest: text("digest").notNull(),
+  bytes: integer("bytes").notNull(),
+  pageCount: integer("page_count").notNull(),
+  fileCount: integer("file_count").notNull(),
+  artifactId: text("artifact_id").references(() => artifacts.id, { onDelete: "set null" }),
+  createdBy: json<Record<string, unknown>>("created_by").notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("site_versions_number_idx").on(t.siteId, t.number), index("site_versions_company_idx").on(t.companyId, t.siteId, t.number)]);
+
 // ---------- Business ----------
 export const contacts = pgTable("contacts", {
   id: id(),

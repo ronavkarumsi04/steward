@@ -20,6 +20,9 @@ const GROUPS = [
     items: [
       ["/growth", "Growth", Icon.Growth],
       ["/finance", "Finance", Icon.Finance],
+      // The company's own website. "Studio" above is the company overview, so this is labelled for what a
+      // founder would look for, even though the page itself is called the Site Studio.
+      ["/site", "Website", Icon.Company],
     ],
   },
   {

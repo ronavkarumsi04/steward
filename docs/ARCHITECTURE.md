@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `api` | `apps/api` | Hono HTTP API. Auth, tenancy, CRUD, approvals, SSE event stream, provider/integration management, companion hub, OpenAPI. Starts Temporal workflows; never runs model calls itself (except provider "test credential"). |
 | `worker` | `apps/worker` | Temporal worker hosting workflows (`agentRun`, `schedule`, `housekeeping`) and activities (context build, plan, model call, tool exec, verify, persist). Also runs the reaction sweep, which answers the rules founders wrote over recorded events without waiting for a schedule (ADR-0014). |
+| Site Studio | `packages/core/src/sites.ts`, `apps/web/src/components/site-studio.tsx` | A company's website as rows (`sites`, `site_pages`, `site_versions`), one pure renderer shared by the studio's preview and the published bundle, a catalog the editor is built from, and a publish that stores bytes while shipping them stays a run (ADR-0016). |
 | `web` | `apps/web` | Next.js 16 app. Server components call the API with the user's cookie; the browser calls `/api/v1/*` which the web server proxies to the API so cookies remain first-party. |
 | `companion` | `apps/companion` | Optional daemon on a user's machine that exposes the official Codex CLI to the org over an authenticated long-poll channel. |
 | Postgres (+pgvector) | | Authoritative state: tenants, work, runs, events, memory embeddings, usage. Temporal uses a separate database in the same instance. |
@@ -14,7 +15,7 @@
 
 ## Data model (core)
 
-`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `reaction_rules` → `reaction_fires`, `business_signals`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
+`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `reaction_rules` → `reaction_fires`, `business_signals`, `sites` → `site_pages` + `site_versions`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
 Org-level: `provider_credentials`, `provider_models`, `integrations`, `companion_devices`, `invitations`, `sessions`.
 Deployment-level: `worker_cursors` — a bookmark in the append-only event log for sweeps that are not tenant data.
 
@@ -49,6 +50,10 @@ The API writes to `events` (append-only, per-company sequence) and NOTIFYs via P
 ## Interface
 
 The web app keeps its interface as a system rather than a set of habits (ADR-0015). Tokens — colour, radii, the three durations, the house ease and the named z-rungs — live in `apps/web/src/app/globals.css`; the numbers that describe motion live in `apps/web/src/lib/motion.ts`, and a unit test reads the stylesheet and fails if the two disagree. Arrivals are pure CSS (`.rise-in` plus an `--enter-delay` produced by `staggerPlan`) scheduled by the named plans in `apps/web/src/lib/arrivals.ts` — one for the landing page, one for the command center, one for a run's rows — each held to its band by `checkPlan`. Values that move after the page has arrived (a duration bar whose row stopped being the slowest) run on the single `requestAnimationFrame` loop in `lib/motion.ts` through the `SettleBar` component, land on exact values and then stop requesting frames. Reduced motion is a real path: values land on their first frame and arrivals are collapsed, never skipped. The system is readable at `/app/design`, which renders the real components and a live motion lab.
+
+## The site studio
+
+A company's website is a document the founder owns (ADR-0016): `sites` holds the name and theme, `site_pages` the pages and their blocks, `site_versions` numbered snapshots of the whole model plus the files that were built from it. `packages/schema/src/site.ts` is the model — bounded strings, links and images checked against a scheme allow-list, a theme of named choices, nothing that can carry markup — and `packages/core/src/sites.ts` is the engine: one pure renderer (`renderPageHtml`/`renderSiteCss`/`renderSiteFiles`), the sha256 digest over the bundle, `shippingInstruction` for the text an agent reads, and `sitePublishProblems`, which reads the block catalog's `required` flags to say what is still missing. `SITE_BLOCK_CATALOG` is also the editor's schema: `GET /companies/:id/site` returns it, and the studio renders its fields from it, so a block kind exists in one place. Saving is tolerant (a draft may be unfinished); publishing is strict and stores the bytes as an artifact of kind `site_bundle`; putting them on the internet is a separate outbound action that goes through a run, recorded before it is launched. The preview a founder approves is rendered by the API with the publishing renderer, and a test asserts the preview and the stored version are byte-identical.
 
 ## Extension points
 

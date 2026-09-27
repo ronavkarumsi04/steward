@@ -922,6 +922,224 @@ describe("event-driven reactions", () => {
   });
 });
 
+/**
+ * The Site Studio over HTTP. The engine's own rules live in `@steward/core`; what these cases are for is the
+ * seams: a read that hands the editor its own catalog, a draft that may be unfinished where a publish may not,
+ * a preview that is the same bytes as the version it becomes, and a ship that is a recorded run rather than a
+ * promise that something started.
+ */
+describe("site studio", () => {
+  /** A founder, their company (with a tagline to start from) and the agents they have. */
+  async function studio() {
+    const founder = await register("Studio");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, {
+      name: `Studio ${uniq()}`,
+      autonomyLevel: 2,
+      profile: { description: "Revenue reports for small stores.", stage: "idea" },
+    });
+    const companyId = co.body.company.id;
+    const listed = await founder.api.json<{ agents: Array<{ id: string; kind: string; enabled: boolean }> }>("GET", `/companies/${companyId}/agents`);
+    const agent = listed.body.agents.find((candidate) => candidate.kind === "engineering") ?? listed.body.agents[0];
+    expect(agent).toBeTruthy();
+    return { ...founder, companyId, agentId: agent!.id };
+  }
+
+  /** A site with every rule satisfied, so a publish has something to succeed at. */
+  const complete = (name: string) => ({
+    name,
+    theme: { accent: "indigo", font: "sans", radius: "soft", dark: false },
+    pages: [
+      {
+        slug: "index",
+        title: name,
+        description: "Revenue reports for small stores.",
+        blocks: [
+          { kind: "hero", heading: "Revenue, explained weekly", subheading: "For stores selling in more than one place.", action: { label: "Talk to us", href: "/contact" } },
+          { kind: "features", heading: "What you get", items: [{ title: "One number", body: "Everything in one place." }] },
+        ],
+      },
+      {
+        slug: "contact",
+        title: "Contact",
+        description: "",
+        blocks: [{ kind: "contact", heading: "Talk to us", body: "We answer within a day.", email: "hello@example.com", phone: "", action: { label: "", href: "" } }],
+      },
+    ],
+  });
+
+  type StudioRead = {
+    site: { id: string; name: string; revision: string } | null;
+    model: { name: string; pages: Array<{ slug: string; blocks: Array<{ kind: string }> }> } | null;
+    starter: unknown;
+    problems: string[];
+    catalog: Array<{ kind: string; label: string; fields: Array<{ path: string; required?: boolean }> }>;
+    versions: Array<{ id: string; number: number; digest: string }>;
+    agents: Array<{ id: string; kind: string }>;
+    canEdit: boolean;
+  };
+
+  const read = (api: ReturnType<typeof client>, companyId: string) => api.json<StudioRead>("GET", `/companies/${companyId}/site`);
+
+  d("opens on a company with no site as a starting draft, not an empty screen", async () => {
+    const { api, companyId } = await studio();
+    const first = await read(api, companyId);
+    expect(first.status).toBe(200);
+    expect(first.body.site).toBeNull();
+    expect(first.body.model).toBeNull();
+    expect(first.body.versions).toEqual([]);
+    expect(first.body.canEdit).toBe(true);
+    // The starting point is the company's own words, and it is already a valid draft.
+    const starter = first.body.starter as { name: string; pages: Array<{ slug: string; blocks: Array<{ kind: string }> }> };
+    expect(starter.name).toContain("Studio");
+    expect(starter.pages.map((page) => page.slug)).toEqual(["index", "contact"]);
+    // The editor is built from the server's catalog: kinds, and the fields of each, including the button a hero
+    // block has, which is not a top-level property of the block.
+    expect(first.body.catalog.map((spec) => spec.kind)).toEqual(["hero", "text", "features", "gallery", "faq", "cta", "contact"]);
+    expect(first.body.catalog.find((spec) => spec.kind === "hero")?.fields.map((field) => field.path)).toContain("action.label");
+    // Nothing has been written by reading — and there is nothing to publish yet, which is a 404 rather than a 500.
+    expect((await read(api, companyId)).body.site).toBeNull();
+    expect((await api.call("POST", `/companies/${companyId}/site/publish`)).status).toBe(404);
+  });
+
+  d("keeps one company's site out of another company's reach", async () => {
+    const owner = await studio();
+    const stranger = await studio();
+    await owner.api.json("PUT", `/companies/${owner.companyId}/site`, { model: complete("Northwind Analytics"), expectedRevision: null });
+    const published = await owner.api.json<{ version: { id: string } }>("POST", `/companies/${owner.companyId}/site/publish`);
+
+    // A company id the caller cannot see is a 404, not a 403: the studio does not confirm that it exists.
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/site`)).status).toBe(404);
+    expect((await stranger.api.call("PUT", `/companies/${owner.companyId}/site`, { model: complete("Mine now"), expectedRevision: null })).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/site/preview?slug=index`)).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/site/versions/${published.body.version.id}/bundle`)).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${owner.companyId}/site/versions/${published.body.version.id}/restore`)).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${owner.companyId}/site/publish`)).status).toBe(404);
+  });
+
+  d("saves an unfinished draft, and says what publishing would still need", async () => {
+    const { api, companyId } = await studio();
+    const started = await read(api, companyId);
+    const saved = await api.json<{ site: { revision: string; name: string }; pages: string[]; problems: string[] }>("PUT", `/companies/${companyId}/site`, {
+      model: started.body.starter,
+      expectedRevision: null,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.pages).toEqual(["index", "contact"]);
+    // A starter is honest but unfinished: saving it works, publishing it would not.
+    expect(saved.body.problems.length).toBeGreaterThan(0);
+    expect(saved.body.problems.join("\n")).toContain("paragraph 1 is empty");
+
+    const reloaded = await read(api, companyId);
+    expect(reloaded.body.site?.revision).toBe(saved.body.site.revision);
+    expect(reloaded.body.starter).toBeNull(); // The starting point is only offered to a company without a site.
+    expect(reloaded.body.problems).toEqual(saved.body.problems);
+
+    // A second tab that never read this revision cannot overwrite it.
+    const stale = await api.json<{ error: { code: string } }>("PUT", `/companies/${companyId}/site`, { model: complete("Later"), expectedRevision: "2020-01-01T00:00:00.000Z" });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.code).toBe("site_stale");
+
+    // A slug that is not an address is refused with the field that was wrong.
+    const bad = await api.json<{ error: { code: string; details?: { problems?: string[] } } }>("PUT", `/companies/${companyId}/site`, {
+      model: { ...complete("Later"), pages: [{ slug: "About Us", title: "About", description: "", blocks: [] }] },
+      expectedRevision: reloaded.body.site!.revision,
+    });
+    expect(bad.status).toBe(422);
+    expect(bad.body.error.details?.problems?.join(" ")).toContain("slug");
+  });
+
+  d("previews the draft with the same renderer that publishes it", async () => {
+    const { api, companyId } = await studio();
+    await api.json("PUT", `/companies/${companyId}/site`, { model: complete("Northwind"), expectedRevision: null });
+
+    const preview = await api.json<{ source: string; html: string; problems: string[] }>("GET", `/companies/${companyId}/site/preview?slug=index`);
+    expect(preview.status).toBe(200);
+    expect(preview.body.source).toBe("draft");
+    expect(preview.body.problems).toEqual([]);
+    expect(preview.body.html.startsWith("<!doctype html>")).toBe(true);
+    expect(preview.body.html).toContain("Revenue, explained weekly");
+    expect(preview.body.html).toContain('href="/contact/"');
+    // A preview is shown in an iframe a founder trusts with nothing: the bundle never carries a script or a handler.
+    expect(preview.body.html).not.toMatch(/<script/i);
+    expect(preview.body.html).not.toMatch(/\son[a-z]+=/i);
+
+    expect((await api.call("GET", `/companies/${companyId}/site/preview?slug=no-such-page`)).status).toBe(404);
+    expect((await api.call("GET", `/companies/${companyId}/site/preview?slug=index&versionId=missing`)).status).toBe(404);
+  });
+
+  d("refuses to publish an unfinished draft, then builds a version that is exactly what was previewed", async () => {
+    const { api, companyId } = await studio();
+    const started = await read(api, companyId);
+    await api.json("PUT", `/companies/${companyId}/site`, { model: started.body.starter, expectedRevision: null });
+
+    const refused = await api.json<{ error: { code: string; details?: { problems?: string[] } } }>("POST", `/companies/${companyId}/site/publish`);
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe("site_invalid");
+    expect(refused.body.error.details?.problems?.join("\n")).toContain("paragraph 1 is empty");
+    expect((await read(api, companyId)).body.versions).toEqual([]); // A refusal leaves no version behind.
+
+    const current = (await read(api, companyId)).body.site!;
+    const saved = await api.json<{ site: { revision: string } }>("PUT", `/companies/${companyId}/site`, { model: complete("Northwind Analytics"), expectedRevision: current.revision });
+    expect(saved.status).toBe(200);
+    const preview = await api.json<{ html: string }>("GET", `/companies/${companyId}/site/preview?slug=index`);
+
+    const published = await api.json<{ version: { id: string; number: number; digest: string; pageCount: number; fileCount: number }; files: Array<{ path: string; bytes: number }> }>("POST", `/companies/${companyId}/site/publish`);
+    expect(published.status).toBe(201);
+    expect(published.body.version.number).toBe(1);
+    expect(published.body.version.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(published.body.files.map((file) => file.path)).toEqual(["contact/index.html", "index.html", "site.json"]);
+
+    // What the founder approved in the preview is what the version holds, byte for byte.
+    const stored = await api.json<{ source: string; html: string; digest: string }>("GET", `/companies/${companyId}/site/preview?slug=index&versionId=${published.body.version.id}`);
+    expect(stored.body.source).toBe("version");
+    expect(stored.body.html).toBe(preview.body.html);
+    expect(stored.body.digest).toBe(published.body.version.digest);
+    expect((await read(api, companyId)).body.versions.map((row) => row.number)).toEqual([1]);
+
+    // The files come back as a download, which is what a founder who hosts elsewhere needs.
+    const bundle = await api.call("GET", `/companies/${companyId}/site/versions/${published.body.version.id}/bundle`);
+    expect(bundle.status).toBe(200);
+    expect(bundle.headers.get("content-disposition")).toContain("attachment");
+    const boxed = (await bundle.json()) as { version: number; digest: string; files: Array<{ path: string; contents: string }> };
+    expect(boxed.version).toBe(1);
+    expect(boxed.digest).toBe(published.body.version.digest);
+    expect(boxed.files.find((file) => file.path === "index.html")?.contents).toBe(preview.body.html);
+  });
+
+  d("restores an old version as the draft, and shipping it is a run rather than a promise", async () => {
+    const { api, companyId, agentId } = await studio();
+    await api.json("PUT", `/companies/${companyId}/site`, { model: complete("Northwind Analytics"), expectedRevision: null });
+    const first = await api.json<{ version: { id: string; number: number; digest: string } }>("POST", `/companies/${companyId}/site/publish`);
+    expect(first.status).toBe(201);
+    expect(first.body.version.number).toBe(1);
+
+    const revision = (await read(api, companyId)).body.site!.revision;
+    await api.json("PUT", `/companies/${companyId}/site`, { model: { ...complete("Northwind Analytics Ltd"), theme: { accent: "rose", font: "mono", radius: "round", dark: true } }, expectedRevision: revision });
+    const second = await api.json<{ version: { number: number; digest: string } }>("POST", `/companies/${companyId}/site/publish`);
+    expect(second.body.version.number).toBe(2);
+    expect(second.body.version.digest).not.toBe(first.body.version.digest);
+
+    const restored = await api.json<{ site: { name: string; theme: { accent: string } }; problems: string[] }>("POST", `/companies/${companyId}/site/versions/${first.body.version.id}/restore`);
+    expect(restored.status).toBe(200);
+    expect(restored.body.site.name).toBe("Northwind Analytics");
+    expect(restored.body.site.theme.accent).toBe("indigo");
+    expect((await read(api, companyId)).body.versions.map((row) => row.number)).toEqual([2, 1]); // A restore is an edit, not a publish.
+
+    const shipped = await api.json<{ status: string; reason: string | null; instruction: string; run: { id: string; trigger: { instruction: string } } }>("POST", `/companies/${companyId}/site/versions/${first.body.version.id}/ship`, { agentId });
+    expect(shipped.status).toBe(201);
+    expect(shipped.body.status).toBe("started");
+    expect(shipped.body.reason).toBeNull();
+    expect(shipped.body.instruction).toContain(first.body.version.digest);
+    expect(shipped.body.run.trigger.instruction).toBe(shipped.body.instruction);
+    // The ship is a real run, so it is visible in the company's own list of what its agents did.
+    const runs = await api.json<{ runs: Array<{ id: string; intent: string }> }>("GET", `/companies/${companyId}/runs?limit=10`);
+    expect(runs.body.runs.map((run) => run.id)).toContain(shipped.body.run.id);
+
+    expect((await api.call("POST", `/companies/${companyId}/site/versions/no-such-version/ship`, { agentId })).status).toBe(404);
+  });
+
+});
+
 describe("openapi + health", () => {
   d("serves a valid OpenAPI document covering every registered route", async () => {
     const res = await app.request("http://api.test/v1/openapi.json");
