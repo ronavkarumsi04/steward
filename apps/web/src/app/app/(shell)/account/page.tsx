@@ -145,6 +145,23 @@ export default async function AccountPage() {
           <DeleteAccountForm />
         </div>
       </section>
+
+      {/* Not an account setting: the design system is documented here because this is where a curious person
+          already is, and because the interface is something you are entitled to read. */}
+      <section className="card p-5" aria-labelledby="interface">
+        <h2 id="interface" className="text-[15px] font-semibold">
+          The interface itself
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
+          The design system — colour, surfaces, state, layering, and the motion rules with a bar you can rescale
+          — rendered live rather than described.
+        </p>
+        <p className="mt-3">
+          <Link href="/app/design" className="btn">
+            Open the design system
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

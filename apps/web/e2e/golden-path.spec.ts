@@ -1,22 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { PASSWORD, openCompanyPalette, register } from "./session";
 
-const password = "correct-horse-battery-staple";
-
-async function register(page: Page) {
-  const email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
-  await page.goto("/register");
-  await page.getByLabel("Your name").fill("E2E Founder");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  // Registration is clickwrap-gated: the submit button stays disabled until the current terms, privacy and
-  // acceptable-use documents are accepted, so a test that skips this would hang on a disabled button.
-  await page.getByRole("checkbox", { name: /I agree to the/i }).check();
-  const submit = page.getByRole("button", { name: "Create account" });
-  await expect(submit).toBeEnabled();
-  await submit.click();
-  await page.waitForURL(/\/app(\/new)?$/);
-  return email;
-}
+const password = PASSWORD;
 
 test.describe.configure({ mode: "serial" });
 
@@ -64,8 +49,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByText("Not live yet")).toBeVisible();
 
   // Company command palette and keyboard navigation are available throughout the operating shell.
-  await page.keyboard.press("Control+k");
-  await expect(page.getByRole("dialog", { name: "Company command palette" })).toBeVisible();
+  await openCompanyPalette(page);
   const palette = page.getByLabel("Search or type a command");
   await expect(palette).toBeFocused();
   // A company with nothing waiting is told so, rather than shown a blank line that reads like a failed load.
@@ -107,7 +91,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
 
   // The palette is a work surface, not a menu. The task that was just created is reachable as work to start or
   // hand over, and nothing runs until the founder reads what it would do and confirms it.
-  await page.keyboard.press("Control+k");
+  await openCompanyPalette(page);
   await page.getByLabel("Search or type a command").fill("positioning statement");
   await expect(page.getByRole("option", { name: /Run “Draft positioning statement”/ })).toBeVisible();
   await expect(page.getByRole("option", { name: /(Assign|Reassign) “Draft positioning statement”/ })).toBeVisible();

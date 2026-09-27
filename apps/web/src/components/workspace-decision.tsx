@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { Approval, Run } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
 import { Ago } from "./ui";
@@ -23,6 +23,7 @@ export function WorkspaceDecision({
   approval,
   run,
   remaining,
+  arriveAfterMs = 0,
 }: {
   companyId: string;
   /** Null once the queue is empty, which is when the panel reports what was decided and stops. */
@@ -30,13 +31,19 @@ export function WorkspaceDecision({
   run: Pick<Run, "id" | "status"> | null;
   /** How many other requests are waiting, so the founder knows this is not the only one. */
   remaining: number;
+  /** Where this panel sits in the page's arrival (`lib/arrivals.ts`). */
+  arriveAfterMs?: number;
 }) {
   const router = useRouter();
   const [decided, setDecided] = useState<Approval[]>([]);
   if (!approval && decided.length === 0) return null;
 
   return (
-    <section aria-labelledby="decide-now" className="nb-panel-flat nb-accent-yellow rise-in">
+    <section
+      aria-labelledby="decide-now"
+      className="nb-panel-flat nb-accent-yellow rise-in"
+      style={{ "--enter-delay": `${arriveAfterMs}ms` } as CSSProperties}
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 id="decide-now" className="nb-section-label">
           {approval ? "DECIDE NOW" : "DECIDED"}

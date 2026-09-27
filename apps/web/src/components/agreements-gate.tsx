@@ -43,7 +43,7 @@ export function AgreementsGate({ pending }: { pending: PendingAgreement[] }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/50 p-4" role="dialog" aria-modal="true" aria-labelledby="agreements-title" aria-describedby="agreements-body">
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-fg/50 p-4" role="dialog" aria-modal="true" aria-labelledby="agreements-title" aria-describedby="agreements-body">
       <section className="card nb-left-purple rise-in w-full max-w-lg p-6 sm:p-7">
         <span className="pill pill-accent mb-4">
           <Icon.Sparkle size={14} />

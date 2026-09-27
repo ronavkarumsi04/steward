@@ -51,11 +51,22 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
 
-  --dur-fast: 120ms;
-  --dur-base: 180ms;
-  --dur-slow: 260ms;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  /* Motion tokens. One ease and three durations, each inside a band declared in `lib/motion.ts`; the unit
+     test reads this file and fails if the two disagree, so a duration typed at a call site is a broken test
+     rather than a style choice. `--settle-factor` is the share of the remaining distance a settling value
+     covers per frame. */
+  --dur-micro: 150ms; /* hover, press, focus — 120–200 ms */
+  --dur-entrance: 420ms; /* one element arriving — 300–800 ms */
+  --dur-ambient: 18000ms; /* one decorative layer drifting — 15–30 s */
+  --ease-house: cubic-bezier(.22,1,.36,1);
+  --settle-factor: 0.13;
+
+  /* Layering. Named rungs, so a new overlay has an obvious place to sit. */
+  --z-sticky-cell: 1;
+  --z-nav: 30;
+  --z-modal: 50;
+  --z-overlay: 100;
+  --z-toast: 200;
 }
 
 :root[data-theme="dark"] {
@@ -227,13 +238,27 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    /* Durations collapse to nothing rather than being skipped, so an arrival lands on its final frame with
+       its content visible. Displacement is what the preference asks to be spared — a card that lifts under
+       the pointer, a press that shoves a button sideways — and it is why no informational motion in this
+       product is expressed as displacement. The one exemption is a bar saying how full it is, which is a
+       scale rather than a movement, and whose value the loop writes final on the first frame anyway. */
     *,
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
       transform: none !important;
+    }
+
+    /* A bar still states how full it is: the blanket `transform: none` above would wipe out the value the
+       frame loop wrote, so the scale is restored. Nothing moves — the loop lands the value on its first
+       frame — and a bar that has not been written yet draws nothing, because every bar here repeats a
+       number that is already in the text beside it. */
+    .settle-bar {
+      transform: scaleX(var(--settle, 0)) !important;
     }
   }
 }
@@ -486,8 +511,8 @@
     white-space: nowrap;
     user-select: none;
     transition-property: transform, background-color, border-color, box-shadow, color, opacity;
-    transition-duration: var(--dur-fast);
-    transition-timing-function: var(--ease-out);
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-house);
   }
 
   .btn:hover {
@@ -500,7 +525,9 @@
   .btn:active {
     box-shadow: none;
     transform: translate(2px, 2px);
-    transition-duration: 60ms;
+    /* No shorter than the micro band: a press is a fact the house states at the same rate as a hover, and a
+       duration below the band was the last hand-typed number in the stylesheet. */
+    transition-duration: var(--dur-micro);
   }
 
   .btn:disabled {
@@ -571,8 +598,8 @@
     font-size: 0.9375rem;
     outline: none;
     transition-property: border-color, outline-color, background-color;
-    transition-duration: var(--dur-fast);
-    transition-timing-function: var(--ease-out);
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-house);
   }
 
   .input::placeholder {
@@ -703,8 +730,8 @@
     font-weight: 750;
     white-space: nowrap;
     transition-property: background-color, color, transform;
-    transition-duration: var(--dur-fast);
-    transition-timing-function: var(--ease-out);
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-house);
   }
 
   .segmented > *:last-child {
@@ -738,8 +765,8 @@
     font-weight: 650;
     text-decoration: none;
     transition-property: background-color, color, transform, border-color, box-shadow;
-    transition-duration: var(--dur-fast);
-    transition-timing-function: var(--ease-out);
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-house);
   }
 
   .nav-item:hover {
@@ -779,7 +806,7 @@
   .table th {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: var(--z-sticky-cell);
     padding: 0.625rem 0.75rem;
     background: var(--panel-2);
     color: var(--fg);
@@ -814,7 +841,7 @@
   }
 
   .table tbody tr {
-    transition: background-color var(--dur-fast) var(--ease-out);
+    transition: background-color var(--dur-micro) var(--ease-house);
   }
 
   .table tbody tr:hover {
@@ -857,13 +884,45 @@
     }
   }
 
+  /* Arrival. A section or a row arrives once, at the entrance duration, on the house ease. A group that
+     arrives together staggers with `--enter-delay` instead of inventing its own `animation-delay`, so one
+     plan from `lib/motion.ts` describes the whole sequence. */
   .rise-in {
-    animation: rise-in var(--dur-slow) var(--ease-out) both;
+    animation: rise-in var(--dur-entrance) var(--ease-house) var(--enter-delay, 0ms) both;
   }
 
-  .rise-in-delayed {
-    animation: rise-in var(--dur-slow) var(--ease-out) both;
-    animation-delay: 80ms;
+  /* Settling. The one frame loop in `lib/motion.ts` writes `--settle`; the track is painted with a
+     transform, so a bar that rescales because a new row is the slowest never triggers layout, and the value
+     lands exactly on its target and then the loop stops requesting frames. */
+  .settle {
+    overflow: hidden;
+    background: var(--panel-3);
+    border-radius: 999px;
+  }
+
+  .settle-bar {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transform: scaleX(var(--settle, 0));
+    transform-origin: left center;
+  }
+
+  /* Ambient. One decorative layer on a surface seen once, slow enough to read as stillness. Never on text,
+     never on something a person is mid-way through reading, and never the only place a fact appears. */
+  @keyframes ambient-drift {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    to {
+      transform: translate3d(-1.5%, -1.5%, 0) scale(1.04);
+    }
+  }
+
+  .ambient {
+    animation: ambient-drift var(--dur-ambient) ease-in-out infinite alternate;
+    will-change: transform;
   }
 
   @keyframes spin {
@@ -896,7 +955,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .rise-in,
-    .rise-in-delayed {
+    .ambient {
       animation: none;
       opacity: 1;
     }
@@ -906,6 +965,8 @@
       animation: none;
     }
 
+    /* The spinner is the one thing that keeps turning: it is the only signal that work is still happening,
+       and at 1.5s per turn it is close to a still image with a hint of life in it. */
     .spinner {
       animation-duration: 1.5s !important;
     }
@@ -918,7 +979,7 @@
     bottom: 0;
     /* Above dialogs: an action taken from a dialog reports its result while the dialog is still open, and a
        toast hidden behind it reads as nothing having happened. */
-    z-index: 200;
+    z-index: var(--z-toast);
     display: flex;
     justify-content: center;
     padding: 0 1rem 1.25rem;
@@ -949,7 +1010,7 @@
     box-shadow: var(--shadow-2);
     cursor: pointer;
     text-align: left;
-    animation: rise-in var(--dur-base) var(--ease-spring);
+    animation: rise-in var(--dur-entrance) var(--ease-house) both;
   }
 
   .toast-ok span {

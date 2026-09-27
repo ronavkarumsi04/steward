@@ -321,7 +321,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
       </button>
       {open && (
         <div
-          className="nb-command-overlay fixed inset-0 z-[100] flex items-start justify-center bg-black/60 px-3 pt-[10vh]"
+          className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] flex items-start justify-center bg-black/60 px-3 pt-[10vh]"
           onMouseDown={(e) => e.currentTarget === e.target && close()}
         >
           <section
