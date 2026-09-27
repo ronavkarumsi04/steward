@@ -795,6 +795,80 @@ export interface CodeSessionRead {
   pullRequests: Array<{ title: string; url: string | null; number: number | null }>;
 }
 
+// ---------- Browser sessions ----------
+
+/**
+ * Where a session is: live while a page is open, `stopped` when the founder ended it, `closed` when the agent or
+ * the sweep did, `failed` when the browser or the page went away.
+ */
+export type BrowserStatus = "live" | "stopped" | "closed" | "failed";
+
+export interface BrowserSessionView {
+  id: string;
+  runId: string | null;
+  agentId: string | null;
+  status: BrowserStatus;
+  /** Which browser this deployment used: `playwright`, or `none` on a stack that has none. */
+  provider: string;
+  url: string;
+  startUrl: string;
+  title: string;
+  width: number;
+  height: number;
+  stepCount: number;
+  frameCount: number;
+  lastFrameId: string | null;
+  lastAction: string | null;
+  lastActionAt: string | null;
+  lastNote: string | null;
+  stopReason: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  stoppedAt: string | null;
+}
+
+/**
+ * One screenshot with the sentence that caused it. Frames are the step log: one image per action, in order, so the
+ * list a founder scrolls is the same list the model read from.
+ */
+export interface BrowserFrameView {
+  id: string;
+  seq: number;
+  action: string;
+  url: string;
+  title: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  bytes: number;
+  digest: string;
+  createdAt: string;
+}
+
+export interface BrowserWorkspaceRead {
+  provider: string;
+  available: boolean;
+  /** Why there is no browser, when there is none: the same sentence a refused run carries. */
+  reason: string | null;
+  sessions: BrowserSessionView[];
+  agents: Array<{ id: string; kind: string; name: string }>;
+  canControl: boolean;
+  frameWindowDays: number;
+}
+
+export interface BrowserSessionRead {
+  session: BrowserSessionView;
+  frames: BrowserFrameView[];
+}
+
+export interface BrowserRunResult {
+  status: "started" | "queued" | "failed";
+  reason: string | null;
+  instruction: string;
+  run: { id: string; status: string; agentId: string } | null;
+}
+
 export interface CodeApplyResult {
   status: "started" | "queued" | "failed";
   reason: string | null;

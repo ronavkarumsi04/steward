@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
-const apiUrl = (process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+/**
+ * Where the API lives, as seen from the web server.
+ *
+ * `||` and not `??`, because an env file that documents a knob as optional — this repository's own `.env` does,
+ * with `API_INTERNAL_URL=` and a comment explaining what it is for — sets the variable to the empty string rather
+ * than leaving it undefined. `??` would take that empty string as the answer, and the rewrite below would then
+ * point at a path that does not exist: every call through the web origin becomes a 404 while a build reports
+ * success, which is a deployment that looks healthy and serves nothing.
+ */
+const apiUrl = (process.env.API_INTERNAL_URL?.trim() || process.env.API_URL?.trim() || "http://localhost:4000").replace(/\/$/, "");
 /**
  * Hosted deployments ship one Next app that also serves the API in-process (see
  * `src/app/embedded-api`). Local development keeps proxying to the standalone API on :4000 so its
@@ -18,8 +27,12 @@ const nextConfig: NextConfig = {
   /**
    * `pg` and `pino` (and Temporal, when configured) resolve native-ish runtime files that must stay
    * outside the server bundle; the API runtime imports them lazily on first request.
+   *
+   * `playwright` belongs on this list for the same reason, and because the hosted image is one Next app that
+   * serves the API in-process: importing the browser package must not mean resolving a browser engine. The
+   * provider loads the engine itself, and only on a deployment that actually has one.
    */
-  serverExternalPackages: ["pg", "pino", "@temporalio/client", "@temporalio/common", "@temporalio/worker"],
+  serverExternalPackages: ["pg", "pino", "@temporalio/client", "@temporalio/common", "@temporalio/worker", "playwright", "playwright-core"],
   /**
    * Root-level legal URLs. Reviewers, app-directory listings, and Google's OAuth verification all
    * look for /privacy and /terms at the root rather than under a subdirectory, and a broken link in

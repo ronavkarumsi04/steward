@@ -1,7 +1,17 @@
-import { and, desc, eq, gt, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import { EVENTS_CHANNEL, auditLog, events, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 import type pg from "pg";
+
+/**
+ * The event-type filter, as a set and not as a tuple.
+ *
+ * Written as a helper because the obvious version — `sql`${events.type} = any(${types})`` with a JavaScript array —
+ * renders as `any(($1, $2, ...))`, and Postgres reads that as a *row constructor* rather than an array: it works
+ * for one type and fails with `operator does not exist: text = record` for two or more, which is exactly the case
+ * a filtered live stream is for. `inArray` renders the `in (...)` this means.
+ */
+const typeFilter = (types?: string[]) => (types?.length ? inArray(events.type, types) : undefined);
 
 export interface EventNotification {
   seq: number;
@@ -93,7 +103,7 @@ export class EventService {
     return this.db
       .select()
       .from(events)
-      .where(and(eq(events.organizationId, scope.organizationId), scope.companyId ? or(eq(events.companyId, scope.companyId), sql`${events.companyId} is null`) : undefined, gt(events.seq, afterSeq), types?.length ? sql`${events.type} = any(${types})` : undefined))
+      .where(and(eq(events.organizationId, scope.organizationId), scope.companyId ? or(eq(events.companyId, scope.companyId), sql`${events.companyId} is null`) : undefined, gt(events.seq, afterSeq), typeFilter(types)))
       .orderBy(events.seq)
       .limit(limit);
   }
@@ -102,7 +112,7 @@ export class EventService {
     return this.db
       .select()
       .from(events)
-      .where(and(eq(events.organizationId, scope.organizationId), scope.companyId ? or(eq(events.companyId, scope.companyId), sql`${events.companyId} is null`) : undefined, beforeSeq ? lt(events.seq, beforeSeq) : undefined, types?.length ? sql`${events.type} = any(${types})` : undefined))
+      .where(and(eq(events.organizationId, scope.organizationId), scope.companyId ? or(eq(events.companyId, scope.companyId), sql`${events.companyId} is null`) : undefined, beforeSeq ? lt(events.seq, beforeSeq) : undefined, typeFilter(types)))
       .orderBy(desc(events.seq))
       .limit(limit);
   }

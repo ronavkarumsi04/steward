@@ -7,6 +7,7 @@ import { createHmac } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
+import { BrowserAction } from "@steward/browser";
 import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
@@ -19,6 +20,7 @@ import { runEvalSuite, SCRIPT_FOR_BACKEND } from "./test/eval-harness.js";
 import { startSmtpSink, type SmtpSink } from "./test/smtp-sink.js";
 import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
 import { startFakeGitHub } from "@steward/core/test/fake-github";
+import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 const ENV: NodeJS.ProcessEnv = {
@@ -147,7 +149,7 @@ async function register(name = "Founder") {
   const body = (await res.json()) as { token: string; user: { id: string }; organization: { id: string } };
   const setCookie = res.headers.get("set-cookie") ?? "";
   const cookie = setCookie.split(";")[0] ?? "";
-  return { email, orgId: body.organization.id, userId: body.user.id, api: client(body.token), cookieApi: client("", cookie), cookie };
+  return { email, orgId: body.organization.id, userId: body.user.id, token: body.token, api: client(body.token), cookieApi: client("", cookie), cookie };
 }
 
 /**
@@ -1324,6 +1326,206 @@ describe("code ide", () => {
     expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/code/sessions/${sessionId}`)).status).toBe(404);
     expect((await stranger.api.call("PUT", `/companies/${strangerCompanyId}/code/sessions/${sessionId}/changes`, { path: "README.md", contents: "x" })).status).toBe(404);
     await owner.github.close();
+  });
+});
+
+describe("browser sessions", () => {
+  /**
+   * The browser lives in the worker, so this suite plays two parts: the API a founder talks to, and the worker that
+   * actually owns a page. The provider is the core fake — the same contract with no Chromium — which is what lets
+   * a session, its steps, its frames and a stop be checked without launching a browser in the test runner.
+   */
+  const fake = new FakeBrowserProvider();
+  let browserApp: ReturnType<typeof createApp>["app"];
+  beforeAll(() => {
+    if (!available) return;
+    const browserServices = new AgentServiceFactory({ core, env: ENV, companionBridge: new CompanionHub(), browser: fake });
+    browserApp = createApp({ core, auth: new AuthService(core.db), mailer, services: browserServices, workflows: fakeTemporal(), companionHub: new CompanionHub(), env: ENV }, null).app;
+  });
+
+  /** A founder, a company, the agents that can browse, and a client for the app that has a browser. */
+  async function browsable() {
+    const founder = await register("Watcher");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Browse ${uniq()}`, autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const listed = await founder.api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    const agentId = listed.body.agents.find((agent) => agent.kind === "research")!.id;
+    return { ...founder, companyId, agentId, api: client(founder.token, "", () => browserApp) };
+  }
+
+  type Workspace = { provider: string; available: boolean; reason: string | null; sessions: Array<{ id: string; status: string; url: string; stepCount: number; frameCount: number; lastAction: string | null; stopReason: string | null }>; agents: Array<{ id: string; kind: string }>; canControl: boolean; frameWindowDays: number };
+  const workspace = (api: ReturnType<typeof client>, companyId: string) => api.json<Workspace>("GET", `/companies/${companyId}/browser`);
+
+  d("says there is no browser here, in the same words a browsing run would be refused with", async () => {
+    const founder = await register("NoBrowser");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `No browser ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+
+    // This client talks to the app built without a provider: the honest state of a stack that installed no Chromium.
+    const first = await workspace(founder.api, companyId);
+    expect(first.status).toBe(200);
+    expect(first.body.provider).toBe("none");
+    expect(first.body.available).toBe(false);
+    expect(first.body.reason).toMatch(/no browser provider configured/i);
+    expect(first.body.sessions).toEqual([]);
+    // A browser is not a way to drive the company, so a viewer reads the page and the buttons are not offered.
+    expect(first.body.canControl).toBe(true);
+
+    const agents = await founder.api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    const agentId = agents.body.agents.find((agent) => agent.kind === "research")!.id;
+    const started = await founder.api.json<{ error: { code: string; message: string } }>("POST", `/companies/${companyId}/browser/runs`, { url: "https://example.com", objective: "read it", agentId });
+    expect(started.body.error.code).toBe("browser_unavailable");
+    expect(started.status).toBe(409);
+    expect(started.body.error.message).toMatch(/no browser provider configured/i);
+    // No run was created for a browser that cannot exist.
+    const runs = await founder.api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs`);
+    expect(runs.body.runs).toEqual([]);
+  });
+
+  d("starts a run from a page and a purpose, and hands it the instruction the founder read", async () => {
+    const { api, companyId, agentId } = await browsable();
+    const started = await api.json<{ status: string; reason: string | null; instruction: string; run: { id: string; trigger: { instruction: string }; agentId: string } }>("POST", `/companies/${companyId}/browser/runs`, {
+      url: "https://example.com/pricing",
+      objective: "check the annual price and the free-trial length",
+      agentId,
+    });
+    expect(started.status).toBe(201);
+    expect(started.body.status).toBe("started");
+    expect(started.body.run.agentId).toBe(agentId);
+    expect(started.body.instruction).toContain("https://example.com/pricing");
+    expect(started.body.instruction).toContain("check the annual price and the free-trial length");
+    expect(started.body.instruction).toMatch(/Watcher asked for this and is watching the session/);
+    // The instruction the founder was shown is the instruction the run holds, byte for byte.
+    expect(started.body.run.trigger.instruction).toBe(started.body.instruction);
+    expect(temporalCalls.some((call) => call.op === "startRun" && (call.args[0] as { runId: string }).runId === started.body.run.id)).toBe(true);
+    // And nothing has opened yet: the run opening the page is the point, so no session appears on its own.
+    expect((await workspace(api, companyId)).body.sessions).toEqual([]);
+  });
+
+  d("refuses an address this deployment will not open, and refuses a run no agent can take", async () => {
+    const { api, companyId, agentId } = await browsable();
+    fake.refuseTarget = "169.254.169.254";
+    const refused = await api.json<{ error: { code: string; message: string } }>("POST", `/companies/${companyId}/browser/runs`, { url: "http://169.254.169.254/latest/meta-data/", objective: "read it", agentId });
+    fake.refuseTarget = null;
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe("browser_refused");
+    expect(refused.body.error.message).toMatch(/private address/);
+
+    const missing = await api.json<{ error: { code: string } }>("POST", `/companies/${companyId}/browser/runs`, { url: "https://example.com", objective: "read it", agentId: "00000000-0000-4000-8000-000000000000" });
+    expect(missing.status).toBe(404);
+    expect(missing.body.error.code).toBe("not_found");
+  });
+
+  d("shows the page the agent is on, what it did, and the frame it saw — then stops it for good", async () => {
+    const { api, companyId, agentId, orgId, userId } = await browsable();
+    const started = await api.json<{ run: { id: string } }>("POST", `/companies/${companyId}/browser/runs`, { url: "https://example.com", objective: "read it", agentId });
+    const scope: TenantScope = { organizationId: orgId, companyId, userId, role: "owner", actor: { type: "user", userId } };
+
+    // The worker half: the provider this app was built with opens the page the run was asked to look at.
+    const browser = new AgentServiceFactory({ core, env: ENV, companionBridge: new CompanionHub(), browser: fake }).browser;
+    const opened = await browser.open(scope, { url: "https://example.com", runId: started.body.run.id, agentId, purpose: "check the pricing page" });
+    expect(opened.session.provider).toBe("fake");
+    fake.handle(opened.session.id)!.body = "the price went up";
+    await browser.act(scope, opened.session.id, BrowserAction.parse({ kind: "click", selector: "#pricing-link" }));
+
+    const live = await workspace(api, companyId);
+    expect(live.body.provider).toBe("fake");
+    expect(live.body.available).toBe(true);
+    expect(live.body.sessions[0]).toMatchObject({ id: opened.session.id, status: "live", stepCount: 2, frameCount: 2 });
+
+    const detail = await api.json<{ session: { status: string; url: string; title: string; lastAction: string }; frames: Array<{ id: string; seq: number; action: string; bytes: number }> }>("GET", `/companies/${companyId}/browser/sessions/${opened.session.id}`);
+    expect(detail.body.session.lastAction).toBe("Click #pricing-link");
+    expect(detail.body.frames.map((frame) => frame.seq)).toEqual([1, 2]);
+    expect(detail.body.frames[1]!.action).toBe("Click #pricing-link");
+
+    // The frames are images served from the rows, so "I watched it" means the founder saw it.
+    const frame = await api.call("GET", `/companies/${companyId}/browser/sessions/${opened.session.id}/frame`);
+    expect(frame.status).toBe(200);
+    expect(frame.headers.get("content-type")).toBe("image/jpeg");
+    expect(frame.headers.get("x-content-type-options")).toBe("nosniff");
+    const bytes = Buffer.from(await frame.arrayBuffer());
+    expect(bytes.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(bytes.byteLength).toBe(detail.body.frames[1]!.bytes);
+    const one = await api.call("GET", `/companies/${companyId}/browser/sessions/${opened.session.id}/frames/${detail.body.frames[0]!.id}`);
+    expect(one.status).toBe(200);
+    expect(Buffer.from(await one.arrayBuffer()).byteLength).toBe(detail.body.frames[0]!.bytes);
+
+    // The founder stops it. From here the worker's own guard refuses: no further action is possible.
+    const stopped = await api.json<{ session: { status: string; stopReason: string } }>("POST", `/companies/${companyId}/browser/sessions/${opened.session.id}/stop`, { reason: "Seen enough." });
+    expect(stopped.body.session).toMatchObject({ status: "stopped", stopReason: "Seen enough." });
+    expect(fake.closedIds).toContain(opened.session.id);
+    await expect(browser.act(scope, opened.session.id, BrowserAction.parse({ kind: "scroll", to: "down" }))).rejects.toMatchObject({ code: "stopped" });
+
+    // A stopped session is still readable — the record of what it did is the point of stopping it.
+    const afterwards = await api.json<{ session: { status: string }; frames: unknown[] }>("GET", `/companies/${companyId}/browser/sessions/${opened.session.id}`);
+    expect(afterwards.body.session.status).toBe("stopped");
+    expect(afterwards.body.frames).toHaveLength(2);
+    expect((await api.call("GET", `/companies/${companyId}/browser/sessions/${opened.session.id}/frame`)).status).toBe(200);
+  });
+
+  d("delivers the live view's own event list: five types at once is a filter, not a broken query", async () => {
+    const { companyId, agentId, orgId, userId, token } = await browsable();
+    const types = "browser.opened,browser.step,browser.stopped,browser.closed,browser.failed";
+    const response = await browserApp.request(`http://api.test/v1/companies/${companyId}/events/stream?types=${encodeURIComponent(types)}`, { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    // A stream has to forbid transformation. Every browser offers `Accept-Encoding`, the web app proxies this route,
+    // and Next's production server gzips what it can — and gzip buffers, so the browser would get a 200, an open
+    // connection, and no events at all. `no-transform` is what the compression middleware reads to stand down; the
+    // browser suite proves the proxy honours it end to end.
+    expect(response.headers.get("cache-control")).toContain("no-transform");
+
+    // Read the stream while a session is opened in another "process", which is what the page does.
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    const reading = (async () => {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline && !text.includes("browser.opened")) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value);
+      }
+      await reader.cancel().catch(() => undefined);
+      return text;
+    })();
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const scope: TenantScope = { organizationId: orgId, companyId, userId, role: "owner", actor: { type: "user", userId } };
+    const browser = new AgentServiceFactory({ core, env: ENV, companionBridge: new CompanionHub(), browser: fake }).browser;
+    const opened = await browser.open(scope, { url: "https://example.com", agentId, purpose: "live view" });
+    const delivered = await reading;
+
+    expect(delivered).toContain("event: ready");
+    expect(delivered).toContain("browser.opened");
+    expect(delivered).toContain(opened.session.id);
+  });
+
+  d("lets a viewer watch and not stop, and keeps one company's sessions out of another's", async () => {
+    const owner = await browsable();
+    const stranger = await register("Peeker");
+    const strangerCo = await stranger.api.json<{ company: { id: string } }>("POST", `/orgs/${stranger.orgId}/companies`, { name: `Peek ${uniq()}`, autonomyLevel: 2 });
+    const strangerCompanyId = strangerCo.body.company.id;
+
+    const scope: TenantScope = { organizationId: owner.orgId, companyId: owner.companyId, userId: owner.userId, role: "owner", actor: { type: "user", userId: owner.userId } };
+    const browser = new AgentServiceFactory({ core, env: ENV, companionBridge: new CompanionHub(), browser: fake }).browser;
+    const opened = await browser.open(scope, { url: "https://example.com", purpose: "look" });
+
+    // An invited viewer reads the workspace and the frames, and cannot stop the session.
+    const viewer = await register("Guest");
+    const inv = await owner.api.json<{ acceptUrl: string }>("POST", `/orgs/${owner.orgId}/invitations`, { email: viewer.email, role: "viewer" });
+    await viewer.api.json("POST", "/invitations/accept", { token: inv.body.acceptUrl.split("/").pop() });
+    const asViewer = await workspace(viewer.api, owner.companyId);
+    expect(asViewer.body.canControl).toBe(false);
+    expect(asViewer.body.sessions[0]!.id).toBe(opened.session.id);
+    expect((await viewer.api.call("GET", `/companies/${owner.companyId}/browser/sessions/${opened.session.id}/frame`)).status).toBe(200);
+    expect((await viewer.api.call("POST", `/companies/${owner.companyId}/browser/sessions/${opened.session.id}/stop`, {})).status).toBe(403);
+    expect((await viewer.api.call("POST", `/companies/${owner.companyId}/browser/runs`, { url: "https://example.com", objective: "x", agentId: owner.agentId })).status).toBe(403);
+
+    // Another company cannot see the session, its frames or its bytes, however it asks.
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/browser`)).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}`)).status).toBe(404);
+    expect((await stranger.api.call("GET", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}/frame`)).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${strangerCompanyId}/browser/sessions/${opened.session.id}/stop`, {})).status).toBe(404);
   });
 });
 

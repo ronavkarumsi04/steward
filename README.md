@@ -17,8 +17,9 @@ It is an independent implementation. It does not use, copy, or depend on any pro
 | Reactions | Rules a founder writes over what Steward records — a failed payment, a bounced email, a finished task, an inbound webhook — so agents wake on what happened, not only on a schedule. One run per record, refused-by-rules written down with the reason, hourly ceilings and cooldowns per rule. |
 | Website | A Site Studio per company: pages of plain blocks built from a server-side catalog (no markup field anywhere), a theme of named choices, a preview rendered by the same pure renderer that publishes, numbered versions with a sha256 digest you can download and host elsewhere, and a publish that stores the bytes while shipping them stays a run with an agent you can watch. Drafts may be unfinished; publishing says exactly what is missing. |
 | Code | A code IDE per company that reads the repository through your own GitHub connection and keeps no copy of it: browse the tree at any branch, edit a file against the bytes that are really there, stage changes into a session, read the diff (computed by Steward's own line-diff engine, so it is against the real file rather than a provider's branch), download it as a patch, and apply it — which records the exact bytes as an artifact and a run that creates the branch, commits once and opens the pull request. Nothing is ever committed from the editor, and a stack with no sandbox says so instead of offering a button that would fail. |
+| Browser | A real Chromium an agent can drive, with the founder watching and able to stop it mid-flight. Seven actions and nothing else — no script evaluation, no uploads, no clipboard — with credentials refused before the first keystroke and private addresses refused before a run exists. Every step is a frame the browser itself produced, served from the row, so what you see is what the agent saw; Stop writes the session row and the page really closes, in whichever process holds it. A stack without Chromium says so instead of offering a button that would fail. |
 | Observability | Append-only event log per company streamed over SSE, run/step/tool-call timelines, token & cost accounting per provider/model/agent/company, audit log. |
-| Web | Next.js app: landing, sign-in/sign-up, onboarding, company workspace (overview, chat, tasks, runs, approvals, agents, knowledge, site, code, settings), org providers/integrations/members. |
+| Web | Next.js app: landing, sign-in/sign-up, onboarding, company workspace (overview, chat, tasks, runs, approvals, agents, knowledge, site, code, browser, settings), org providers/integrations/members. |
 | Interface | One design system: named colour/radius/z tokens, three durations in declared bands, one house ease, and arrivals scheduled by a tested plan rather than typed per element. Settling values (a bar whose row stopped being the slowest) share one frame loop that lands exactly and then stops. Reduced motion is a real path, not a hammer. Read it live at `/app/design`. |
 | API | Hono REST API with OpenAPI document at `/v1/openapi.json`, cookie or bearer auth, CSRF protection, rate limiting. |
 
@@ -77,6 +78,7 @@ packages/
   policy/       autonomy levels, risk classification, approval rules, budgets
   tools/        tool registry, built-in tools, MCP client
   memory/       episodic/semantic memory on pgvector
+  browser/      real-browser provider: the action vocabulary, the address policy, Playwright
   sandbox/      Docker sandbox for code execution
   integrations/ integration framework + providers
   workflows/    Temporal workflow definitions
@@ -94,6 +96,8 @@ Key toggles:
 
 - `ALLOW_SIGNUP` — disable public registration after the first owner exists.
 - `SANDBOX_PROVIDER=docker|none` — code execution isolation (use a dedicated Docker host via `SANDBOX_DOCKER_HOST` in production).
+- `BROWSER_PROVIDER=auto|playwright|none` — whether agents may drive a real browser. `auto` (the default) uses Chromium when the image has it and says so when it does not, rather than offering a form that would fail.
+- `BROWSER_ALLOW_PRIVATE=true` — the explicit exception that lets a browser reach this deployment's own network. Off everywhere that is not deliberate.
 - `API_INTERNAL_URL` — URL the worker and web server use to reach the API inside a private network.
 - `RUN_MIGRATIONS_ON_START=false` — run migrations out of band.
 

@@ -1,6 +1,7 @@
 import { AgentServiceFactory } from "@steward/agents";
 import type { CompanionBridge } from "@steward/ai";
 import { AuthService, EventBus, createCoreContext, createMailer, loadConfig, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { browserProviderFromEnv } from "@steward/browser";
 import { runMigrations } from "@steward/db";
 // Type-only: the Temporal client is loaded lazily below so a deployment with TEMPORAL_DISABLED=true
 // never pulls the workflow engine into its bundle or its cold start.
@@ -77,7 +78,16 @@ export async function createApiRuntime(options: RuntimeOptions = {}): Promise<Ap
   if (options.listen !== false) await bus.start();
 
   const companionHub = new CompanionHub();
-  const services = new AgentServiceFactory({ core, approvalSignal, companionBridge: companionHub });
+
+  // The API never opens a page — pages live in the worker that holds them — but it does have to answer "does this
+  // deployment have a browser?" honestly, and the cheapest true answer is the same probe the worker makes. The
+  // provider's handles stay empty here; it exists so the sentence a founder reads is a fact about the image and not
+  // a guess made from an environment variable.
+  const { provider: browser, mode: browserMode } = await browserProviderFromEnv(env);
+  const browserState = await browser.availability();
+  log.info({ provider: browser.name, mode: browserMode, available: browserState.available, reason: browserState.reason }, "browser availability");
+
+  const services = new AgentServiceFactory({ core, approvalSignal, companionBridge: companionHub, browser });
   const mailer = createMailer(log);
   log.info({ provider: mailer.provider, allowSignup: config.allowSignup }, "platform email + signup policy");
   if (config.env === "production" && mailer.provider === "console") {
@@ -92,6 +102,7 @@ export async function createApiRuntime(options: RuntimeOptions = {}): Promise<Ap
     workflows,
     companionHub,
     async close() {
+      await browser.dispose().catch(() => undefined);
       await bus.stop();
       await core.pool.end();
     },

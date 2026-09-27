@@ -1,5 +1,6 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
 import type { TenantScope } from "@steward/schema";
@@ -9,6 +10,14 @@ import type { AgentServices, RunWorkflowLauncher } from "./services.js";
 export interface AgentServiceFactoryOptions {
   core: CoreContext;
   sandbox?: SandboxProvider;
+  /**
+   * The browser this process may drive, resolved from the environment at boot by whoever owns the process.
+   *
+   * It is a *process-local* handle cache, so it is passed in rather than built here: the worker that runs agents
+   * holds the Chromium, the API process only needs to be able to answer "does this deployment have a browser?"
+   * and to stop a session by writing its row.
+   */
+  browser?: BrowserProvider;
   approvalSignal?: ApprovalSignal;
   companionBridge?: CompanionBridge;
   runWorkflowLauncher?: RunWorkflowLauncher;
@@ -36,6 +45,8 @@ export class AgentServiceFactory {
   readonly sites: SiteService;
   /** The company's code: the repository read through its integration, and editing sessions a run commits. */
   readonly code: CodeService;
+  /** Pages an agent drives with the founder watching, and the frames that make it watchable. */
+  readonly browser: BrowserService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -59,6 +70,7 @@ export class AgentServiceFactory {
     this.reactions = new ReactionService(db);
     this.sites = new SiteService(db);
     this.code = new CodeService(db, this.integrations);
+    this.browser = new BrowserService(db, o.browser ?? null);
     this.companion = new CompanionService(db);
   }
 
@@ -86,6 +98,7 @@ export class AgentServiceFactory {
       reactions: this.reactions,
       sites: this.sites,
       code: this.code,
+      browser: this.browser,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),

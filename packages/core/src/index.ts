@@ -19,3 +19,4 @@ export * from "./reconcile.js";
 export * from "./sites.js";
 export * from "./diff.js";
 export * from "./code.js";
+export * from "./browser.js";

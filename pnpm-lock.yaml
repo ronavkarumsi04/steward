@@ -44,6 +44,9 @@ importers:
       '@steward/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@steward/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
       '@steward/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -175,6 +178,9 @@ importers:
       '@steward/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@steward/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
       '@steward/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -227,6 +233,9 @@ importers:
       '@steward/ai':
         specifier: workspace:*
         version: link:../ai
+      '@steward/browser':
+        specifier: workspace:*
+        version: link:../browser
       '@steward/core':
         specifier: workspace:*
         version: link:../core
@@ -299,11 +308,36 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.6)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(tsx@4.23.15)
 
+  packages/browser:
+    dependencies:
+      '@steward/tools':
+        specifier: workspace:*
+        version: link:../tools
+      playwright:
+        specifier: 1.63.0
+        version: 1.63.0
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      eslint:
+        specifier: ^9.39.0
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@24.13.6)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(tsx@4.23.15)
+
   packages/core:
     dependencies:
       '@steward/ai':
         specifier: workspace:*
         version: link:../ai
+      '@steward/browser':
+        specifier: workspace:*
+        version: link:../browser
       '@steward/crypto':
         specifier: workspace:*
         version: link:../crypto

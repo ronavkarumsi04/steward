@@ -850,6 +850,83 @@ export const codeChanges = pgTable("code_changes", {
   index("code_changes_company_idx").on(t.companyId, t.sessionId),
 ]);
 
+// ---------- Browser sessions ----------
+
+/**
+ * One live-ish browser: a session an agent opened to look at a page, and the state a founder watches.
+ *
+ * The row is the truth and the browser process is a cache — the handle lives in whichever worker opened it, and
+ * a handle that has gone away (restart, idle timer, eviction) is reopened and re-navigated to `url`, which is why
+ * the current URL is a column rather than something reconstructed from the steps.
+ */
+export const browserSessions = pgTable("browser_sessions", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  /** The run that opened it. Null when a founder opened one directly, which is how a person checks a page. */
+  runId: text("run_id"),
+  agentId: text("agent_id"),
+  /** `live`, `stopped`, `closed` or `failed`. Stopped is the founder's decision and is final for this session. */
+  status: text("status").notNull().default("live"),
+  /** Which provider is holding it: `playwright`, or `none` for a stack that has no browser at all. */
+  provider: text("provider").notNull(),
+  /** Where the page is now, and where it was first sent. */
+  url: text("url").notNull(),
+  startUrl: text("start_url").notNull(),
+  title: text("title").notNull().default(""),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  stepCount: integer("step_count").notNull().default(0),
+  frameCount: integer("frame_count").notNull().default(0),
+  lastFrameId: text("last_frame_id"),
+  lastAction: text("last_action"),
+  lastActionAt: ts("last_action_at"),
+  /** The last thing the page said for itself: console errors, notes, whether the last frame changed. */
+  lastNote: text("last_note"),
+  stoppedAt: ts("stopped_at"),
+  stoppedBy: json<Record<string, unknown>>("stopped_by"),
+  stopReason: text("stop_reason"),
+  closedAt: ts("closed_at"),
+  error: text("error"),
+  createdBy: json<Record<string, unknown>>("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  // One live session per run: an agent that asks twice gets the session it already has, not a second browser.
+  uniqueIndex("browser_sessions_run_live_idx").on(t.runId).where(sql`status = 'live'`),
+  index("browser_sessions_company_idx").on(t.companyId, t.createdAt),
+]);
+
+/**
+ * A frame: the page as it looked when one action finished, as a JPEG.
+ *
+ * Frames are not artifacts. An artifact is a durable thing a company keeps — a site bundle, a patch, a pull
+ * request — and a session produces dozens of frames that are evidence about a moment, are large, and are
+ * worthless once the session is over. Keeping them apart is what stops a run's artifact list from filling with
+ * screenshots and what lets the frame rows be swept on their own schedule.
+ */
+export const browserFrames = pgTable("browser_frames", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  sessionId: text("session_id").notNull().references(() => browserSessions.id, { onDelete: "cascade" }),
+  /** The one-based position of this frame within its session, so the history reads in order. */
+  seq: integer("seq").notNull(),
+  /** The sentence the step log shows: what was done immediately before this frame was taken. */
+  action: text("action").notNull(),
+  url: text("url").notNull(),
+  title: text("title").notNull().default(""),
+  mimeType: text("mime_type").notNull().default("image/jpeg"),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  bytes: integer("bytes").notNull(),
+  /** sha256 over the image: two identical frames are one fact, and the second one is dropped. */
+  digest: text("digest").notNull(),
+  /** Base64 image bytes. Text rather than a blob store because Steward has no blob store, and 60 kB is a row. */
+  data: text("data").notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("browser_frames_seq_idx").on(t.sessionId, t.seq), index("browser_frames_company_idx").on(t.companyId, t.createdAt)]);
+
 // ---------- Business ----------
 export const contacts = pgTable("contacts", {
   id: id(),

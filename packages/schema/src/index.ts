@@ -379,6 +379,11 @@ export const EventType = z.enum([
   "code.staged",
   "code.discarded",
   "code.apply_requested",
+  "browser.opened",
+  "browser.step",
+  "browser.stopped",
+  "browser.closed",
+  "browser.failed",
   "agent.updated",
   "audit",
 ]);

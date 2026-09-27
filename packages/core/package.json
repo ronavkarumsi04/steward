@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@steward/ai": "workspace:*",
+    "@steward/browser": "workspace:*",
     "@steward/crypto": "workspace:*",
     "@steward/db": "workspace:*",
     "@steward/integrations": "workspace:*",

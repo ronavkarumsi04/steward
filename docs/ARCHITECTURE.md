@@ -46,7 +46,9 @@ Workflows are deterministic; all IO lives in activities with retry policies. A w
 
 ## Realtime
 
-The API writes to `events` (append-only, per-company sequence) and NOTIFYs via Postgres; `GET /companies/:id/events/stream` is an SSE endpoint with `Last-Event-ID` resume. The web app's live feed and run detail pages subscribe to it.
+The API writes to `events` (append-only, per-company sequence) and NOTIFYs via Postgres; `GET /companies/:id/events/stream` is an SSE endpoint with `Last-Event-ID` resume. The web app's live feed, run detail pages and the browser live view subscribe to it.
+
+A streamed response is sent with `cache-control: no-store, no-transform`, derived from its own content type in `securityHeaders`. That directive is load-bearing rather than tidy: the web app proxies `/api/v1/*` to the API, Next's production server gzips what it can, and gzip buffers — so a compressed event stream reaches the browser only when it ends, which for a live view is never. The page would show a connected `EventSource` and never move. `apps/web/e2e/browser-live.spec.ts` asserts the response behind that connection is uncompressed, because the failure is invisible from the page.
 
 ## Interface
 
@@ -63,6 +65,14 @@ Code is the one thing a company owns that Steward does not (ADR-0017): the repos
 An edit is a `code_sessions` row against one repository, base ref and branch, plus `code_changes` rows holding the file's text at the base ref, the proposed text and the diff between them. `packages/core/src/diff.ts` is the Myers line diff and the unified format, pure and round-trip tested, so what a founder reads is a diff against real bytes rather than a provider's diff of a branch that does not exist yet. Staging text identical to the repository's withdraws the change instead of recording a no-op; paths are held to what a filesystem would accept, binaries are refused, and a path the base ref lacks is a new file (a 404 means "new", anything else is a real failure).
 
 Applying is a run, not a write: the service stores the proposed bundle as an artifact of kind `code_change`, records a run carrying the exact instruction the agent will read (create the branch, write these bytes, one commit, open the pull request, stop rather than committing elsewhere), links the session and only then starts it — so a stack with no workflow engine leaves a visible `queued` run and a sentence explaining why. `apps/web/src/components/code-workspace.tsx` renders the tree, the editor, the staged diffs with both line-number gutters, the patch download and the apply panel, and says what the sandbox is instead of offering a command runner this surface does not have.
+
+## The browser
+
+An agent can drive a real Chromium (ADR-0018). `packages/browser` owns three things: the action vocabulary (`actions.ts` — seven kinds, bounded, each with one sentence for the step log), where a browser may be pointed (`policy.ts` — public addresses only, with `BROWSER_ALLOW_PRIVATE` as the explicit exception), and the provider that runs one (`provider.ts`, `playwright-provider.ts`). The provider refuses credentials before a keystroke, resolves a selector to exactly one element or fails, and calls `stillWanted` immediately before every action.
+
+Sessions are rows and pages are a cache: `browser_sessions` (one live session per run, enforced by a partial unique index) and `browser_frames` in `packages/db`, with the state machine, policy checks and step log in `packages/core/src/browser.ts`. `BrowserService` opens, acts, reads, stops and sweeps; `startBrowsingRun` records the run *before* it is launched, carrying the instruction `browserInstruction` generated once so the UI shows the same bytes the runtime obeys. The API reads and stops and never drives a page (`apps/api/src/routes/browser.ts`); the worker holds the pages, asks the rows before every action, and on its own tick closes handles whose row is no longer `live` (`apps/worker/src/browser-job.ts`), which is what makes a stop written by the API actually close a page in another process.
+
+What the founder sees is the frame the browser produced, served as an image from the row with `nosniff` and a `sandbox` CSP, with the step log built from the same frames — so the picture and the log cannot disagree. `apps/web/src/components/browser-workspace.tsx` renders the live view, and the page subscribes to the five `browser.*` event types purely to know when to re-read those rows.
 
 ## Extension points
 

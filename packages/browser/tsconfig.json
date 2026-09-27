@@ -1,0 +1,8 @@
+{
+  // `DOM` is here for one reason: `page.evaluate` runs its callback inside the page, so the code in
+  // `playwright-provider.ts` that reads the document is written against the page's globals on purpose. Nothing
+  // else in this package touches a document — the provider's own work is Node's.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src", "composite": false, "lib": ["ES2023", "DOM"] },
+  "include": ["src"]
+}

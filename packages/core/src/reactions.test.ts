@@ -381,9 +381,14 @@ describe("reactions (postgres)", () => {
 
     const after = await reactions.cursor();
     expect(after).toBeGreaterThan(before);
-    // Nothing new happened, so the next sweep reads nothing and the bookmark does not move.
-    expect((await reactions.sweep({ launcher: launcher() })).considered).toBe(0);
-    expect(await reactions.cursor()).toBe(after);
+    // A bookmark is what stops an event being answered twice, and the property is about *this* company: its own
+    // record is not read again, and no second run starts for it. The sweep is deployment-wide, so what the cursor
+    // does is stated as "not behind" rather than "unchanged" — another test writing records in the same database
+    // while this one runs is a fact about the suite, not about the bookmark.
+    await reactions.sweep({ launcher: launcher() });
+    expect(await reactions.listFires(scope)).toHaveLength(1);
+    expect(await reactions.cursor()).toBeGreaterThanOrEqual(after);
+    expect(await runs.list(scope, { agentId })).toHaveLength(1);
 
     // A run a reaction started completes: its records are that reaction's own work, and no rule answers them.
     const followUpRule = await reactions.createRule(scope, { agentId, name: "Watch finished runs", source: "event", matchKinds: ["run.completed"], instruction: "Summarize the run." });
