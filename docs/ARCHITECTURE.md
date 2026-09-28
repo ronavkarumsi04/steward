@@ -7,6 +7,7 @@
 | `api` | `apps/api` | Hono HTTP API. Auth, tenancy, CRUD, approvals, SSE event stream, provider/integration management, companion hub, OpenAPI. Starts Temporal workflows; never runs model calls itself (except provider "test credential"). |
 | `worker` | `apps/worker` | Temporal worker hosting workflows (`agentRun`, `schedule`, `housekeeping`) and activities (context build, plan, model call, tool exec, verify, persist). Also runs the reaction sweep, which answers the rules founders wrote over recorded events without waiting for a schedule (ADR-0014). |
 | Site Studio | `packages/core/src/sites.ts`, `apps/web/src/components/site-studio.tsx` | A company's website as rows (`sites`, `site_pages`, `site_versions`), one pure renderer shared by the studio's preview and the published bundle, a catalog the editor is built from, and a publish that stores bytes while shipping them stays a run (ADR-0016). |
+| Knowledge graph | `packages/core/src/graph.ts`, `apps/web/src/components/knowledge-graph.tsx` | What the company knows, as one thing: every kind of row as a node, the columns between them read as edges (each naming its column), and `entities` + `entity_links` for what somebody wrote down (each naming its author, and a claim whose row is gone still said out loud). Recording is a member act; correcting, merging and forgetting are administrators' (ADR-0021). |
 | Marketplace | `packages/core/src/mcp.ts`, `packages/tools/src/mcp.ts`, `apps/web/src/components/mcp-marketplace.tsx` | Other people's tools, installed deliberately: `mcp_servers` is the install, `mcp_tools` is what the last inspection found, and `riskForMcpTool` derives a band while recording where it came from. The runtime builds a run's MCP tools from the rows, and a grant is written into the agent's own allow list (ADR-0020). |
 | Code IDE | `packages/core/src/code.ts` + `diff.ts`, `apps/web/src/components/code-workspace.tsx` | Reads a repository through its own source-control integration and mirrors nothing; edits are sessions (`code_sessions` → `code_changes`) diffed by our own engine; applying records the proposed bytes as an artifact and a run before launching it, and the run writes the branch and opens the pull request (ADR-0017). |
 | `web` | `apps/web` | Next.js 16 app. Server components call the API with the user's cookie; the browser calls `/api/v1/*` which the web server proxies to the API so cookies remain first-party. |
@@ -17,7 +18,7 @@
 
 ## Data model (core)
 
-`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `reaction_rules` → `reaction_fires`, `business_signals`, `sites` → `site_pages` + `site_versions`, `code_sessions` → `code_changes`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
+`users` → `memberships` → `organizations` → `companies` → { `company_profiles`, `goals`, `tasks`, `agents`, `agent_runs` → `run_steps` → `tool_calls`, `approvals`, `conversations` → `messages`, `documents`, `decisions`, `memories`, `schedules`, `reaction_rules` → `reaction_fires`, `business_signals`, `sites` → `site_pages` + `site_versions`, `code_sessions` → `code_changes`, `entities` → `entity_links`, `budgets`, `policies`, `events`, `usage_records`, `audit_log` }.
 Org-level: `provider_credentials`, `provider_models`, `integrations`, `companion_devices`, `invitations`, `sessions`.
 Deployment-level: `worker_cursors` — a bookmark in the append-only event log for sweeps that are not tenant data.
 
@@ -91,10 +92,18 @@ A grant is the agent's own `toolAllowlist` and nothing else: `applyGrant` is pur
 
 The spawned process gets the install's own variables plus the protocol library's platform-safe minimum and nothing else, so this deployment's database and keys are not reachable from it; an http or sse address is refused when it is on this deployment's own network unless `MCP_ALLOW_PRIVATE` says otherwise, and is checked again with a DNS lookup at the moment of connecting. The surface is `/app/c/:companyId/mcp` (`apps/web/src/components/mcp-marketplace.tsx`), and `packages/tools/fixtures/mcp-server.mjs` is a real MCP server the tests install over stdio, so an inspection is exercised against the protocol rather than against a stub of our own writing.
 
+## The knowledge graph
+
+What a company has and what it knows about the world, in one picture (ADR-0021). The nodes are the company's own rows — thirteen kinds of them, each read through a source in `graphSources()` that decides the label, the sublabel, the bounded page and the count — plus `entities`, which is rebuilt (migration 0016) around an identity key: a `normalizedName` under a unique index per `(companyId, type, normalizedName)`, so recording a name that folds into one already known **confirms** that row and keeps the new spelling as an alias rather than growing a second node beside it.
+
+The edges are of two kinds and the difference is the feature. A **derived** edge is not stored at all: `DERIVED_RULES` names seventeen columns the product already writes — `tasks.project_id`, `task_dependencies.depends_on_task_id`, `memories.created_by_run_id` — and reading a neighborhood runs the rules that touch that kind and resolves the far ends in one batch, so an edge cannot drift from the row behind it and disappears when the row does. A **recorded** claim is an `entity_links` row: a closed, narrow vocabulary of eight relations, each naming what it may point at (and which types of thing, when it points at another known thing), a note, and the actor and run it came from. A claim points at a row rather than copying it, so a claim whose target is gone is reported as dangling and droppable instead of cascading away from the graph into nine tables.
+
+Reading is bounded and says so: every kind carries its real total beside the page it showed, each neighborhood reports the relations it had to cut, and every line is printed with where it came from — `Read from tasks.project_id`, or `Written by the founder` with a date. Recording is a member act; correcting, merging and forgetting are an administrator's, because each of them moves or destroys something a run may already have relied on. The surface is `/app/c/:companyId/graph` (`apps/web/src/components/knowledge-graph.tsx`), agents reach it through `knowledge.about` and `knowledge.record`, and every write emits an event.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.
-- Tools: `packages/tools` registry, built-in tools and the MCP client; the marketplace attaches a company's own servers (ADR-0020).
+- Tools: `packages/tools` registry, built-in tools and the MCP client; the marketplace attaches a company's own servers (ADR-0020), and agents read and write the company's own knowledge through `knowledge.*` (ADR-0021).
 - Integrations: `packages/integrations/src/providers/*`.
 - Sandbox providers: `packages/sandbox` (`SandboxProvider` interface; Docker implemented).
 - Deploy/source-control providers: `packages/integrations/src/providers/{deploy,github}.ts`.

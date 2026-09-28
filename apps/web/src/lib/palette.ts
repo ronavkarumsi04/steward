@@ -103,6 +103,7 @@ export const NAV: ReadonlyArray<{ suffix: string; label: string; keywords: strin
   { suffix: "/approvals", label: "Approvals", keywords: "review permission pending decide approve" },
   { suffix: "/agents", label: "Agents", keywords: "roster schedule automation run" },
   { suffix: "/knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
+  { suffix: "/graph", label: "Graph", keywords: "knowledge graph entities relations what we know" },
   { suffix: "/integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
   { suffix: "/settings", label: "Settings", keywords: "autonomy policy provider models" },
 ];

@@ -93,6 +93,14 @@ export const Icon = {
       <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5z" />
     </Base>
   ),
+  Graph: (p: IconProps) => (
+    <Base {...p}>
+      <circle cx="12" cy="5" r="2.5" />
+      <circle cx="5" cy="18" r="2.5" />
+      <circle cx="19" cy="18" r="2.5" />
+      <path d="M10.2 6.8 6.6 15.4M13.8 6.8l3.6 8.6M7.6 18h8.8" />
+    </Base>
+  ),
   Settings: (p: IconProps) => (
     <Base {...p}>
       <circle cx="12" cy="12" r="3" />

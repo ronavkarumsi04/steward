@@ -1102,6 +1102,108 @@ export interface WorkflowWorkspaceRead {
   canManage: boolean;
 }
 
+/**
+ * The graph, as one read.
+ *
+ * `nodes` is a bounded page of every kind and `overview.counts` carries each kind's real total, so the surface can
+ * say what it is not showing rather than presenting forty of two hundred projects as the whole company. The two
+ * capability flags come from the API, so a viewer is not offered a form the server would refuse.
+ */
+export interface GraphNodeView {
+  kind: string;
+  id: string;
+  /** The label the service chose, so every surface draws the same two strings for the same row. */
+  label: string;
+  sublabel: string;
+  at: string | null;
+  /** Only on a known thing: which type of thing it is. */
+  entityType?: string;
+}
+
+/**
+ * One connection.
+ *
+ * `origin` is the field this surface must never blur: `derived` means the company's own rows say it and `field`
+ * names the column; `recorded` means somebody wrote it down and `by`/`at` say who and when. A `dangling` claim is
+ * one whose row is gone — reported, droppable, and never drawn as if the row were still there.
+ */
+export interface GraphEdgeView {
+  id: string;
+  relation: string;
+  label: string;
+  sentence: string;
+  origin: "derived" | "recorded";
+  field: string | null;
+  by: string | null;
+  at: string | null;
+  note: string | null;
+  from: GraphNodeView;
+  to: GraphNodeView;
+  dangling: boolean;
+}
+
+export interface GraphNeighborhoodView {
+  node: GraphNodeView;
+  derived: GraphEdgeView[];
+  recorded: GraphEdgeView[];
+  incoming: GraphEdgeView[];
+  outgoing: GraphEdgeView[];
+  omitted: Record<string, number>;
+  dangling: number;
+}
+
+export interface GraphOverviewView {
+  counts: Array<{ kind: string; label: string; total: number; omitted: number }>;
+  entitiesByType: Array<{ type: string; label: string; total: number }>;
+  links: { total: number; dangling: number; byRelation: Array<{ relation: string; label: string; total: number }> };
+  /** The vocabulary, sent by the API: the surface renders choices from the list the server validates against. */
+  relations: Array<{ id: string; label: string; targets: string[]; targetTypes: string[]; sentence: string }>;
+  nodeKinds: Array<{ kind: string; label: string }>;
+  limits: Record<string, number>;
+}
+
+export interface GraphRead {
+  overview: GraphOverviewView;
+  nodes: GraphNodeView[];
+  canRecord: boolean;
+  canManage: boolean;
+}
+
+/** A known thing, as the API serializes it once it has been recorded or corrected. */
+export interface GraphEntityView {
+  id: string;
+  type: string;
+  name: string;
+  normalizedName: string;
+  aliases: string[];
+  attributes: Record<string, unknown>;
+  confidence: number;
+  source: string;
+  firstSeenRunId: string | null;
+  lastConfirmedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The record/correct form, in the shape a text box gives it. */
+export interface GraphEntityForm {
+  type: string;
+  name: string;
+  /** One spelling per line. */
+  aliases: string;
+  /** The row's attributes as JSON, because that is what the row holds. */
+  attributes: string;
+  confidence: string;
+}
+
+/** What a claim form is about: the thing making the claim, and who it points at. */
+export interface GraphClaimForm {
+  targetKind: string;
+  targetId: string;
+  relation: string;
+  note: string;
+}
+
 export interface CodeApplyResult {
   status: "started" | "queued" | "failed";
   reason: string | null;

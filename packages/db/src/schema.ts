@@ -431,16 +431,72 @@ export const decisions = pgTable("decisions", {
   createdAt: createdAt(),
 }, (t) => [index("decisions_company_idx").on(t.companyId, t.createdAt), index("decisions_project_idx").on(t.projectId, t.createdAt)]);
 
+/**
+ * What the company knows about the world: people, companies, competitors, products, tools.
+ *
+ * The identity of one of these is (company, type, `normalizedName`) rather than its name, because two ways of
+ * writing a name are the same thing and a graph that treats them as two nodes is a graph nobody can trust. The
+ * fold is deliberately narrow — case, surrounding space, runs of space, trailing punctuation — and everything
+ * wider than that is a *merge*, which is a decision with an author rather than a regex: `Acme, Inc.` and
+ * `Acme Inc` are one company, and only a person can say so about `Acme` and `ACME Corp`.
+ *
+ * A merge keeps both spellings in `aliases`. Losing one on the way in would be losing the answer to "why is this
+ * not two rows?", which is exactly the question somebody will ask in six months.
+ */
 export const entities = pgTable("entities", {
   id: id(),
   organizationId: text("organization_id").notNull(),
   companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // person|company|product|competitor|tool|other
   name: text("name").notNull(),
+  /** The name folded to one spelling. Unique per (company, type): this is what makes two names one thing. */
+  normalizedName: text("normalized_name").notNull(),
+  /** Other spellings this company has written the same thing as. Kept when a duplicate is merged into this row. */
+  aliases: json<string[]>("aliases").notNull().default([]),
   attributes: json<Record<string, unknown>>("attributes").notNull().default({}),
+  /** How sure whoever wrote it was. Shown as it is; never used to hide or to decide anything on its own. */
+  confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull().default("0.700"),
+  /** Who put it here — founder|agent — and the run that did, so a claim can be traced back to its author. */
+  source: text("source").notNull().default("founder"),
+  firstSeenRunId: text("first_seen_run_id"),
+  lastConfirmedAt: ts("last_confirmed_at").notNull().defaultNow(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (t) => [uniqueIndex("entities_name_idx").on(t.companyId, t.type, t.name)]);
+}, (t) => [uniqueIndex("entities_identity_idx").on(t.companyId, t.type, t.normalizedName), index("entities_company_type_idx").on(t.companyId, t.type, t.name)]);
+
+/**
+ * A claim that one of those things is connected to something the company has a row for.
+ *
+ * Deliberately not a copy of the row it points at: the target is named by (kind, id) and resolved at read time,
+ * so a link can never disagree with the thing it is about. What that costs is a target that has since been
+ * deleted, and the answer is to *say* so — a link whose row is gone is reported as dangling and can be dropped
+ * in one act — rather than to cascade from here into nine tables, or to hide the link and let a founder wonder
+ * why a competitor lost its evidence.
+ *
+ * The unique index is the claim itself: the same entity connected to the same thing by the same relation is one
+ * row, so recording it twice is idempotent instead of doubling a neighborhood.
+ */
+export const entityLinks = pgTable("entity_links", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  entityId: text("entity_id").notNull().references(() => entities.id, { onDelete: "cascade" }),
+  relation: text("relation").notNull(),
+  /** A graph node kind: project|task|run|decision|document|memory|artifact|signal|contact|server|entity. */
+  targetKind: text("target_kind").notNull(),
+  targetId: text("target_id").notNull(),
+  /** Why this is here, in the words of whoever wrote it. Empty is allowed; a claim needs an author, not a reason. */
+  note: text("note").notNull().default(""),
+  source: text("source").notNull().default("founder"), // founder|agent
+  createdByRunId: text("created_by_run_id"),
+  createdByUserId: text("created_by_user_id"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("entity_links_claim_idx").on(t.companyId, t.entityId, t.relation, t.targetKind, t.targetId),
+  index("entity_links_entity_idx").on(t.entityId, t.createdAt),
+  index("entity_links_target_idx").on(t.companyId, t.targetKind, t.targetId),
+]);
 
 // ---------- Conversations ----------
 export const conversations = pgTable("conversations", {

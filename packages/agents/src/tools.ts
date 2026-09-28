@@ -4,7 +4,7 @@ import { outboundMessages, suppressionList } from "@steward/db";
 import { BrowserAction, BrowserRefusal, describeAction, type PageSnapshot } from "@steward/browser";
 import { BranchName, CompanyProfile, RepoRef } from "@steward/schema";
 import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, TwilioClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
-import { BrowserError, PrivacyService, type BrowserSessionView } from "@steward/core";
+import { BrowserError, ENTITY_TYPES, GRAPH_NODE_KINDS, GRAPH_RELATION_IDS, GraphError, PrivacyService, type BrowserSessionView } from "@steward/core";
 import { ToolRegistry, defineTool, untrusted, webFetchTool, webSearchTool, type ToolContext, type ToolDefinition } from "@steward/tools";
 import { applyEmailCompliance, applySmsCompliance } from "./outbound.js";
 import type { AgentServices } from "./services.js";
@@ -41,6 +41,92 @@ const memorySave = defineTool({
   execute: async (input, ctx) => {
     const rec = await svc(ctx).memory.save({ ...input, createdByRunId: ctx.runId });
     return { ok: true, content: `Saved memory ${rec.id}.`, data: rec };
+  },
+});
+
+/**
+ * What the company knows, as one thing.
+ *
+ * `knowledge.about` is the tool an agent should reach for *before* it writes to somebody: it answers "what do we
+ * already know about this name?" from the company's own rows and from what people recorded about it, and it says
+ * where each answer came from — a column, or somebody's sentence. `knowledge.record` is the write: a thing, and
+ * optionally what it is connected to, with this run as the provenance.
+ *
+ * Neither invents anything. The derived half is the product's rows, and the recorded half is a sentence with an
+ * author; there is no extraction step anywhere in this feature. And because a recorded name can have been typed by
+ * somebody who had just read a web page, the reading tool hands its answer back as untrusted content: a graph that
+ * quietly replays other people's strings as instructions would be a hole, not a feature.
+ */
+const knowledgeAbout = defineTool({
+  name: "knowledge.about",
+  description: "Read everything this company has recorded about a name — a customer, competitor, person or tool: the projects, decisions, documents and tasks it appears in, and how each connection was learned.",
+  input: z.object({ name: z.string().min(2).max(120), limit: z.number().int().min(1).max(20).default(8) }),
+  risk: "LOW",
+  idempotent: true,
+  execute: async ({ name, limit }, ctx) => {
+    const { graph, scope } = svc(ctx);
+    const asked = name.trim();
+    const found = await graph.search(scope, asked, ["entity"]);
+    const entity = found.nodes.find((node) => node.label.toLowerCase() === asked.toLowerCase()) ?? found.nodes[0] ?? null;
+    const lines: string[] = [];
+
+    if (entity) {
+      const hood = await graph.neighborhood(scope, { kind: "entity", id: entity.id });
+      lines.push(`${hood.node.label} (${entity.entityType ?? "thing"}, ${hood.node.id})`);
+      const edges = [...hood.recorded, ...hood.derived].slice(0, limit);
+      for (const edge of edges) {
+        // Where it came from, every time: a column of the product's own, or somebody's sentence.
+        const from = edge.origin === "recorded" ? `recorded${edge.dangling ? ", and what it pointed at is gone" : ""}` : `from ${edge.field}`;
+        lines.push(`- ${edge.sentence} (${from})`);
+      }
+      if (!edges.length) lines.push("- Nothing is connected to it yet; it is a name the company has written down.");
+      if (hood.dangling) lines.push(`- ${hood.dangling} recorded connection(s) point at something that no longer exists.`);
+      return { ok: true, content: untrusted("company knowledge graph", lines.join("\n")), data: { entity: hood.node, edges }, untrusted: true };
+    }
+
+    const mentioned = await graph.search(scope, asked);
+    if (!mentioned.nodes.length) return { ok: true, content: `Nothing in this company mentions “${asked}”. It has not been recorded as something we know.`, data: { entity: null, nodes: [] } };
+    lines.push(`“${asked}” is not something this company has recorded as a thing it knows — but rows mention it:`);
+    for (const node of mentioned.nodes.slice(0, limit)) lines.push(`- ${node.kind}: ${node.label}`);
+    return { ok: true, content: untrusted("company knowledge graph", lines.join("\n")), data: { entity: null, nodes: mentioned.nodes.slice(0, limit) }, untrusted: true };
+  },
+});
+
+const knowledgeRecord = defineTool({
+  name: "knowledge.record",
+  description: "Record something the company should know — a person, company, competitor, product or tool — and optionally connect it to a project, document, task, decision, memory, artifact, signal or contact. Read by every future run, so record what a colleague would need.",
+  input: z.object({
+    type: z.enum(ENTITY_TYPES),
+    name: z.string().min(2).max(120),
+    aliases: z.array(z.string().min(1).max(120)).max(8).default([]),
+    attributes: z.record(z.string().max(60), z.string().max(400)).default({}),
+    confidence: z.number().min(0).max(1).default(0.7),
+    links: z
+      .array(z.object({ relation: z.enum(GRAPH_RELATION_IDS), targetKind: z.enum(GRAPH_NODE_KINDS), targetId: z.string().min(1).max(60), note: z.string().max(500).optional() }))
+      .max(8)
+      .default([]),
+  }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const { graph, scope } = svc(ctx);
+    // The run and the agent are the author of this claim, exactly as a founder's name is the author of theirs.
+    const source = { actor: { type: "agent" as const, agentId: ctx.agentId ?? "unknown", ...(ctx.runId ? { runId: ctx.runId } : {}) }, source: "agent" as const, userId: null, runId: ctx.runId ?? null };
+    const recorded = await graph.record(scope, { type: input.type, name: input.name, aliases: input.aliases, attributes: input.attributes, confidence: input.confidence }, source);
+
+    const lines = [recorded.created ? `Recorded “${recorded.entity.name}” as a ${recorded.entity.type}.` : `“${recorded.entity.name}” was already known, so it was confirmed rather than recorded twice.`];
+    if (recorded.entity.aliases.length) lines.push(`Other spellings kept: ${recorded.entity.aliases.map((alias) => `“${alias}”`).join(", ")}.`);
+    for (const link of input.links) {
+      try {
+        const result = await graph.link(scope, recorded.entity.id, link, source);
+        lines.push(result.alreadyThere ? `Already connected: ${link.relation} → ${link.targetId}.` : `Connected: ${link.relation} → ${link.targetId}.`);
+      } catch (error) {
+        // A refused connection is said out loud rather than swallowed: a claim the graph will not hold is a
+        // sentence the agent should be able to correct on its next step.
+        lines.push(`Not connected: ${link.relation} → ${link.targetId} was refused — ${error instanceof GraphError ? error.message : "that is not a claim this graph holds"}.`);
+      }
+    }
+    return { ok: true, content: lines.join("\n"), data: { entity: recorded.entity, created: recorded.created } };
   },
 });
 
@@ -1126,7 +1212,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
@@ -1141,13 +1227,13 @@ export function buildToolRegistry(): ToolRegistry {
  * per-agent allowlist is for.
  */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "browser.*", "slack.post"],
-  research: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "browser.*"],
-  engineering: ["memory.*", "document.*", "task.update", "company.profile", "web.*", "browser.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
-  sales: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "browser.*", "email.send"],
-  support: ["memory.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
-  finance: ["memory.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
-  operations: ["memory.*", "document.*", "task.*", "company.profile", "web.*", "browser.*", "slack.post"],
-  custom: ["memory.*", "document.*", "task.update", "web.*", "browser.*"],
+  orchestrator: ["memory.*", "knowledge.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "browser.*", "slack.post"],
+  research: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "browser.*"],
+  engineering: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "web.*", "browser.*", "github.*", "sandbox.*", "deploy.*"],
+  marketing: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
+  sales: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "browser.*", "email.send"],
+  support: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
+  finance: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
+  operations: ["memory.*", "knowledge.*", "document.*", "task.*", "company.profile", "web.*", "browser.*", "slack.post"],
+  custom: ["memory.*", "knowledge.*", "document.*", "task.update", "web.*", "browser.*"],
 };

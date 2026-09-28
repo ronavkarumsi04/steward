@@ -1935,6 +1935,245 @@ describe("mcp marketplace", () => {
   }, 60_000);
 });
 
+describe("knowledge graph", () => {
+  /**
+   * What the company knows, as one thing.
+   *
+   * The two halves are asserted apart because the product keeps them apart. A *derived* edge is read from the
+   * rows the company already has, so it disappears with the row it came from. A *recorded* claim is somebody's
+   * sentence about a row, so it is the one that can outlive its subject — which is why the case that matters most
+   * here is a claim pointing at something that has been deleted: it has to be reported, not hidden, and not
+   * cascaded away from a graph into nine tables.
+   */
+  type Node = { kind: string; id: string; label: string; sublabel: string; at: string | null; entityType?: string };
+  type Edge = { id: string; relation: string; label: string; sentence: string; origin: "derived" | "recorded"; field: string | null; by: string | null; note: string | null; from: Node; to: Node; dangling: boolean };
+  type Surface = {
+    overview: {
+      counts: Array<{ kind: string; total: number; omitted: number }>;
+      links: { total: number; dangling: number; byRelation: Array<{ relation: string; total: number }> };
+      relations: Array<{ id: string; label: string; targets: string[] }>;
+      nodeKinds: Array<{ kind: string; label: string }>;
+      limits: { nodesPerKind: number };
+    };
+    nodes: Node[];
+    canRecord: boolean;
+    canManage: boolean;
+  };
+  type Neighborhood = { node: Node; derived: Edge[]; incoming: Edge[]; outgoing: Edge[]; omitted: Record<string, number>; dangling: number };
+  type Entity = { id: string; type: string; name: string; normalizedName: string; aliases: string[]; attributes: Record<string, unknown>; confidence: number; source: string };
+  type Refusal = { error: { code: string; message: string; details: { problems?: Array<{ code: string }>; entityId?: string } } };
+
+  async function workspace() {
+    const founder = await register("Graph");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Graph ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+    const api = client(founder.token, "", () => app);
+    const project = await api.json<{ project: { id: string } }>("POST", `/companies/${companyId}/projects`, { name: "Payments", objective: "Take payments and ship the ledger to every customer." });
+    const task = await api.json<{ task: { id: string } }>("POST", `/companies/${companyId}/tasks`, { title: "Ship the ledger", projectId: project.body.project.id });
+    return {
+      ...founder,
+      companyId,
+      api,
+      projectId: project.body.project.id,
+      taskId: task.body.task.id,
+      read: () => api.json<Surface>("GET", `/companies/${companyId}/graph`),
+      find: (query: string) => api.json<{ nodes: Node[]; query: string }>("GET", `/companies/${companyId}/graph/search?q=${encodeURIComponent(query)}`),
+      node: (kind: string, id: string) => api.json<Neighborhood>("GET", `/companies/${companyId}/graph/nodes/${kind}/${id}`),
+      // The row itself, which is what a surface opens an edit form on: a node in a list is a label, not a record.
+      known: (id: string) => api.json<{ entity: Entity }>("GET", `/companies/${companyId}/graph/entities/${id}`),
+      record: (body: Record<string, unknown>) => api.json<{ entity: Entity; created: boolean; aliasAdded: boolean; notices: string[] }>("POST", `/companies/${companyId}/graph/entities`, body),
+      recordRaw: (body: Record<string, unknown>) => api.json<Refusal>("POST", `/companies/${companyId}/graph/entities`, body),
+      link: (entityId: string, body: Record<string, unknown>) => api.json<{ link: { id: string }; alreadyThere: boolean; notices: string[] }>("POST", `/companies/${companyId}/graph/entities/${entityId}/links`, body),
+      linkRaw: (entityId: string, body: Record<string, unknown>) => api.json<Refusal>("POST", `/companies/${companyId}/graph/entities/${entityId}/links`, body),
+    };
+  }
+
+  d("reads what the company already has, and says which column every edge came from", async () => {
+    const me = await workspace();
+    const surface = await me.read();
+    expect(surface.status).toBe(200);
+    expect(surface.body).toMatchObject({ canRecord: true, canManage: true });
+
+    const count = (kind: string) => surface.body.overview.counts.find((row) => row.kind === kind)!;
+    expect(count("project").total).toBe(1);
+    expect(count("task").total).toBe(1);
+    // A company that has never recorded anything still has a kind to record into.
+    expect(count("entity").total).toBe(0);
+    expect(surface.body.overview.nodeKinds.map((row) => row.kind)).toContain("entity");
+    expect(surface.body.overview.relations.map((row) => row.id)).toContain("works_at");
+
+    // The page is the company's own rows, with the label a surface draws and the type a known thing carries.
+    expect(surface.body.nodes.find((node) => node.kind === "task")).toMatchObject({ id: me.taskId, label: "Ship the ledger", sublabel: "todo" });
+    // Nothing was left out of a company this small, and the bound is the API's own number rather than a hidden one.
+    expect(count("task").omitted).toBe(0);
+    expect(surface.body.overview.limits.nodesPerKind).toBeGreaterThan(0);
+
+    // The derived half: read from a column, and the column travels with the edge.
+    const hood = await me.node("project", me.projectId);
+    expect(hood.status).toBe(200);
+    expect(hood.body.derived.find((edge) => edge.from.id === me.taskId)).toMatchObject({ relation: "belongs_to", origin: "derived", field: "tasks.project_id" });
+    expect(hood.body.incoming).toEqual([]);
+  });
+
+  d("records a thing, confirms one it already knew, and refuses a name that says nothing", async () => {
+    const me = await workspace();
+    const first = await me.record({ type: "company", name: "Acme, Inc.", attributes: { domain: "acme.test" }, confidence: 0.8 });
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ created: true, aliasAdded: false });
+    expect(first.body.entity).toMatchObject({ type: "company", normalizedName: "acme, inc", confidence: 0.8, source: "founder" });
+    expect(first.body.entity.attributes).toEqual({ domain: "acme.test" });
+    // And reading it back gives the surface every spelling and field to open a correction on.
+    const read = await me.known(first.body.entity.id);
+    expect(read.status).toBe(200);
+    expect(read.body.entity).toMatchObject({ name: "Acme, Inc.", type: "company", confidence: 0.8, source: "founder" });
+    expect(read.body.entity.attributes).toEqual({ domain: "acme.test" });
+
+    // The same name written differently is the same thing: confirmed, not a second node.
+    const again = await me.record({ type: "company", name: "ACME,  INC." });
+    expect(again.status).toBe(200);
+    expect(again.body.created).toBe(false);
+    expect(again.body.entity.id).toBe(first.body.entity.id);
+    expect(again.body.notices[0]).toContain("already knew");
+
+    // A spelling the fold cannot reach is kept, because that is the one that would otherwise look like another thing.
+    const named = await me.record({ type: "company", name: "Acme, Inc.", aliases: ["Acme Incorporated"] });
+    expect(named.body.aliasAdded).toBe(true);
+    expect(named.body.entity.aliases).toContain("Acme Incorporated");
+    expect((await me.find("Acme Incorporated")).body.nodes.map((node) => node.id)).toContain(first.body.entity.id);
+
+    // A name that says nothing is refused by the graph's own rules, in the words the surface renders against the field.
+    const refused = await me.recordRaw({ type: "company", name: "x", attributes: { domain: "x".repeat(401) } });
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe("graph_invalid");
+    expect(refused.body.error.details.problems!.map((problem) => problem.code)).toEqual(expect.arrayContaining(["name_required", "attribute_too_long"]));
+    // And a kind of thing this build does not have never reaches the service at all: the transport refuses it.
+    const nonsense = await me.recordRaw({ type: "wizard", name: "Merlin" });
+    expect(nonsense.status).toBe(422);
+    expect(nonsense.body.error.code).toBe("invalid_body");
+  });
+
+  d("connects a thing to the company's own rows, and refuses a claim its relation cannot make", async () => {
+    const me = await workspace();
+    const person = await me.record({ type: "person", name: "Ada Lovelace" });
+    const entityId = person.body.entity.id;
+
+    const linked = await me.link(entityId, { relation: "works_on", targetKind: "project", targetId: me.projectId, note: "owns the ledger" });
+    expect(linked.status).toBe(201);
+    expect(linked.body.alreadyThere).toBe(false);
+    // Recording the same claim twice is idempotent rather than a doubled neighborhood.
+    const twice = await me.link(entityId, { relation: "works_on", targetKind: "project", targetId: me.projectId });
+    expect(twice.status).toBe(200);
+    expect(twice.body.alreadyThere).toBe(true);
+    expect(twice.body.notices[0]).toContain("already recorded");
+
+    // A relation that points at a project cannot point at one by accident, and a target that is not here is not here.
+    const wrongKind = await me.linkRaw(entityId, { relation: "works_at", targetKind: "project", targetId: me.projectId });
+    expect(wrongKind.status).toBe(422);
+    expect(wrongKind.body.error.code).toBe("graph_invalid");
+    expect(wrongKind.body.error.details.problems!.map((problem) => problem.code)).toContain("target_kind_not_allowed");
+    const missing = await me.linkRaw(entityId, { relation: "mentioned_in", targetKind: "document", targetId: "00000000-0000-0000-0000-000000000000" });
+    expect(missing.body.error.details.problems!.map((problem) => problem.code)).toContain("target_missing");
+    const itself = await me.linkRaw(entityId, { relation: "same_as", targetKind: "entity", targetId: entityId });
+    expect(itself.body.error.details.problems!.map((problem) => problem.code)).toContain("self_link");
+
+    // The claim is one edge seen from both ends, and it says who wrote it.
+    const mine = await me.node("entity", entityId);
+    expect(mine.body.outgoing).toHaveLength(1);
+    expect(mine.body.outgoing[0]).toMatchObject({ relation: "works_on", origin: "recorded", by: "founder", dangling: false });
+    const theirs = await me.node("project", me.projectId);
+    expect(theirs.body.incoming).toHaveLength(1);
+    expect(theirs.body.incoming[0]!.sentence).toContain("Ada Lovelace");
+    expect((await me.read()).body.overview.links.byRelation.find((row) => row.relation === "works_on")!.total).toBe(1);
+  });
+
+  d("reports a claim whose row is gone, and drops it in one act", async () => {
+    const me = await workspace();
+    const doc = await me.api.json<{ document: { id: string } }>("PUT", `/companies/${me.companyId}/documents`, { title: "Pricing notes", content: "What we charge for." });
+    const entity = await me.record({ type: "company", name: "Globex" });
+    expect((await me.link(entity.body.entity.id, { relation: "mentioned_in", targetKind: "document", targetId: doc.body.document.id })).status).toBe(201);
+
+    await me.api.json("DELETE", `/companies/${me.companyId}/documents/${doc.body.document.id}`);
+    const hood = await me.node("entity", entity.body.entity.id);
+    expect(hood.body.dangling).toBe(1);
+    expect(hood.body.outgoing[0]).toMatchObject({ dangling: true });
+    // Said out loud rather than hidden: the claim is there, and what it was about is not.
+    expect(hood.body.outgoing[0]!.to.label).toContain("gone");
+    expect((await me.read()).body.overview.links.dangling).toBe(1);
+
+    const dropped = await me.api.json("DELETE", `/companies/${me.companyId}/graph/links/${hood.body.outgoing[0]!.id}`);
+    expect(dropped.status).toBe(200);
+    expect((await me.node("entity", entity.body.entity.id)).body.dangling).toBe(0);
+    expect((await me.read()).body.overview.links.total).toBe(0);
+  });
+
+  d("merges a duplicate without losing a claim, and refuses to rename into a name it knows", async () => {
+    const me = await workspace();
+    const ours = await me.record({ type: "company", name: "Acme Inc" });
+    const theirs = await me.record({ type: "company", name: "Acme, Inc." });
+    // Two nodes, because the fold is narrow on purpose: only a person can say these are one company.
+    expect(ours.body.entity.id).not.toBe(theirs.body.entity.id);
+
+    await me.link(ours.body.entity.id, { relation: "works_on", targetKind: "project", targetId: me.projectId });
+    await me.link(theirs.body.entity.id, { relation: "works_on", targetKind: "project", targetId: me.projectId });
+    await me.link(theirs.body.entity.id, { relation: "mentioned_in", targetKind: "task", targetId: me.taskId });
+
+    const merged = await me.api.json<{ entity: Entity; moved: number; dropped: number; aliases: string[]; notices: string[] }>("POST", `/companies/${me.companyId}/graph/entities/${ours.body.entity.id}/merge`, { duplicateId: theirs.body.entity.id });
+    expect(merged.status).toBe(200);
+    expect(merged.body).toMatchObject({ moved: 1, dropped: 1 });
+    expect(merged.body.entity.aliases).toContain("Acme, Inc.");
+    expect(merged.body.notices.join(" ")).toContain("moved to");
+    // The duplicate is gone, and what it knew is the survivor's.
+    expect((await me.node("entity", theirs.body.entity.id)).status).toBe(404);
+    expect((await me.node("entity", ours.body.entity.id)).body.outgoing).toHaveLength(2);
+
+    const other = await me.record({ type: "company", name: "Globex" });
+    const clash = await me.api.json<Refusal>("PATCH", `/companies/${me.companyId}/graph/entities/${other.body.entity.id}`, { name: "Acme Inc" });
+    expect(clash.status).toBe(409);
+    expect(clash.body.error.code).toBe("graph_conflict");
+    expect(clash.body.error.details.entityId).toBe(ours.body.entity.id);
+    expect(clash.body.error.message).toContain("Merge them");
+
+    // A correction keeps the spelling it had, so searching for the old name still finds the row.
+    const corrected = await me.api.json<{ entity: Entity; notices: string[] }>("PATCH", `/companies/${me.companyId}/graph/entities/${ours.body.entity.id}`, { name: "Acme Incorporated" });
+    expect(corrected.body.entity).toMatchObject({ name: "Acme Incorporated", normalizedName: "acme incorporated" });
+    expect(corrected.body.entity.aliases).toEqual(expect.arrayContaining(["Acme, Inc.", "Acme Inc"]));
+    expect((await me.known(ours.body.entity.id)).body.entity.aliases).toEqual(expect.arrayContaining(["Acme, Inc.", "Acme Inc"]));
+    expect((await me.find("Acme Incorporated")).body.nodes.map((node) => node.id)).toContain(ours.body.entity.id);
+  });
+
+  d("forgets a thing and everything said about it, and takes nothing else with it", async () => {
+    const me = await workspace();
+    const entity = await me.record({ type: "competitor", name: "Globex" });
+    await me.link(entity.body.entity.id, { relation: "works_on", targetKind: "project", targetId: me.projectId });
+
+    const forgotten = await me.api.json<{ ok: boolean; removed: { name: string; links: number } }>("DELETE", `/companies/${me.companyId}/graph/entities/${entity.body.entity.id}`);
+    expect(forgotten.status).toBe(200);
+    expect(forgotten.body.removed).toEqual({ name: "Globex", links: 1 });
+    expect((await me.node("entity", entity.body.entity.id)).status).toBe(404);
+    // The row the claim pointed at is untouched: a claim was never a copy of it.
+    const project = await me.node("project", me.projectId);
+    expect(project.body.incoming).toEqual([]);
+    expect(project.body.node.label).toBe("Payments");
+  });
+
+  d("keeps one company's knowledge out of another's, and refuses a claim that reaches across", async () => {
+    const mine = await workspace();
+    const theirs = await workspace();
+    const entity = await mine.record({ type: "company", name: "Acme" });
+
+    // Another company cannot even ask about it.
+    expect((await theirs.node("entity", entity.body.entity.id)).status).toBe(404);
+    // Nor point a claim at a row that belongs to somebody else: it is not there, because it is not theirs.
+    const theirsEntity = await theirs.record({ type: "company", name: "Globex" });
+    const cross = await theirs.linkRaw(theirsEntity.body.entity.id, { relation: "works_on", targetKind: "project", targetId: mine.projectId });
+    expect(cross.status).toBe(422);
+    expect(cross.body.error.details.problems!.map((problem) => problem.code)).toContain("target_missing");
+    // And the graph each of them reads is their own.
+    expect((await theirs.read()).body.overview.counts.find((row) => row.kind === "entity")!.total).toBe(1);
+    expect((await mine.read()).body.overview.counts.find((row) => row.kind === "entity")!.total).toBe(1);
+  });
+});
+
 describe("openapi + health", () => {
   d("serves a valid OpenAPI document covering every registered route", async () => {
     const res = await app.request("http://api.test/v1/openapi.json");

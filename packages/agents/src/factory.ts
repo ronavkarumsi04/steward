@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -57,6 +57,13 @@ export class AgentServiceFactory {
    * scattered through the surface.
    */
   readonly mcp: McpService;
+  /**
+   * What the company knows, as one thing: the rows it already has, joined, plus the claims somebody wrote down.
+   *
+   * Nothing is configured here, because nothing about it is a deployment decision: the derived half is read from
+   * the tables this process already talks to, and the recorded half is a claim with an author.
+   */
+  readonly graph: GraphService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -83,6 +90,7 @@ export class AgentServiceFactory {
     this.browser = new BrowserService(db, o.browser ?? null);
     this.workflows = new WorkflowService(db);
     this.mcp = new McpService(db, undefined, { stdio: (this.env.MCP_STDIO ?? "").trim().toLowerCase() !== "off", allowPrivate: (this.env.MCP_ALLOW_PRIVATE ?? "").trim().toLowerCase() === "true" });
+    this.graph = new GraphService(db);
     this.companion = new CompanionService(db);
   }
 
@@ -113,6 +121,7 @@ export class AgentServiceFactory {
       browser: this.browser,
       workflows: this.workflows,
       mcp: this.mcp,
+      graph: this.graph,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),
