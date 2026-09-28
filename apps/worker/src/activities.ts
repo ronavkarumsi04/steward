@@ -1,8 +1,7 @@
 import { Context, ApplicationFailure } from "@temporalio/activity";
 import { ProviderError } from "@steward/ai";
-import { AgentRuntime, buildToolRegistry, type AgentServiceFactory, type RunContextBundle as RuntimeContext } from "@steward/agents";
+import { AgentRuntime, buildToolRegistry, registryWithMcpTools, type AgentServiceFactory, type RunContextBundle as RuntimeContext } from "@steward/agents";
 import type { ApprovalSignal, CoreContext } from "@steward/core";
-import type { ToolRegistry } from "@steward/tools";
 import { runWorkflowId, type AgentActivities, type AgentRunInput, type WorkflowScope } from "@steward/workflows";
 import type { TenantScope } from "@steward/schema";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -19,17 +18,27 @@ function heartbeatLoop(): () => void {
 }
 
 export function createActivities(opts: { core: CoreContext; factory: AgentServiceFactory; sandbox?: SandboxProvider; approvalSignal: ApprovalSignal }): AgentActivities {
-  const registry: ToolRegistry = buildToolRegistry();
   const { core, factory } = opts;
 
-  const runtimeFor = (input: AgentRunInput) => new AgentRuntime(factory.forScope(tenantScope(input.scope)), registry);
+  /**
+   * A runtime for one run, with the company's own tools in it.
+   *
+   * The built-in registry is rebuilt per call and the company's MCP tools are read from their rows each time for
+   * the same reason: a tool a founder inspected a moment ago has to be callable on the next run, and a server they
+   * removed has to stop existing at once rather than linger in a worker that stays up for weeks. It is two small
+   * queries against tables the run is already reading.
+   */
+  const runtimeFor = async (input: AgentRunInput) => {
+    const services = factory.forScope(tenantScope(input.scope));
+    return new AgentRuntime(services, await registryWithMcpTools(buildToolRegistry(), services));
+  };
   const asRuntimeCtx = (ctx: Parameters<AgentActivities["plan"]>[0]["ctx"]) => ctx as unknown as RuntimeContext;
 
   return {
     async buildContext(input) {
       const stop = heartbeatLoop();
       try {
-        return (await runtimeFor(input).buildContext(input.runId)) as unknown as Awaited<ReturnType<AgentActivities["buildContext"]>>;
+        return (await (await runtimeFor(input)).buildContext(input.runId)) as unknown as Awaited<ReturnType<AgentActivities["buildContext"]>>;
       } catch (e) {
         throw classify(e);
       } finally {
@@ -40,7 +49,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     async plan(input) {
       const stop = heartbeatLoop();
       try {
-        const plan = await runtimeFor(input).plan(input.runId, asRuntimeCtx(input.ctx));
+        const plan = await (await runtimeFor(input)).plan(input.runId, asRuntimeCtx(input.ctx));
         return { objective: plan.objective };
       } catch (e) {
         throw classify(e);
@@ -52,7 +61,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     async iterate(input) {
       const stop = heartbeatLoop();
       try {
-        return await runtimeFor(input).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume);
+        return await (await runtimeFor(input)).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume);
       } catch (e) {
         throw classify(e);
       } finally {
@@ -63,7 +72,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     async verify(input) {
       const stop = heartbeatLoop();
       try {
-        return await runtimeFor(input).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText);
+        return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText);
       } finally {
         stop();
       }
@@ -72,7 +81,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     async finalize(input) {
       // Returns the status the database actually holds, which may differ from the outcome the workflow
       // intended if the run was already finished another way (for example cancelled by its founder).
-      return runtimeFor(input).finalize(input.runId, input.outcome);
+      return (await runtimeFor(input)).finalize(input.runId, input.outcome);
     },
 
     async markRunning(input) {

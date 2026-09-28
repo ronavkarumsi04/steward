@@ -353,6 +353,9 @@ importers:
       '@steward/schema':
         specifier: workspace:*
         version: link:../schema
+      '@steward/tools':
+        specifier: workspace:*
+        version: link:../tools
       argon2:
         specifier: ^0.45.1
         version: 0.45.1

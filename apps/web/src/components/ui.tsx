@@ -54,7 +54,13 @@ export function Empty({ children, icon }: { children: ReactNode; icon?: ReactNod
           {icon}
         </div>
       )}
-      <p className="max-w-sm">{children}</p>
+      {/*
+        A plain block, not a `<p>`. Callers put whatever the empty state is about in here — often paragraphs of
+        their own — and a `<p>` inside a `<p>` is closed early by the browser's HTML parser, so the markup the
+        server sent could never match the tree React builds on the client. That mismatch is invisible except as a
+        full client re-render on every load of the page (React error #418), so the box is neutral on purpose.
+      */}
+      <div className="max-w-sm">{children}</div>
     </div>
   );
 }

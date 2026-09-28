@@ -729,6 +729,100 @@ export const workflowBindings = pgTable("workflow_bindings", {
   index("workflow_bindings_company_idx").on(t.companyId, t.targetKind, t.targetId),
 ]);
 
+// ---------- MCP servers ----------
+
+/**
+ * An installed MCP server: somebody else's tools, brought into a company on purpose.
+ *
+ * `slug` is the identity that matters and `name` is only what it is called. Tool names are built from the slug
+ * (`mcp.<slug>.<tool>`), so a rename must not silently change which tools an agent was granted, and the unique
+ * index on `(company_id, slug)` is what makes "two servers cannot mean the same thing" true in the database
+ * rather than in a check somebody could forget.
+ *
+ * The transport columns are all nullable at the database level and one group is filled in, because a CHECK
+ * constraint here would be a second place for the vocabulary to live: the install is validated once, in
+ * `validateMcpInstall`, and an install that fails it is never written.
+ */
+export const mcpServers = pgTable("mcp_servers", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  /** What the founder says this server is for, in their own words. */
+  purpose: text("purpose").notNull().default(""),
+  transport: text("transport").notNull(), // stdio | http | sse
+  /** stdio: the program, its arguments, the variables it is given, and where it runs. */
+  command: text("command"),
+  args: json<string[]>("args").notNull().default([]),
+  env: json<Record<string, string>>("env").notNull().default({}),
+  cwd: text("cwd"),
+  /** http and sse: the address, and the headers the request carries. */
+  url: text("url"),
+  headers: json<Record<string, string>>("headers").notNull().default({}),
+  enabled: boolean("enabled").notNull().default(true),
+  /** When the tool list behind this install was last read from the server itself. */
+  lastInspectedAt: ts("last_inspected_at"),
+  /**
+   * Why the last inspection failed, or null. A server that cannot be reached is a condition of the install and
+   * not a failure of the request that asked, so it is stored and shown beside the server rather than returned as
+   * an error the surface would have to guess the meaning of.
+   */
+  lastError: text("last_error"),
+  installedBy: json<Record<string, unknown>>("installed_by").notNull().default({}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("mcp_servers_slug_idx").on(t.companyId, t.slug), index("mcp_servers_company_idx").on(t.companyId, t.enabled)]);
+
+/**
+ * What one install may do: every tool the server offered when it was last inspected, and the band Steward puts
+ * on it.
+ *
+ * The row is the record of an *inspection*, not a cache of a live server, and that is deliberate: an agent run
+ * builds its tool list from these rows rather than from a handshake, so a run never waits on somebody else's
+ * process to start, and the surface can always answer what a server may do without reaching the network. A server
+ * whose tools changed is reported as drift on the next inspection (`added`, `removed`, `changed`) rather than
+ * quietly replacing what a founder read.
+ *
+ * `name` is what the server answers to and `tool_name` is what Steward calls it. Both are stored because a rename
+ * upstream must not change which tool an agent was granted, and because the call has to send the server the name
+ * it knows.
+ */
+export const mcpTools = pgTable("mcp_tools", {
+  id: id(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  serverId: text("server_id").notNull().references(() => mcpServers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  toolName: text("tool_name").notNull(),
+  description: text("description").notNull().default(""),
+  inputSchema: json<Record<string, unknown>>("input_schema").notNull().default({}),
+  /** The server's own claims about the tool, kept verbatim so the derivation can be re-read later. */
+  annotations: json<McpToolAnnotationsShape>("annotations").notNull().default({}),
+  risk: text("risk").notNull(),
+  sideEffects: text("side_effects").notNull(),
+  idempotent: boolean("idempotent").notNull().default(false),
+  dimension: text("dimension"),
+  /** Where the band came from: a company's override, the server's hint, the name, or nothing at all. */
+  riskSource: text("risk_source").notNull(),
+  /** One sentence saying what this tool may do and why we think so, as the founder reads it. */
+  riskReason: text("risk_reason").notNull().default(""),
+  /** Widened by default and narrowed on purpose: a founder can refuse one tool without removing the server. */
+  enabled: boolean("enabled").notNull().default(true),
+  firstSeenAt: ts("first_seen_at").notNull().defaultNow(),
+  lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("mcp_tools_name_idx").on(t.serverId, t.name), index("mcp_tools_company_idx").on(t.companyId, t.enabled)]);
+
+/** The protocol's own annotation block, as far as Steward reads it. Kept loose on purpose. */
+export interface McpToolAnnotationsShape {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  [key: string]: unknown;
+}
+
 // ---------- Companion devices ----------
 export const companionDevices = pgTable("companion_devices", {
   id: id(),

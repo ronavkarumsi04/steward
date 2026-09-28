@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
+import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -43,6 +43,12 @@ export interface AgentServices {
   code: CodeService;
   /** A real browser an agent can drive: opened pages are rows, steps are frames, and the founder can stop them. */
   browser: BrowserService;
+  /**
+   * The MCP servers this company installed and what each one turned out to offer. The runtime builds its MCP
+   * tools from these rows, and an agent reaches one only through its own allowlist — `mcp.<slug>.<tool>`, or the
+   * whole server as `mcp.<slug>.*`.
+   */
+  mcp: McpService;
   /** Starts an already-persisted run as a durable workflow. Present in worker runtimes. */
   runWorkflowLauncher?: RunWorkflowLauncher;
   sandbox?: SandboxProvider;
