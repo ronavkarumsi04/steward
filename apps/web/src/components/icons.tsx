@@ -185,6 +185,13 @@ export const Icon = {
       <path d="M6.2 6.3h.01M8.6 6.3h.01M11 6.3h.01" />
     </Base>
   ),
+  Workflow: (p: IconProps) => (
+    <Base {...p}>
+      <rect x="3" y="3.5" width="7" height="6" rx="1.5" />
+      <rect x="14" y="14.5" width="7" height="6" rx="1.5" />
+      <path d="M6.5 9.5v5a2 2 0 0 0 2 2h5.5" />
+    </Base>
+  ),
   Sparkle: (p: IconProps) => (
     <Base {...p}>
       <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />

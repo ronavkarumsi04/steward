@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -47,6 +47,8 @@ export class AgentServiceFactory {
   readonly code: CodeService;
   /** Pages an agent drives with the founder watching, and the frames that make it watchable. */
   readonly browser: BrowserService;
+  /** The drawings that publish reaction rules and agent schedules, and the bindings that hold them together. */
+  readonly workflows: WorkflowService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -71,6 +73,7 @@ export class AgentServiceFactory {
     this.sites = new SiteService(db);
     this.code = new CodeService(db, this.integrations);
     this.browser = new BrowserService(db, o.browser ?? null);
+    this.workflows = new WorkflowService(db);
     this.companion = new CompanionService(db);
   }
 
@@ -99,6 +102,7 @@ export class AgentServiceFactory {
       sites: this.sites,
       code: this.code,
       browser: this.browser,
+      workflows: this.workflows,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),
