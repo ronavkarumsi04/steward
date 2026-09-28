@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -49,6 +49,14 @@ export class AgentServiceFactory {
   readonly browser: BrowserService;
   /** The drawings that publish reaction rules and agent schedules, and the bindings that hold them together. */
   readonly workflows: WorkflowService;
+  /**
+   * The MCP servers a company installed, what they offer, and who may call what.
+   *
+   * The deployment's policy is resolved once here, from the environment, so "this stack will not run a program"
+   * and "this stack will not connect to its own network" are decisions of the process rather than checks
+   * scattered through the surface.
+   */
+  readonly mcp: McpService;
   readonly companion: CompanionService;
   private readonly env: NodeJS.ProcessEnv;
 
@@ -74,6 +82,7 @@ export class AgentServiceFactory {
     this.code = new CodeService(db, this.integrations);
     this.browser = new BrowserService(db, o.browser ?? null);
     this.workflows = new WorkflowService(db);
+    this.mcp = new McpService(db, undefined, { stdio: (this.env.MCP_STDIO ?? "").trim().toLowerCase() !== "off", allowPrivate: (this.env.MCP_ALLOW_PRIVATE ?? "").trim().toLowerCase() === "true" });
     this.companion = new CompanionService(db);
   }
 
@@ -103,6 +112,7 @@ export class AgentServiceFactory {
       code: this.code,
       browser: this.browser,
       workflows: this.workflows,
+      mcp: this.mcp,
       runWorkflowLauncher: this.o.runWorkflowLauncher,
       sandbox: this.o.sandbox,
       search: searchProviderFromEnv(this.env),

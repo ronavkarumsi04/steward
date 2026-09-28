@@ -7,6 +7,7 @@
 | `api` | `apps/api` | Hono HTTP API. Auth, tenancy, CRUD, approvals, SSE event stream, provider/integration management, companion hub, OpenAPI. Starts Temporal workflows; never runs model calls itself (except provider "test credential"). |
 | `worker` | `apps/worker` | Temporal worker hosting workflows (`agentRun`, `schedule`, `housekeeping`) and activities (context build, plan, model call, tool exec, verify, persist). Also runs the reaction sweep, which answers the rules founders wrote over recorded events without waiting for a schedule (ADR-0014). |
 | Site Studio | `packages/core/src/sites.ts`, `apps/web/src/components/site-studio.tsx` | A company's website as rows (`sites`, `site_pages`, `site_versions`), one pure renderer shared by the studio's preview and the published bundle, a catalog the editor is built from, and a publish that stores bytes while shipping them stays a run (ADR-0016). |
+| Marketplace | `packages/core/src/mcp.ts`, `packages/tools/src/mcp.ts`, `apps/web/src/components/mcp-marketplace.tsx` | Other people's tools, installed deliberately: `mcp_servers` is the install, `mcp_tools` is what the last inspection found, and `riskForMcpTool` derives a band while recording where it came from. The runtime builds a run's MCP tools from the rows, and a grant is written into the agent's own allow list (ADR-0020). |
 | Code IDE | `packages/core/src/code.ts` + `diff.ts`, `apps/web/src/components/code-workspace.tsx` | Reads a repository through its own source-control integration and mirrors nothing; edits are sessions (`code_sessions` → `code_changes`) diffed by our own engine; applying records the proposed bytes as an artifact and a run before launching it, and the run writes the branch and opens the pull request (ADR-0017). |
 | `web` | `apps/web` | Next.js 16 app. Server components call the API with the user's cookie; the browser calls `/api/v1/*` which the web server proxies to the API so cookies remain first-party. |
 | `companion` | `apps/companion` | Optional daemon on a user's machine that exposes the official Codex CLI to the org over an authenticated long-poll channel. |
@@ -80,10 +81,20 @@ A company's standing work — the reaction rules of ADR-0014 and the agent sched
 
 The surface is `/app/c/:companyId/workflows` (`apps/web/src/components/workflow-studio.tsx`): the canvas, the live preview (the same compile and validate functions, called on every keystroke), the rows each trigger is running right now, and one button that publishes. Saving writes the draft and nothing else; publishing is the only act that changes behaviour; pausing stops the drawing and every row it ran. Deleting a workflow deletes the rules and schedules it published, while `reaction_fires.rule_id` is `set null`, so the ledger of what those rules did survives them.
 
+## The MCP marketplace
+
+Other people's tools, brought into a company on purpose (ADR-0020). Two tables and two acts: `mcp_servers` is an install — where the server is, under a slug that is immutable because every tool name and every grant is written in terms of it — and `mcp_tools` is the record of one inspection, holding each tool the server offered, the schema a model provider will be handed, the server's own annotation block verbatim, and the risk band Steward derived together with the sentence saying which of four things it came from. Installing opens no connection at all; inspecting is the one act that does, and a server that cannot be reached is recorded as *its* condition rather than returned as a failed request.
+
+The runtime builds an agent's MCP tools from those rows rather than from a live handshake, so a run never begins by waiting on somebody else's process, and a server whose tools changed is reported as drift on the next inspection (`added`, `removed`, `changed`) instead of quietly replacing what a founder read. Tools are namespaced `mcp.<slug>.<tool>`; `McpService.forRuntime` returns the enabled tools of the enabled installs and `registryWithMcpTools` puts them in the registry a run uses — which registers everything and grants nothing, because no default allow list mentions `mcp.`.
+
+A grant is the agent's own `toolAllowlist` and nothing else: `applyGrant` is pure and uses the same `matchTool` the runtime does, so what the surface says an agent may call and what a run can call cannot drift apart, and there is no second permission store to keep in step. Revoking one tool from an agent that holds the server wildcard materialises the wildcard, and an agent that was running on the defaults for its kind has those written out beside the grant — because the first grant must not be the thing that removed every tool it had.
+
+The spawned process gets the install's own variables plus the protocol library's platform-safe minimum and nothing else, so this deployment's database and keys are not reachable from it; an http or sse address is refused when it is on this deployment's own network unless `MCP_ALLOW_PRIVATE` says otherwise, and is checked again with a DNS lookup at the moment of connecting. The surface is `/app/c/:companyId/mcp` (`apps/web/src/components/mcp-marketplace.tsx`), and `packages/tools/fixtures/mcp-server.mjs` is a real MCP server the tests install over stdio, so an inspection is exercised against the protocol rather than against a stub of our own writing.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.
-- Tools: `packages/tools` registry; MCP servers can be attached per company.
+- Tools: `packages/tools` registry, built-in tools and the MCP client; the marketplace attaches a company's own servers (ADR-0020).
 - Integrations: `packages/integrations/src/providers/*`.
 - Sandbox providers: `packages/sandbox` (`SandboxProvider` interface; Docker implemented).
 - Deploy/source-control providers: `packages/integrations/src/providers/{deploy,github}.ts`.

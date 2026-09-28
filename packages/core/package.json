@@ -30,6 +30,7 @@
     "@steward/integrations": "workspace:*",
     "@steward/policy": "workspace:*",
     "@steward/schema": "workspace:*",
+    "@steward/tools": "workspace:*",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",

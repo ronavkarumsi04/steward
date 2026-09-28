@@ -39,6 +39,8 @@ const GROUPS = [
       ["/approvals", "Approvals", Icon.Approvals],
       ["/agents", "Agents", Icon.Agents],
       ["/knowledge", "Knowledge", Icon.Knowledge],
+      // Other people's tools, installed on purpose: what each server offers, and who may call it.
+      ["/mcp", "Marketplace", Icon.Plug],
       ["/integrations", "Integrations", Icon.Integrations],
       ["/settings", "Settings", Icon.Settings],
     ],

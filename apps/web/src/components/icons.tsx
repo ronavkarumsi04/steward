@@ -197,6 +197,14 @@ export const Icon = {
       <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
     </Base>
   ),
+  // Somebody else's tools, plugged in: a socket and the lead that reaches it.
+  Plug: (p: IconProps) => (
+    <Base {...p}>
+      <path d="M9 3v5M15 3v5" />
+      <path d="M6.5 8h11v3a5.5 5.5 0 0 1-11 0z" />
+      <path d="M12 16.5V21" />
+    </Base>
+  ),
   Logo: (p: IconProps) => (
     <svg width={p.size ?? 20} height={p.size ?? 20} viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...p}>
       <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" />

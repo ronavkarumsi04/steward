@@ -389,6 +389,12 @@ export const EventType = z.enum([
   "browser.closed",
   "browser.failed",
   "agent.updated",
+  "mcp.installed",
+  "mcp.updated",
+  "mcp.inspected",
+  "mcp.inspection_failed",
+  "mcp.granted",
+  "mcp.removed",
   "audit",
 ]);
 export type EventType = z.infer<typeof EventType>;

@@ -1001,6 +1001,97 @@ export interface WorkflowPreview {
   targets: WorkflowTarget[];
 }
 
+/**
+ * An MCP server a company installed, and what it may do.
+ *
+ * Two fields that exist precisely to stop the surface implying more than it knows: `inspectedAt` (has anybody
+ * actually asked this server what it offers?) and `riskSource` (did that band come from the company, the server's
+ * own claim about itself, the tool's name, or from nothing at all?).
+ */
+export interface McpToolView {
+  id: string;
+  /** The name the server answers to, which is what a call sends. */
+  name: string;
+  /** The name Steward knows it by — `mcp.<slug>.<name>` — which is what a grant is written in terms of. */
+  toolName: string;
+  description: string;
+  risk: RiskLevel;
+  riskSource: string;
+  riskReason: string;
+  sideEffects: string;
+  idempotent: boolean;
+  dimension: string | null;
+  enabled: boolean;
+  grantedTo: Array<{ agentId: string; agentName: string; pattern: string }>;
+}
+
+export interface McpServerView {
+  id: string;
+  name: string;
+  slug: string;
+  purpose: string;
+  transport: string;
+  /** Where it points: the command line, or the address. */
+  target: string;
+  description: string;
+  enabled: boolean;
+  inspectedAt: string | null;
+  /** Why the last inspection failed, or the reason it needs another one. */
+  error: string | null;
+  tools: McpToolView[];
+  /** Where it points, sent as it is: the command line, or the address. Not secret, and the edit form starts here. */
+  command: string | null;
+  args: string[];
+  url: string | null;
+  /** The variables and headers this install carries, by name only — a credential's value is never sent back. */
+  envKeys: string[];
+  headerKeys: string[];
+}
+
+export interface McpMarketplaceRead {
+  servers: McpServerView[];
+  agents: Array<{ id: string; name: string; kind: string; enabled: boolean }>;
+  catalog: {
+    transports: string[];
+    /** The bounds the API enforces, sent so the surface can say them before a founder hits one. */
+    limits: { serversPerCompany: number; toolsPerServer: number; nameChars: number; purposeChars: number };
+    /** Whether this deployment runs programs for stdio installs, and whether it dials its own network. */
+    stdio: boolean;
+    privateTargets: boolean;
+  };
+  canManage: boolean;
+}
+
+/** The outcome of one inspection, which is a fact about the server rather than a success or a failure of a request. */
+export interface McpInspectionResult {
+  ok: boolean;
+  error: string | null;
+  added: string[];
+  removed: string[];
+  changed: Array<{ toolName: string; fields: string[] }>;
+  omitted: number;
+  total: number;
+  server: McpServerView;
+  notices: string[];
+}
+
+/**
+ * The install form, in the shape a text box gives it: one argument per line, `KEY=value` for variables, and
+ * `Header: value` for headers. Both halves exist whatever the transport is, because switching transport while
+ * writing should not lose what was typed.
+ */
+export interface McpInstallForm {
+  name: string;
+  slug: string;
+  purpose: string;
+  transport: string;
+  command: string;
+  args: string;
+  env: string;
+  url: string;
+  headers: string;
+}
+
 export interface WorkflowWorkspaceRead {
   workflows: WorkflowView[];
   agents: Array<{ id: string; name: string; enabled: boolean }>;

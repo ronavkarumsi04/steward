@@ -4,9 +4,10 @@
  * in-process through the same AgentRuntime the worker uses. Skipped when Postgres is unreachable.
  */
 import { createHmac } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
-import { AgentRuntime, AgentServiceFactory, buildToolRegistry } from "@steward/agents";
+import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
 import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
@@ -1684,6 +1685,254 @@ describe("workflows", () => {
     // And the rule really belongs to the company that drew it.
     expect((await stranger.api.call("PATCH", `/companies/${owner.companyId}/reactions/${published.body.targets[0]!.targetId}`, { enabled: false })).status).toBe(404);
   });
+});
+
+describe("mcp marketplace", () => {
+  /**
+   * Install a server, see what it may do, decide who may call it.
+   *
+   * The inspection half of these tests spawns a *real* MCP server over stdio — the fixture beside the seam that
+   * speaks to it — because the claim being made is that a company can install somebody else's server and the
+   * product will tell them the truth about it. A stub would only prove we agree with ourselves. The grant half
+   * then goes one step further than any read: it builds the registry a run would use, in-process, from the rows
+   * the API just wrote, and checks that the agent's own allowlist and nothing else decides what is in it.
+   */
+  const FIXTURE_SERVER = fileURLToPath(new URL("../../../packages/tools/fixtures/mcp-server.mjs", import.meta.url));
+
+  type ToolView = { id: string; name: string; toolName: string; risk: string; riskSource: string; riskReason: string; sideEffects: string; idempotent: boolean; enabled: boolean; grantedTo: Array<{ agentId: string; agentName: string; pattern: string }> };
+  type ServerView = { id: string; name: string; slug: string; purpose: string; transport: string; target: string; description: string; enabled: boolean; inspectedAt: string | null; error: string | null; tools: ToolView[] };
+  type Surface = { servers: ServerView[]; agents: Array<{ id: string; name: string; kind: string }>; catalog: { transports: string[]; stdio: boolean; privateTargets: boolean }; canManage: boolean };
+  type Inspected = { ok: boolean; error: string | null; added: string[]; removed: string[]; changed: Array<{ toolName: string; fields: string[] }>; omitted: number; total: number; server: ServerView; notices: string[] };
+
+  async function marketplace() {
+    const founder = await register("Marketplace");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Marketplace ${uniq()}`, autonomyLevel: 2 });
+    const companyId = co.body.company.id;
+    const api = client(founder.token, "", () => app);
+    const listed = await api.json<{ agents: Array<{ id: string; kind: string; name: string; enabled: boolean }> }>("GET", `/companies/${companyId}/agents`);
+    const agent = listed.body.agents.find((row) => row.enabled)!;
+    return {
+      ...founder,
+      companyId,
+      api,
+      agentId: agent.id,
+      agentKind: agent.kind,
+      read: () => api.json<Surface>("GET", `/companies/${companyId}/mcp`),
+      install: (over: Record<string, unknown> = {}) => ({ name: "Fixture ledger", slug: "ledger", purpose: "Customers and invoices.", transport: "stdio", command: process.execPath, args: [FIXTURE_SERVER], ...over }),
+    };
+  }
+
+  d("installs a server, then asks it what it may do and records the answer with its reasoning", async () => {
+    const me = await marketplace();
+    const empty = await me.read();
+    expect(empty.status).toBe(200);
+    expect(empty.body.servers).toEqual([]);
+    expect(empty.body.catalog.transports).toEqual(["stdio", "http", "sse"]);
+    expect(empty.body.catalog.stdio).toBe(true);
+    expect(empty.body.catalog.privateTargets).toBe(false);
+    expect(empty.body.canManage).toBe(true);
+
+    // Installing is not reaching out: the server exists, and it offers nothing, because nobody has asked it yet.
+    const installed = await me.api.json<{ server: ServerView; notices: string[] }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    expect(installed.status).toBe(201);
+    expect(installed.body.server).toMatchObject({ slug: "ledger", transport: "stdio", inspectedAt: null, error: null, tools: [] });
+    expect(installed.body.server.target).toContain("mcp-server.mjs");
+    expect(installed.body.notices[0]).toContain("has not been inspected");
+
+    const inspected = await me.api.json<Inspected>("POST", `/companies/${me.companyId}/mcp/${installed.body.server.id}/inspect`, {});
+    expect(inspected.status).toBe(200);
+    expect(inspected.body).toMatchObject({ ok: true, error: null, total: 6, omitted: 0 });
+    expect(inspected.body.added).toHaveLength(6);
+
+    const server = (await me.read()).body.servers[0]!;
+    const tool = (name: string) => server.tools.find((row) => row.name === name)!;
+    // Two names, because a founder reading a tool list and a founder writing an allowlist must be looking at what
+    // the runtime is: the server's name and the name Steward calls it.
+    expect(tool("lookup_invoice")).toMatchObject({ toolName: "mcp.ledger.lookup_invoice", risk: "LOW", riskSource: "hint", sideEffects: "none", idempotent: true, enabled: true });
+    expect(tool("lookup_invoice").riskReason).toContain("only reads");
+    expect(tool("delete_customer")).toMatchObject({ risk: "HIGH", riskSource: "hint", sideEffects: "external" });
+    expect(tool("reschedule")).toMatchObject({ risk: "MEDIUM", riskSource: "default" });
+    // The one a naive classifier gets wrong: a name that reads as a query, an annotation that says it writes.
+    expect(tool("get_and_reissue")).toMatchObject({ risk: "HIGH", riskSource: "hint" });
+    expect(server.inspectedAt).not.toBeNull();
+
+    // A second inspection of an unchanged server reports no drift.
+    const again = await me.api.json<Inspected>("POST", `/companies/${me.companyId}/mcp/${installed.body.server.id}/inspect`, {});
+    expect(again.body).toMatchObject({ added: [], removed: [], changed: [], total: 6 });
+  }, 60_000);
+
+  d("refuses an install this deployment will not carry out, naming the field and saying why", async () => {
+    const me = await marketplace();
+    const refused = (body: Record<string, unknown>) => me.api.json<{ error: { code: string; details?: { problems: Array<{ code: string; where: string; message: string }> } } }>("POST", `/companies/${me.companyId}/mcp`, me.install(body));
+
+    const badSlug = await refused({ slug: "Ledger API!" });
+    expect(badSlug.status).toBe(422);
+    expect(badSlug.body.error.code).toBe("mcp_invalid");
+    expect(badSlug.body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "slug_invalid", where: "slug" }));
+    expect((await refused({ name: "  " })).body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "name_required" }));
+    expect((await refused({ command: "" })).body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "command_required" }));
+
+    // The deployment's own network is refused unless it has been told otherwise, and the sentence names the host.
+    const privateTarget = await refused({ transport: "http", url: "http://169.254.169.254/latest/meta-data", command: null, args: [] });
+    expect(privateTarget.body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "url_private", where: "url" }));
+    expect(privateTarget.body.error.details!.problems.find((problem) => problem.code === "url_private")!.message).toContain("169.254.169.254");
+    // Credentials in an address end up written down in a dozen places.
+    expect((await refused({ transport: "http", url: "https://user:pass@mcp.example.com/mcp", command: null, args: [] })).body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "url_invalid" }));
+    // A transport this build does not have never reaches the handler at all.
+    expect((await me.api.call("POST", `/companies/${me.companyId}/mcp`, me.install({ transport: "smoke-signal" }))).status).toBe(422);
+
+    // And two servers in one company cannot share a slug, because their tool names would collide.
+    expect((await me.api.json("POST", `/companies/${me.companyId}/mcp`, me.install())).status).toBe(201);
+    const clash = await refused({ name: "Other ledger" });
+    expect(clash.status).toBe(422);
+    expect(clash.body.error.details!.problems).toContainEqual(expect.objectContaining({ code: "slug_taken" }));
+    expect(await me.api.call("DELETE", `/companies/${me.companyId}/mcp/does-not-exist`)).toHaveProperty("status", 404);
+  }, 60_000);
+
+  d("records a server it cannot reach as the server's condition, not as a failed request", async () => {
+    const me = await marketplace();
+    const broken = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ command: "steward-mcp-that-does-not-exist", args: [] }));
+    const inspected = await me.api.json<Inspected>("POST", `/companies/${me.companyId}/mcp/${broken.body.server.id}/inspect`, {});
+
+    // 200, because a third party being down is not this request failing — it is what this server is right now.
+    expect(inspected.status).toBe(200);
+    expect(inspected.body.ok).toBe(false);
+    expect(inspected.body.error).toContain("Could not start “Fixture ledger”");
+    expect(inspected.body.notices[0]).toContain("steward-mcp-that-does-not-exist");
+    expect(inspected.body.total).toBe(0);
+
+    // The row says so too, so the next reader is told without having to try again.
+    const server = (await me.read()).body.servers[0]!;
+    expect(server.error).toContain("Could not start");
+    expect(server.inspectedAt).toBeNull();
+    expect(server.tools).toEqual([]);
+  }, 60_000);
+
+  d("grants a server by writing the agent's own allowlist, and takes it back the same way", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+
+    // Nothing is granted by installing: the agent that exists has no `mcp.` pattern of its own.
+    const before = (await me.read()).body.servers[0]!;
+    expect(before.tools.every((tool) => tool.grantedTo.length === 0)).toBe(true);
+
+    const granted = await me.api.json<{ agent: { id: string; toolAllowlist: string[] }; notices: string[] }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames: null, granted: true });
+    expect(granted.status).toBe(200);
+    expect(granted.body.agent.toolAllowlist).toContain("mcp.ledger.*");
+    // This agent has a tool list of its own, so nothing had to be written out on its behalf.
+    expect(granted.body.notices).toEqual([]);
+
+    // An agent with no list of its own is running on the defaults for its kind, and the first grant must not be
+    // the thing that takes those away — so they are written out explicitly, and the answer says it happened.
+    const bare = await me.api.json<{ agent: { id: string; toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/agents`, { kind: "research", name: `Researcher ${uniq()}`, toolAllowlist: [] });
+    expect(bare.body.agent.toolAllowlist).toEqual([]);
+    const bareGrant = await me.api.json<{ agent: { toolAllowlist: string[] }; notices: string[] }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: bare.body.agent.id, toolNames: null, granted: true });
+    expect(bareGrant.body.notices[0]).toContain("no tools of its own");
+    expect(bareGrant.body.agent.toolAllowlist).toContain("mcp.ledger.*");
+    expect(bareGrant.body.agent.toolAllowlist).toContain("web.*");
+
+    // The surface and the agent agree, because they are reading the same field.
+    const after = (await me.read()).body.servers[0]!;
+    expect(after.tools.every((tool) => tool.grantedTo.some((row) => row.pattern === "mcp.ledger.*"))).toBe(true);
+    const agents = await me.api.json<{ agents: Array<{ id: string; toolAllowlist: string[] }> }>("GET", `/companies/${me.companyId}/agents`);
+    expect(agents.body.agents.find((row) => row.id === me.agentId)!.toolAllowlist).toContain("mcp.ledger.*");
+
+    // Taking one tool back from a wildcard has to leave the other five named explicitly, or "revoke one" would
+    // either do nothing or take the whole server away.
+    const one = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames: ["mcp.ledger.delete_customer"], granted: false });
+    expect(one.body.agent.toolAllowlist).not.toContain("mcp.ledger.*");
+    expect(one.body.agent.toolAllowlist).not.toContain("mcp.ledger.delete_customer");
+    expect(one.body.agent.toolAllowlist).toContain("mcp.ledger.lookup_invoice");
+    const narrowed = (await me.read()).body.servers[0]!;
+    // Read per agent, because another agent holding the whole server is exactly the case this is not about.
+    const heldBy = (name: string) => narrowed.tools.find((tool) => tool.name === name)!.grantedTo.filter((row) => row.agentId === me.agentId);
+    expect(heldBy("delete_customer")).toEqual([]);
+    expect(heldBy("lookup_invoice")).toHaveLength(1);
+
+    // And taking the server back leaves the agent with what it had before, defaults included.
+    const revoked = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames: null, granted: false });
+    expect(revoked.body.agent.toolAllowlist.some((pattern) => pattern.startsWith("mcp."))).toBe(false);
+    expect(revoked.body.agent.toolAllowlist.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  d("puts the granted tools in the registry a run actually reads, and only those", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    const runtimeRegistry = async () => registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+    const names = async (allow: string[]) => (await runtimeRegistry()).list({ allow }).map((tool) => tool.manifest.name);
+
+    // Before any grant, the server's tools are registered but invisible to this agent — which is the whole safety
+    // story of a marketplace: installing a server changes what no agent may do.
+    const agent = await services.forScope(scope).agents.get(scope, me.agentId);
+    const grantedNames = await names(["mcp.ledger.*"]);
+    expect(grantedNames).toHaveLength(6);
+    expect(await names(agent!.toolAllowlist)).not.toContain("mcp.ledger.lookup_invoice");
+    expect(agent!.toolAllowlist.some((pattern) => pattern.startsWith("mcp."))).toBe(false);
+
+    // The tool in the registry is the one the row describes, and it is the server's tool.
+    const listed = (await runtimeRegistry()).get("mcp.ledger.lookup_invoice")!;
+    expect(listed.manifest).toMatchObject({ source: "mcp", risk: "LOW", sideEffects: "none", idempotent: true, costCategory: "none" });
+    expect(listed.manifest.description).toContain("Fixture ledger");
+    expect(listed.manifest.inputSchema).toMatchObject({ type: "object" });
+    const result = await listed.execute({ id: "inv_1" }, { scope, services: {}, log: () => {} });
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("250.00 GBP");
+
+    // Blocking one tool takes it out of the registry without touching the rest, and pausing the server takes them
+    // all away at once — which is the difference between a per-tool decision and an install.
+    const surface = (await me.read()).body.servers[0]!;
+    const blocked = surface.tools.find((tool) => tool.name === "delete_customer")!;
+    expect((await me.api.json("PATCH", `/companies/${me.companyId}/mcp/${serverId}/tools/${blocked.id}`, { enabled: false })).status).toBe(200);
+    expect(await names(["mcp.ledger.*"])).not.toContain("mcp.ledger.delete_customer");
+    expect(await names(["mcp.ledger.*"])).toHaveLength(5);
+
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/enabled`, { enabled: false });
+    expect(await names(["mcp.ledger.*"])).toEqual([]);
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/enabled`, { enabled: true });
+    expect(await names(["mcp.ledger.*"])).toHaveLength(5);
+  }, 60_000);
+
+  d("discards the tool list when where a server points changes, and keeps one company's servers out of another's", async () => {
+    const owner = await marketplace();
+    const stranger = await marketplace();
+    const installed = await owner.api.json<{ server: ServerView }>("POST", `/companies/${owner.companyId}/mcp`, owner.install());
+    const serverId = installed.body.server.id;
+    await owner.api.json("POST", `/companies/${owner.companyId}/mcp/${serverId}/inspect`, {});
+
+    // Renaming is not moving. The tool list still came from this server, so it stays.
+    const renamed = await owner.api.json<{ server: ServerView; uninspected: boolean; notices: string[] }>("PATCH", `/companies/${owner.companyId}/mcp/${serverId}`, { name: "Ledger API" });
+    expect(renamed.body.uninspected).toBe(false);
+    expect(renamed.body.notices).toEqual([]);
+    expect(renamed.body.server.tools).toHaveLength(6);
+
+    // Changing the arguments is: what was recorded is evidence about a different process.
+    const moved = await owner.api.json<{ server: ServerView; uninspected: boolean; notices: string[] }>("PATCH", `/companies/${owner.companyId}/mcp/${serverId}`, { args: [FIXTURE_SERVER, "--other"] });
+    expect(moved.body.uninspected).toBe(true);
+    expect(moved.body.server.tools).toEqual([]);
+    expect(moved.body.server.inspectedAt).toBeNull();
+    expect(moved.body.notices[0]).toContain("discarded");
+    // A slug is not editable, because every tool name and every grant is written in terms of it.
+    expect((await owner.api.json("PATCH", `/companies/${owner.companyId}/mcp/${serverId}`, { slug: "ledger-v2" })).status).toBe(422);
+
+    // Nothing of the owner's is reachable from the stranger, on any route, and its own surface is still empty.
+    expect((await stranger.api.call("GET", `/companies/${owner.companyId}/mcp`)).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${owner.companyId}/mcp/${serverId}/inspect`, {})).status).toBe(404);
+    expect((await stranger.api.call("POST", `/companies/${owner.companyId}/mcp/${serverId}/grant`, { agentId: stranger.agentId, granted: true })).status).toBe(404);
+    expect((await stranger.api.call("DELETE", `/companies/${owner.companyId}/mcp/${serverId}`)).status).toBe(404);
+    expect((await stranger.read()).body.servers).toEqual([]);
+
+    // Removing an install takes its tools with it, and says how many went.
+    const removed = await owner.api.json<{ removed: { slug: string; tools: number } }>("DELETE", `/companies/${owner.companyId}/mcp/${serverId}`);
+    expect(removed.body.removed).toEqual({ slug: "ledger", tools: 0 });
+    expect((await owner.read()).body.servers).toEqual([]);
+  }, 60_000);
 });
 
 describe("openapi + health", () => {
