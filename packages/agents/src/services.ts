@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
+import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -37,6 +37,12 @@ export interface AgentServices {
    * rows, the engine runs them.
    */
   workflows: WorkflowService;
+  /**
+   * What the company knows, as one thing. A run reads it before it acts — the neighbourhood of a name is the
+   * difference between an agent that has heard of a customer and one that has read what this company recorded
+   * about them — and writes to it when it learns something no column holds.
+   */
+  graph: GraphService;
   /** The company's website, so an agent can be handed a page without owning the only copy of it. */
   sites: SiteService;
   /** The company's code: an agent can be given a session to commit, and a founder can read what it changed. */

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { AuthError, BrowserError, CodeError, McpError, SiteError, WorkflowError, type EventBus } from "@steward/core";
+import { AuthError, BrowserError, CodeError, GraphError, McpError, SiteError, WorkflowError, type EventBus } from "@steward/core";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
 import { csrf, rateLimit, requestId, securityHeaders, session } from "./middleware.js";
@@ -18,6 +18,7 @@ import { registerCodeRoutes } from "./routes/code.js";
 import { registerBrowserRoutes } from "./routes/browser.js";
 import { registerWorkflowRoutes } from "./routes/workflows.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
+import { registerGraphRoutes } from "./routes/graph.js";
 import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/signals.js";
 
 export const API_VERSION = "0.1.0";
@@ -76,6 +77,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerBrowserRoutes(v1, registry);
   registerWorkflowRoutes(v1, registry);
   registerMcpRoutes(v1, registry);
+  registerGraphRoutes(v1, registry);
   registerProviderRoutes(v1, registry);
   registerCompanionRoutes(v1, registry);
 
@@ -115,6 +117,13 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
       const status = err.code === "not_found" ? 404 : 422;
       const problems = (err.details as { problems?: unknown }).problems;
       return c.json({ error: { code: `mcp_${err.code}`, message: err.message, details: Array.isArray(problems) && problems.length ? { problems } : undefined, requestId: rid } }, status);
+    }
+    if (err instanceof GraphError) {
+      // A claim the graph cannot hold says which part of it is wrong, because that list is what the surface marks
+      // up; renaming into a name the company already knows is a conflict and names the row to merge into instead.
+      const status = err.code === "not_found" ? 404 : err.code === "conflict" ? 409 : 422;
+      const problems = (err.details as { problems?: unknown }).problems;
+      return c.json({ error: { code: `graph_${err.code}`, message: err.message, details: { ...(Array.isArray(problems) && problems.length ? { problems } : {}), ...(typeof (err.details as { entityId?: unknown }).entityId === "string" ? { entityId: (err.details as { entityId: string }).entityId } : {}) }, requestId: rid } }, status);
     }
     if (err instanceof SiteError) {
       // A refused save or publish carries the list of what is wrong, because that list is what the studio shows.

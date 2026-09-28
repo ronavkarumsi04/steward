@@ -395,6 +395,13 @@ export const EventType = z.enum([
   "mcp.inspection_failed",
   "mcp.granted",
   "mcp.removed",
+  "graph.entity.recorded",
+  "graph.entity.confirmed",
+  "graph.entity.corrected",
+  "graph.entity.merged",
+  "graph.entity.forgotten",
+  "graph.link.recorded",
+  "graph.link.dropped",
   "audit",
 ]);
 export type EventType = z.infer<typeof EventType>;

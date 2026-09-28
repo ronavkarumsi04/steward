@@ -226,7 +226,8 @@ describe("what the palette offers", () => {
     const hrefs = actions.filter((a) => a.kind === "navigate").map((a) => (a.target.kind === "navigate" ? a.target.href : ""));
     expect(hrefs).toContain("/app/c/company-1");
     expect(hrefs).toContain("/app/c/company-1/approvals");
-    expect(hrefs).toHaveLength(14);
+    expect(hrefs).toContain("/app/c/company-1/graph");
+    expect(hrefs).toHaveLength(15);
   });
 });
 

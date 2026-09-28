@@ -22,3 +22,4 @@ export * from "./diff.js";
 export * from "./code.js";
 export * from "./browser.js";
 export * from "./mcp.js";
+export * from "./graph.js";
