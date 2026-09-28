@@ -171,6 +171,29 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
   await expect(card.getByTestId("mcp-tool")).toHaveCount(6);
   await expect(card.getByTestId("mcp-tools")).toBeVisible();
 
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow).toBeLessThanOrEqual(1);
+  /** Which of the page's own elements reach past the phone, named, so a failure says what the culprit was. */
+  const pastTheEdge = () =>
+    page.evaluate(() => {
+      const width = window.innerWidth;
+      return [...document.querySelectorAll("main *")]
+        .filter((el) => el.getBoundingClientRect().right > width + 1)
+        .slice(0, 3)
+        .map((el) => `${el.tagName.toLowerCase()}${el.getAttribute("data-testid") ? `[${el.getAttribute("data-testid")}]` : ""} “${(el.textContent ?? "").trim().slice(0, 40)}”`);
+    });
+
+  const past = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(past, `${past}px past the phone; widest in the page: ${(await pastTheEdge()).join(" | ") || "(nothing)"}`).toBeLessThanOrEqual(1);
+
+  // And the page's own content again with every font a little wider, which is the real difference between a laptop
+  // and the Linux machine CI runs on — a badge here fitted locally and pushed CI's page 66px past the screen, and
+  // nothing else was going to notice. Only `main` is measured, because this bump widens the shell's own furniture
+  // with it and the shell is not what this is about.
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "19px";
+  });
+  const withWiderText = await pastTheEdge();
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "";
+  });
+  expect(withWiderText, `with wider text these reach past the phone: ${withWiderText.join(" | ")}`).toEqual([]);
 });

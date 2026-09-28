@@ -135,9 +135,19 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
   return (
     <div className="space-y-5">
       <div className="rise-in flex flex-wrap items-center justify-between gap-3">
+        {/*
+          What this deployment will carry, stated before anything is installed. These two are sentences rather than
+          short badges, so they are allowed to fold: a `.pill` is nowrap and uppercased, and one of them is long
+          enough that the font a browser happens to have decides whether the page scrolls sideways on a phone.
+          The two utilities win over the component rule, which is why they are enough.
+        */}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <Pill tone={data.catalog.stdio ? "ok" : "neutral"}>{data.catalog.stdio ? "This deployment runs programs for stdio servers" : "This deployment will not run programs — HTTP and SSE only"}</Pill>
-          <Pill tone={data.catalog.privateTargets ? "warn" : "neutral"}>{data.catalog.privateTargets ? "Its own network is allowed" : "Its own network is refused"}</Pill>
+          <Pill tone={data.catalog.stdio ? "ok" : "neutral"} className="max-w-full whitespace-normal normal-case">
+            {data.catalog.stdio ? "This deployment runs programs for stdio servers" : "This deployment will not run programs — HTTP and SSE only"}
+          </Pill>
+          <Pill tone={data.catalog.privateTargets ? "warn" : "neutral"} className="max-w-full whitespace-normal normal-case">
+            {data.catalog.privateTargets ? "Its own network is allowed" : "Its own network is refused"}
+          </Pill>
           <span>
             {data.servers.length} of {data.catalog.limits.serversPerCompany} installed
           </span>
@@ -373,10 +383,12 @@ function ServerCard({
               </Pill>
             </span>
           </div>
-          <p className="mt-1 text-sm text-muted">{server.description}</p>
+          {/* Somebody else's sentence, carrying the command line or the address verbatim: it has to be able to
+              break, because a long path is exactly what a third-party string looks like. */}
+          <p className="mt-1 break-words text-sm text-muted">{server.description}</p>
           {server.purpose && <p className="mt-1 text-xs text-muted">{server.purpose}</p>}
           {server.error && (
-            <p data-testid="mcp-error" className="mt-2 text-sm text-danger">
+            <p data-testid="mcp-error" className="mt-2 break-words text-sm text-danger">
               {server.error}
             </p>
           )}
@@ -469,7 +481,7 @@ function ServerCard({
                         {tool.idempotent && <Pill tone="neutral">Repeat-safe</Pill>}
                         {tool.sideEffects === "none" && <Pill tone="neutral">Reads only</Pill>}
                       </div>
-                      <p className="mt-1 text-sm text-muted">{tool.description || "The server gave no description."}</p>
+                      <p className="mt-1 break-words text-sm text-muted">{tool.description || "The server gave no description."}</p>
                       <p className="mt-1 text-[11px] text-muted">
                         {tool.riskReason} <span className="opacity-70">(from {tool.riskSource === "override" ? "this company" : tool.riskSource === "hint" ? "the server's own claim" : tool.riskSource === "name" ? "its name" : "nothing the server said"})</span>
                       </p>
