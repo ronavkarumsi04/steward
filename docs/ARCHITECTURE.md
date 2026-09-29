@@ -100,6 +100,14 @@ The edges are of two kinds and the difference is the feature. A **derived** edge
 
 Reading is bounded and says so: every kind carries its real total beside the page it showed, each neighborhood reports the relations it had to cut, and every line is printed with where it came from — `Read from tasks.project_id`, or `Written by the founder` with a date. Recording is a member act; correcting, merging and forgetting are an administrator's, because each of them moves or destroys something a run may already have relied on. The surface is `/app/c/:companyId/graph` (`apps/web/src/components/knowledge-graph.tsx`), agents reach it through `knowledge.about` and `knowledge.record`, and every write emits an event.
 
+## Testing
+
+The web end-to-end suite (`apps/web/e2e`) drives the **production build** — Next's standalone server, a real API and a real Postgres — rather than `next dev`, because the thing under test should be the bytes a deployment serves, and because a dev server's hydration and bundling differences have hidden real bugs here. Each spec registers its own account and onboards its own company through the real forms, so no test depends on another's rows, and each one ends by asserting the browser produced no errors.
+
+Nearly everything a spec needs, it creates the way a founder does, and then checks against the server's own read rather than against what it just watched itself do — a re-render that raced a write would otherwise look like a product that quietly did nothing. But a little of what the product *shows* is not the caller's to write. A memory a run decided to remember carries the run's own provenance (`source: { type: "auto" }`) and a life a confirmation cancels; a live browser session belongs to the agent's process. Every write route records the caller's act — which is precisely why a provenance line is worth printing — so those rows cannot be created through the API at all, and the gap is the shape of the thing rather than a missing endpoint.
+
+`apps/web/e2e/seed.ts` is the single seam for that class of state, and it is deliberately narrow. It calls the product's own service with the product's own values, never hand-written SQL, and each seeder names the real write it reproduces (a change to that write's meaning is a change in the seeder); it seeds the same Postgres the running stack was given, and closes what it opens; and it stays test-only — `e2e/` is outside the Next build and the app's `tsconfig`, nothing in it is reachable from `src`, and the packages it needs are dev dependencies for that reason alone. `browser-live.spec.ts` drives `BrowserService` against that same connection, under the same rule that the service is the writer. Everything else a spec can create through a request, it creates in the spec.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.
