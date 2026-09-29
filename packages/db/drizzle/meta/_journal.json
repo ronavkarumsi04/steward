@@ -120,6 +120,13 @@
       "when": 1790899200000,
       "tag": "0016_knowledge_graph",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790985600000,
+      "tag": "0017_memory_v2",
+      "breakpoints": true
     }
   ]
 }

@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Artifact, Decision, Document, DocumentVersion, Memory, Project } from "@/lib/types";
+import type { Artifact, Decision, Document, DocumentVersion, Memory, MemoryRevision, Project } from "@/lib/types";
 import { Card, Empty, Json, Ago } from "./ui";
+import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
 
 type Tab = "playbooks" | "documents" | "decisions" | "memory" | "artifacts";
 
@@ -34,7 +35,7 @@ const blankDocument = (kind: Document["kind"]): Document => ({
   updatedAt: "",
 });
 
-export function KnowledgePanel({ companyId, documents, decisions, memories, artifacts, projects, canManagePlaybooks }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean }) {
+export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("playbooks");
   const [open, setOpen] = useState<Document | null>(null);
@@ -42,6 +43,11 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<Memory | null>(null);
+  const [replacingFor, setReplacingFor] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [revisions, setRevisions] = useState<MemoryRevision[] | null>(null);
+  const [revisionsFor, setRevisionsFor] = useState<string | null>(null);
   const playbooks = documents.filter((d) => d.kind === "playbook");
   const regularDocuments = documents.filter((d) => d.kind !== "playbook");
   const projectName = (id: string | null) => id ? projects.find((p) => p.id === id)?.name ?? "Unknown project" : "Company-wide";
@@ -116,7 +122,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
     const fd = new FormData(form);
     setError(null);
     try {
-      await browserApi.post(`/companies/${companyId}/memories`, { kind: "knowledge", title: String(fd.get("title")), content: String(fd.get("content")), importance: 0.8, tags: ["user"] });
+      await browserApi.post(`/companies/${companyId}/memories`, { kind: String(fd.get("kind") || "knowledge"), title: String(fd.get("title")), content: String(fd.get("content")), importance: Number(fd.get("importance") || 6), tags: ["user"] });
       form.reset();
       router.refresh();
     } catch (err) {
@@ -131,6 +137,70 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
     }
+  }
+
+  async function confirmMemory(id: string) {
+    setBusy(`confirm:${id}`); setError(null);
+    try {
+      await browserApi.post(`/companies/${companyId}/memories/${id}/confirm`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Confirm failed");
+    } finally { setBusy(null); }
+  }
+
+  async function saveCorrection(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!correcting) return;
+    const fd = new FormData(e.currentTarget);
+    setBusy("correct"); setError(null);
+    try {
+      await browserApi.patch(`/companies/${companyId}/memories/${correcting.id}`, { title: String(fd.get("title") || ""), content: String(fd.get("content") || ""), importance: Number(fd.get("importance")) });
+      setCorrecting(null); setRevisions(null); setRevisionsFor(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Correction failed");
+    } finally { setBusy(null); }
+  }
+
+  async function replaceMemory(e: FormEvent<HTMLFormElement>, id: string) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const kind = memories.find((m) => m.id === id)?.kind ?? "knowledge";
+    setBusy(`supersede:${id}`); setError(null);
+    try {
+      await browserApi.post(`/companies/${companyId}/memories/${id}/supersede`, { kind, content: String(fd.get("content") || ""), importance: 6 });
+      setReplacingFor(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Supersede failed");
+    } finally { setBusy(null); }
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-2)));
+  }
+
+  async function mergeSelected() {
+    if (selected.length !== 2) return;
+    setBusy("merge"); setError(null);
+    try {
+      await browserApi.post(`/companies/${companyId}/memories/merge`, { intoId: selected[0], fromId: selected[1] });
+      setSelected([]);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Merge failed");
+    } finally { setBusy(null); }
+  }
+
+  async function loadRevisions(id: string) {
+    setBusy(`history:${id}`); setError(null);
+    try {
+      const { revisions: rows } = await browserApi.get<{ revisions: MemoryRevision[] }>(`/companies/${companyId}/memories/${id}`);
+      setRevisions(rows); setRevisionsFor(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "History could not be loaded");
+    } finally { setBusy(null); }
   }
 
   const tabs: Array<[Tab, string, number]> = [
@@ -214,7 +284,93 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, arti
       )}
 
       {tab === "memory" && (
-        <Card title="Long-term memory" className="nb-left-pink"><form onSubmit={addMemory} className="mb-4 grid gap-2 md:grid-cols-[1fr_2fr_auto]"><input name="title" className="input" placeholder="Title (e.g. Pricing decision)" required /><input name="content" className="input" placeholder="Something every agent should remember" required /><button className="btn btn-primary">Remember</button></form>{memories.length === 0 ? <Empty>Nothing remembered yet. Memories are retrieved semantically into every agent&rsquo;s context.</Empty> : <ul className="divide-y divide-line text-sm">{memories.map((m) => <li key={m.id} className="flex items-start justify-between gap-2 py-2"><div className="min-w-0"><div className="flex items-center gap-2"><span className="pill text-muted">{m.kind}</span><span className="font-medium">{m.title}</span><span className="text-xs text-muted">importance {m.importance}</span></div><p className="mt-1 text-muted">{m.content}</p></div><button className="btn btn-danger px-2 py-0.5 text-xs" onClick={() => forget(m.id)}>Forget</button></li>)}</ul>}</Card>
+        <Card title="Long-term memory" className="nb-left-pink">
+          <p className="mb-4 text-sm leading-6 text-muted">A memory is read into every agent&rsquo;s context, so it has to earn its place. What you write is kept; a run&rsquo;s outcome is kept only when it carries something reusable, and it expires unless someone confirms it. Correct a memory without destroying the record of what was believed before.</p>
+          <form onSubmit={addMemory} className="mb-4 grid gap-2 md:grid-cols-[9rem_1fr_2fr_9rem_auto]">
+            <select name="kind" className="input" defaultValue="knowledge" aria-label="Kind">{MEMORY_KIND_CHOICES.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
+            <input name="title" className="input" placeholder="Title (e.g. Pricing decision)" required />
+            <input name="content" className="input" placeholder="Something every agent should remember" required />
+            <select name="importance" className="input" defaultValue="6" aria-label="Importance">{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <button className="btn btn-primary">Remember</button>
+          </form>
+          {selected.length === 2 && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 card-inset p-3 text-sm">
+              <span>Merge the two selected memories into one, keeping the first.</span>
+              <button className="btn btn-sm" disabled={busy !== null} onClick={mergeSelected}>{busy === "merge" ? "Merging…" : "Merge selected"}</button>
+            </div>
+          )}
+          {pending.length > 0 && (
+            <div className="mb-4 nb-panel-flat nb-left-yellow p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Awaiting confirmation</div>
+              <ul className="space-y-2 text-sm">
+                {pending.map((m) => (
+                  <li key={m.id} className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0"><span className="font-medium">{m.title}</span> <span className="text-xs text-muted">{m.kind} · {expirySentence(m)}</span><p className="mt-0.5 text-muted">{m.content}</p></div>
+                    <button className="btn btn-sm" disabled={busy !== null} onClick={() => confirmMemory(m.id)}>{busy === `confirm:${m.id}` ? "Confirming…" : "Confirm"}</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {memories.length === 0 ? <Empty>Nothing remembered yet. Memories are retrieved into every agent&rsquo;s context — a fact you write, or a run&rsquo;s surprise, is what they are made of.</Empty> : (
+            <ul className="divide-y divide-line text-sm">
+              {memories.map((m) => (
+                <li key={m.id} className="py-3">
+                  {correcting?.id === m.id ? (
+                    <form onSubmit={saveCorrection} className="space-y-2 card-inset nb-left-pink p-3">
+                      <input name="title" className="input" defaultValue={m.title} placeholder="Title" />
+                      <textarea name="content" className="input min-h-24" defaultValue={m.content} required />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select name="importance" className="input w-40" defaultValue={String(m.importance)} aria-label="Importance">{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+                        <button type="button" className="btn" disabled={busy !== null} onClick={() => loadRevisions(m.id)}>{busy === `history:${m.id}` ? "Loading…" : "History"}</button>
+                        <span className="flex-1" />
+                        <button type="button" className="btn" onClick={() => { setCorrecting(null); setRevisions(null); setRevisionsFor(null); }}>Cancel</button>
+                        <button className="btn btn-primary" disabled={busy !== null}>{busy === "correct" ? "Saving…" : "Save correction"}</button>
+                      </div>
+                      {revisionsFor === m.id && revisions && (
+                        <div className="text-xs text-muted">{revisions.length === 0 ? <p>No earlier versions.</p> : <ul className="space-y-1">{revisions.map((r) => <li key={r.id}><span className="pill">{r.reason}</span> {r.title || "(untitled)"} · <Ago iso={r.createdAt} /></li>)}</ul>}</div>
+                      )}
+                    </form>
+                  ) : replacingFor === m.id ? (
+                    <form onSubmit={(e) => replaceMemory(e, m.id)} className="space-y-2 card-inset p-3">
+                      <textarea name="content" className="input min-h-24" placeholder="The corrected statement, which replaces this memory" required />
+                      <div className="flex justify-end gap-2">
+                        <button type="button" className="btn" onClick={() => setReplacingFor(null)}>Cancel</button>
+                        <button className="btn btn-primary" disabled={busy !== null}>{busy === `supersede:${m.id}` ? "Replacing…" : "Supersede"}</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <input type="checkbox" className="mt-1" checked={selected.includes(m.id)} onChange={() => toggleSelected(m.id)} aria-label="Select for merge" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="pill text-muted">{m.kind}</span>
+                          {m.title && <span className="font-medium">{m.title}</span>}
+                          <span className="pill text-muted" title={`importance ${m.importance} of 10`}>{importanceLabel(m.importance)}</span>
+                          <span className="text-xs text-muted">{confidenceLabel(m.confidence)} · {Math.round(m.confidence * 100)}%</span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-muted">{m.content}</p>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+                          <span>{describeProvenance(m)}</span>
+                          <Ago iso={m.createdAt} />
+                          {m.createdByRunId && <Link className="text-accent" href={`/app/c/${companyId}/runs/${m.createdByRunId}`}>run</Link>}
+                          {expirySentence(m) && <span>{expirySentence(m)}</span>}
+                          {m.confirmations > 0 && <span>{m.confirmations} confirmation{m.confirmations === 1 ? "" : "s"}</span>}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <button className="btn btn-sm" disabled={busy !== null} onClick={() => confirmMemory(m.id)}>{busy === `confirm:${m.id}` ? "…" : "Confirm"}</button>
+                        <button className="btn btn-sm" onClick={() => { setCorrecting(m); setRevisions(null); setRevisionsFor(null); }}>Correct</button>
+                        <button className="btn btn-sm" onClick={() => setReplacingFor(m.id)}>Supersede</button>
+                        {canManageMemories && <button className="btn btn-danger btn-sm" onClick={() => forget(m.id)}>Forget</button>}
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       )}
 
       {tab === "artifacts" && (

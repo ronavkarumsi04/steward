@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { AuthError, BrowserError, CodeError, GraphError, McpError, SiteError, WorkflowError, type EventBus } from "@steward/core";
+import { MemoryError } from "@steward/memory";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
 import { csrf, rateLimit, requestId, securityHeaders, session } from "./middleware.js";
@@ -124,6 +125,13 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
       const status = err.code === "not_found" ? 404 : err.code === "conflict" ? 409 : 422;
       const problems = (err.details as { problems?: unknown }).problems;
       return c.json({ error: { code: `graph_${err.code}`, message: err.message, details: { ...(Array.isArray(problems) && problems.length ? { problems } : {}), ...(typeof (err.details as { entityId?: unknown }).entityId === "string" ? { entityId: (err.details as { entityId: string }).entityId } : {}) }, requestId: rid } }, status);
+    }
+    if (err instanceof MemoryError) {
+      // A correction a memory cannot hold carries its problem list, and a memory an agent may not touch is a
+      // refusal the caller can tell apart from a missing row (ADR-0022 §4).
+      const status = err.code === "not_found" ? 404 : err.code === "forbidden" ? 403 : err.code === "conflict" ? 409 : 422;
+      const problems = (err.details as { problems?: unknown }).problems;
+      return c.json({ error: { code: `memory_${err.code}`, message: err.message, details: Array.isArray(problems) && problems.length ? { problems } : undefined, requestId: rid } }, status);
     }
     if (err instanceof SiteError) {
       // A refused save or publish carries the list of what is wrong, because that list is what the studio shows.

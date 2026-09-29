@@ -435,8 +435,30 @@ export interface Memory {
   scope: string;
   title: string;
   content: string;
+  /** How sure the writer is it is true (0–1). */
+  confidence: number;
+  confidenceBand: "uncertain" | "probable" | "confident";
+  /** How much it matters if it is true (1–10). */
   importance: number;
   tags: string[];
+  source: Record<string, unknown>;
+  sourceType: "user" | "agent" | "auto";
+  aboutEntityId: string | null;
+  createdByRunId: string | null;
+  supersededBy: string | null;
+  supersededAt: string | null;
+  correctedAt: string | null;
+  confirmations: number;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface MemoryRevision {
+  id: string;
+  title: string;
+  content: string;
+  reason: string;
+  author: Record<string, unknown>;
   createdAt: string;
 }
 

@@ -34,13 +34,35 @@ const memorySearch = defineTool({
 
 const memorySave = defineTool({
   name: "memory.save",
-  description: "Store a durable fact, learning or decision in company memory so future runs can use it. Keep it short and specific.",
-  input: z.object({ kind: z.enum(["knowledge", "decision", "entity", "performance", "episodic"]).default("knowledge"), title: z.string().max(120).optional(), content: z.string().min(5).max(4000), tags: z.array(z.string()).max(10).default([]), importance: z.number().int().min(1).max(5).default(3) }),
+  description: "Store a durable fact, learning or decision in company memory so future runs can use it. Keep it short and specific. Importance is 1 (trivial) to 10 (critical).",
+  input: z.object({ kind: z.enum(["knowledge", "decision", "performance", "episodic"]).default("knowledge"), title: z.string().max(120).optional(), content: z.string().min(5).max(4000), tags: z.array(z.string()).max(10).default([]), importance: z.number().int().min(1).max(10).default(5), confidence: z.number().min(0).max(1).optional(), aboutEntityId: z.string().min(1).optional() }),
   risk: "LOW",
   sideEffects: "internal",
   execute: async (input, ctx) => {
     const rec = await svc(ctx).memory.save({ ...input, createdByRunId: ctx.runId });
-    return { ok: true, content: `Saved memory ${rec.id}.`, data: rec };
+    // The write reports how sure it is; a memory a person can confirm is the only way an automatic one survives.
+    const when = rec.expiresAt ? ` Held until ${rec.expiresAt.toISOString().slice(0, 10)} unless a person confirms it.` : "";
+    return { ok: true, content: `Saved memory ${rec.id} (${rec.confidenceBand}).${when}`, data: rec };
+  },
+});
+
+/**
+ * Correct a memory this run wrote. An agent may fix its own mistake; it may never silently rewrite the founder's
+ * facts, which is why the service checks `createdByRunId` and a refusal is reported rather than thrown.
+ */
+const memoryCorrect = defineTool({
+  name: "memory.correct",
+  description: "Correct a memory your own run wrote when it turns out to be wrong or out of date. Only memories written by this run can be corrected; a refusal is reported instead of failing the run.",
+  input: z.object({ id: z.string().min(1), title: z.string().max(200).optional(), content: z.string().min(1).max(20000).optional(), importance: z.number().int().min(1).max(10).optional(), tags: z.array(z.string()).max(20).optional() }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async ({ id, ...patch }, ctx) => {
+    try {
+      const rec = await svc(ctx).memory.correct(id, patch);
+      return { ok: true, content: `Corrected memory ${rec.id}.`, data: rec };
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : "The correction could not be made.");
+    }
   },
 });
 
@@ -1212,7 +1234,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }

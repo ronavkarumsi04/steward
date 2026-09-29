@@ -353,6 +353,11 @@ export const EventType = z.enum([
   "budget.threshold",
   "budget.exhausted",
   "memory.written",
+  "memory.confirmed",
+  "memory.corrected",
+  "memory.superseded",
+  "memory.merged",
+  "memory.forgotten",
   "decision.recorded",
   "document.created",
   "document.updated",
@@ -428,10 +433,34 @@ export const MemoryKind = z.enum([
   "knowledge",
   "episodic",
   "decision",
-  "entity",
   "performance",
 ]);
 export type MemoryKind = z.infer<typeof MemoryKind>;
+
+/**
+ * What a memory's importance means, as a band rather than a bare number (ADR-0022).
+ *
+ * `importance` is the *consequence* of the fact being true, on one integer scale from 1 to 10 — the same scale
+ * the column holds and the API accepts. Giving each third of the scale a name means the number a founder or an
+ * agent picks means the same thing on every surface, and ranking can weight a band instead of a magic divisor.
+ */
+export const IMPORTANCE_BANDS = ["trivial", "minor", "notable", "important", "critical"] as const;
+export type ImportanceBand = (typeof IMPORTANCE_BANDS)[number];
+/** The inclusive 1–10 range each band takes. Five thirds: 1–2, 3–4, 5–6, 7–8, 9–10. */
+export function importanceBand(importance: number): ImportanceBand {
+  const n = Math.min(10, Math.max(1, Math.round(importance)));
+  return IMPORTANCE_BANDS[Math.min(IMPORTANCE_BANDS.length - 1, Math.floor((n - 1) / 2))]!;
+}
+
+/**
+ * Which door a memory came through, in one word (ADR-0022).
+ *
+ * It is not where it was stored (`kind`) — it is *who is saying so*: a person, an agent through the tool, or a
+ * run that earned a place automatically. Provenance is the reason a founder can tell a deliberate fact from a
+ * run's own summary, so it is a closed vocabulary rather than free text.
+ */
+export const MemorySource = z.enum(["user", "agent", "auto"]);
+export type MemorySource = z.infer<typeof MemorySource>;
 
 export const IntegrationStatus = z.enum(["connected", "needs_reauth", "error", "unavailable", "disconnected"]);
 export type IntegrationStatus = z.infer<typeof IntegrationStatus>;
