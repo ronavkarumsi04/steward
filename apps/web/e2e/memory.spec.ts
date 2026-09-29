@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { seedAutomaticMemory } from "./memory-seed";
+import { seedAutomaticMemory } from "./seed";
 import { createCompany, register, watchErrors } from "./session";
 
 /**
@@ -16,8 +16,8 @@ import { createCompany, register, watchErrors } from "./session";
  * The confirmation queue is a run's automatic memory — a failed run, an unverified ending or a run with follow-ups,
  * kept for three weeks unless a person confirms it. No request can create one (the API's write route records a
  * person's act; a run's own write carries `source: { type: "auto" }`), so the suite seeds the runtime's exact write
- * through the same service the runtime uses (`./memory-seed`) and then drives what a founder sees: the queue, the
- * sentence that says how long the memory has, confirming it into permanence, and a memory that lapsed.
+ * through the same service the runtime uses (`./seed`) and then drives what a founder sees: the queue, the sentence
+ * that says how long the memory has, confirming it into permanence, and a memory that lapsed.
  */
 
 /** A fresh company through the real onboarding, and the base path its pages live under. */
@@ -38,13 +38,6 @@ async function writeVia(page: Page, request: { method: string; url: RegExp; stat
     page.waitForResponse((r) => r.request().method() === request.method && request.url.test(r.url()) && r.status() === request.status),
     action(),
   ]);
-}
-
-/** The organisation a company belongs to, which the seed needs to write a row the company's own reads will find. */
-async function organization(page: Page, companyId: string): Promise<string> {
-  const response = await page.request.get(`/api/v1/companies/${companyId}`);
-  expect(response.status(), "the company's own read").toBe(200);
-  return ((await response.json()) as { company: { organizationId: string } }).company.organizationId;
 }
 
 /** Open the company's Memory tab the way a founder does: the Knowledge page, then the tab. */
@@ -242,10 +235,9 @@ test("shows what a run decided to remember, and confirming it stops it lapsing",
   const errors = watchErrors(page);
   await register(page);
   const { id, base } = await company(page, "Memory Queue");
-  const orgId = await organization(page, id);
   const checkpoint = (where: string) => expect(errors, `browser errors by ${where}`).toEqual([]);
 
-  const memoryId = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The pilot pricing ends in March." });
+  const memoryId = await seedAutomaticMemory({ companyId: id, content: "The pilot pricing ends in March." });
   await openMemory(page, base);
 
   // A run's own memory arrives in the review queue, with the sentence that says how long it has left.
@@ -288,11 +280,10 @@ test("lets an automatic memory lapse: one past its window is neither shown nor r
   const errors = watchErrors(page);
   await register(page);
   const { id, base } = await company(page, "Memory Lapse");
-  const orgId = await organization(page, id);
   const checkpoint = (where: string) => expect(errors, `browser errors by ${where}`).toEqual([]);
 
-  const lapsing = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The trial ends tomorrow.", expiresAt: new Date(Date.now() + 12 * 3_600_000) });
-  const lapsed = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The old pilot pricing ended in March.", expiresAt: new Date(Date.now() - 86_400_000) });
+  const lapsing = await seedAutomaticMemory({ companyId: id, content: "The trial ends tomorrow.", expiresAt: new Date(Date.now() + 12 * 3_600_000) });
+  const lapsed = await seedAutomaticMemory({ companyId: id, content: "The old pilot pricing ended in March.", expiresAt: new Date(Date.now() - 86_400_000) });
 
   await openMemory(page, base);
   // The one still inside its window is waiting to be confirmed, and says how little time it has.

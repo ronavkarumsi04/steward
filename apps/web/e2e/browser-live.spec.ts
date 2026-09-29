@@ -1,8 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { BrowserService } from "../../../packages/core/dist/index.js";
 import { FakeBrowserProvider } from "../../../packages/core/dist/test/fake-browser.js";
-import { createDb } from "../../../packages/db/dist/index.js";
-import type { TenantScope } from "../../../packages/schema/dist/index.js";
+import { openSeedDb, seedScope } from "./seed";
 import { createCompany, register, watchErrors } from "./session";
 
 /**
@@ -19,12 +18,11 @@ import { createCompany, register, watchErrors } from "./session";
  * The agent's half is driven in-process (`FakeBrowserProvider`) because no test can make a real model decide to look
  * at a page; the founder's half is the real page, the real server, the real stream, and real clicks. The fake still
  * routes every action through the service's `stillWanted` check, so the Stop below exercises the same race a real
- * worker does.
+ * worker does. The session is opened by that service against the stack's own database (`./seed`, which is also where
+ * a write no request can make — a run's automatic memory — is reproduced).
  */
 test.setTimeout(120_000);
 test.describe.configure({ mode: "serial" });
-
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 
 test("shows an agent's session as it happens, and stops it for real", async ({ page }) => {
   const errors = watchErrors(page);
@@ -37,11 +35,10 @@ test("shows an agent's session as it happens, and stops it for real", async ({ p
   await register(page);
   const companyId = await createCompany(page, "Browser Live");
 
-  const { db, pool } = createDb(DATABASE_URL);
-  const rows = await pool.query<{ organization_id: string }>("select organization_id from companies where id = $1", [companyId]);
-  const scope: TenantScope = { organizationId: rows.rows[0]!.organization_id, companyId, role: "owner", actor: { type: "user", userId: "browser-live-e2e" } };
+  const seed = openSeedDb();
+  const scope = await seedScope(seed, companyId, { actor: { type: "user", userId: "browser-live-e2e" }, role: "owner" });
   const provider = new FakeBrowserProvider();
-  const browser = new BrowserService(db, provider);
+  const browser = new BrowserService(seed.db, provider);
 
   try {
     await page.goto(`/app/c/${companyId}/browser`);
@@ -95,6 +92,6 @@ test("shows an agent's session as it happens, and stops it for real", async ({ p
     expect(errors).toEqual([]);
   } finally {
     await provider.dispose();
-    await pool.end();
+    await seed.close();
   }
 });
