@@ -2174,6 +2174,117 @@ describe("knowledge graph", () => {
   });
 });
 
+describe("memory 2.0 (ADR-0022)", () => {
+  /** A founder, a company, and the base path for its memories. */
+  async function workspace() {
+    const founder = await register("Rememberer");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Memory ${uniq()}`, autonomyLevel: 2 });
+    return { ...founder, companyId: co.body.company.id, base: `/companies/${co.body.company.id}/memories` };
+  }
+
+  d("keeps a fact a person wrote, with its provenance and no expiry", async () => {
+    const me = await workspace();
+    const created = await me.api.json<{ memory: { id: string; sourceType: string; confidence: number; importance: number; expiresAt: string | null; confidenceBand: string } }>("POST", me.base, { kind: "decision", title: "Pricing", content: "We charge $49 a seat.", importance: 8, tags: ["pricing"] });
+    expect(created.status).toBe(201);
+    expect(created.body.memory.sourceType).toBe("user");
+    expect(created.body.memory.confidence).toBeGreaterThan(0.8);
+    expect(created.body.memory.importance).toBe(8);
+    expect(created.body.memory.expiresAt).toBeNull();
+
+    const list = await me.api.json<{ memories: Array<{ id: string }>; pending: unknown[]; canManage: boolean }>("GET", me.base);
+    expect(list.body.memories.map((m) => m.id)).toContain(created.body.memory.id);
+    // A deliberate write is never waiting on confirmation, and the creator is an owner.
+    expect(list.body.pending).toEqual([]);
+    expect(list.body.canManage).toBe(true);
+  });
+
+  d("holds importance to the column's own scale — whole numbers 1 to 10", async () => {
+    const me = await workspace();
+    expect((await me.api.json("POST", me.base, { kind: "knowledge", content: "A fact", importance: 0.8 })).status).toBe(422);
+    expect((await me.api.json("POST", me.base, { kind: "knowledge", content: "A fact", importance: 11 })).status).toBe(422);
+    expect((await me.api.json("POST", me.base, { kind: "knowledge", content: "A fact", importance: 10 })).status).toBe(201);
+    // `entity` is retired: identity belongs to the graph, not to a kind of memory.
+    expect((await me.api.json("POST", me.base, { kind: "entity", content: "Acme" })).status).toBe(422);
+  });
+
+  d("corrects a memory without losing the words it replaced", async () => {
+    const me = await workspace();
+    const created = await me.api.json<{ memory: { id: string } }>("POST", me.base, { kind: "knowledge", title: "Price", content: "We charge $39.", importance: 6 });
+    const id = created.body.memory.id;
+    const corrected = await me.api.json<{ memory: { content: string; confidence: number; correctedAt: string | null } }>("PATCH", `${me.base}/${id}`, { content: "We charge $49.", importance: 8 });
+    expect(corrected.status).toBe(200);
+    expect(corrected.body.memory.content).toBe("We charge $49.");
+    expect(corrected.body.memory.confidence).toBe(1);
+    expect(corrected.body.memory.correctedAt).not.toBeNull();
+
+    const read = await me.api.json<{ memory: { content: string }; revisions: Array<{ content: string; reason: string }> }>("GET", `${me.base}/${id}`);
+    expect(read.body.memory.content).toBe("We charge $49.");
+    // The version before the correction is the reason there is a revision table at all.
+    expect(read.body.revisions).toHaveLength(1);
+    expect(read.body.revisions[0]).toMatchObject({ content: "We charge $39.", reason: "corrected" });
+  });
+
+  d("supersedes: the new statement is retrieved, the old one stays readable but out of search", async () => {
+    const me = await workspace();
+    const old = await me.api.json<{ memory: { id: string } }>("POST", me.base, { kind: "decision", title: "Hosting", content: "We host on the old provider.", importance: 6 });
+    const oldId = old.body.memory.id;
+    const next = await me.api.json<{ memory: { id: string } }>("POST", `${me.base}/${oldId}/supersede`, { kind: "decision", title: "Hosting", content: "We host on the new provider.", importance: 6 });
+    expect(next.status).toBe(201);
+
+    const list = await me.api.json<{ memories: Array<{ id: string }> }>("GET", me.base);
+    expect(list.body.memories.map((m) => m.id)).not.toContain(oldId);
+    expect(list.body.memories.map((m) => m.id)).toContain(next.body.memory.id);
+
+    // The old row is still there, marked, so "what did we believe then" has an answer.
+    const read = await me.api.json<{ memory: { supersededBy: string | null } }>("GET", `${me.base}/${oldId}`);
+    expect(read.body.memory.supersededBy).toBe(next.body.memory.id);
+    // Retrieval does not see it; the corrected statement is what a run is handed.
+    const search = await me.api.json<{ memories: Array<{ id: string }> }>("GET", `${me.base}?q=old%20provider`);
+    expect(search.body.memories.map((m) => m.id)).not.toContain(oldId);
+  });
+
+  d("merges two memories into one, losing neither the tags nor the record", async () => {
+    const me = await workspace();
+    const a = await me.api.json<{ memory: { id: string } }>("POST", me.base, { kind: "knowledge", title: "Acme", content: "Acme is on the enterprise plan.", tags: ["acme"] });
+    const b = await me.api.json<{ memory: { id: string } }>("POST", me.base, { kind: "knowledge", title: "Acme (again)", content: "Acme renewed in March.", tags: ["renewal"] });
+    const intoId = a.body.memory.id;
+    const fromId = b.body.memory.id;
+    const merged = await me.api.json<{ memory: { tags: string[] } }>("POST", `${me.base}/merge`, { intoId, fromId });
+    expect(merged.status).toBe(200);
+    expect(merged.body.memory.tags.sort()).toEqual(["acme", "renewal"]);
+
+    expect((await me.api.json<{ memory: { supersededBy: string | null } }>("GET", `${me.base}/${fromId}`)).body.memory.supersededBy).toBe(intoId);
+    const list = await me.api.json<{ memories: Array<{ id: string }> }>("GET", me.base);
+    expect(list.body.memories.map((m) => m.id)).not.toContain(fromId);
+  });
+
+  d("confirms a memory: certainty to the top, and a vote on the record", async () => {
+    const me = await workspace();
+    const created = await me.api.json<{ memory: { id: string; confidence: number } }>("POST", me.base, { kind: "knowledge", content: "Net revenue retention is 112%." });
+    const confirmed = await me.api.json<{ memory: { confidence: number; confirmations: number } }>("POST", `${me.base}/${created.body.memory.id}/confirm`);
+    expect(confirmed.body.memory.confidence).toBe(1);
+    expect(confirmed.body.memory.confirmations).toBe(1);
+  });
+
+  d("refuses to file a memory against a thing the company does not know", async () => {
+    const me = await workspace();
+    const res = await me.api.json<{ error: { details: { problems: Array<{ code: string }> } } }>("POST", me.base, { kind: "knowledge", content: "A fact", aboutEntityId: "not-a-real-entity" });
+    expect(res.status).toBe(422);
+    expect(res.body.error.details.problems.map((p) => p.code)).toContain("about_unknown");
+  });
+
+  d("keeps one company's memory out of another's, and forgets for real", async () => {
+    const me = await workspace();
+    const created = await me.api.json<{ memory: { id: string } }>("POST", me.base, { kind: "knowledge", content: "A private fact." });
+    const stranger = await register("Stranger");
+    // Another user is not a member of this company, so it is not there, because it is not theirs.
+    expect((await stranger.api.json("GET", me.base)).status).toBe(404);
+    expect((await stranger.api.json("DELETE", `${me.base}/${created.body.memory.id}`)).status).toBe(404);
+    expect((await me.api.json<{ ok: boolean }>("DELETE", `${me.base}/${created.body.memory.id}`)).body.ok).toBe(true);
+    expect((await me.api.json("GET", `${me.base}/${created.body.memory.id}`)).status).toBe(404);
+  });
+});
+
 describe("openapi + health", () => {
   d("serves a valid OpenAPI document covering every registered route", async () => {
     const res = await app.request("http://api.test/v1/openapi.json");

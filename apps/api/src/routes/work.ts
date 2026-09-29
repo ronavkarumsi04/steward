@@ -6,7 +6,7 @@ import type { AgentServiceFactory } from "@steward/agents";
 import { StripeClient } from "@steward/integrations";
 import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
 import { runWorkflowId, type WorkflowClient } from "@steward/workflows";
-import { HttpError, companyScope, type AppEnv, type Ctx, param } from "../context.js";
+import { HttpError, companyScope, roleAtLeast, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus, type ReactionLauncher } from "@steward/core";
 
@@ -294,19 +294,59 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     return c.json({ entries: await c.get("deps").services.events.auditLog(scope, query.limit) });
   });
 
-  // ---- knowledge ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/memories", tag: "knowledge", summary: "List or search memories", query: z.object({ q: z.string().max(500).optional(), kinds: csv(MemoryKind), limit }) }, async (c, { query }) => {
+  // ---- knowledge / memory (ADR-0022) ----
+  //
+  // Writing and correcting are *member* acts, because knowledge only an administrator can add stays empty;
+  // forgetting is an *administrator's*, because it destroys what a run may already have relied on. The read
+  // carries both capability flags from the same scope it renders, so a viewer is never shown a control that
+  // would be refused. `importance` is the column's own scale — a whole number 1–10 — and the surface offers it
+  // as bands, so the number a founder picks means the same thing here and in the database.
+  const MemoryWrite = z.object({ title: z.string().max(200).optional(), tags: z.array(z.string().max(50)).max(20).optional(), importance: z.number().int().min(1).max(10).optional(), confidence: z.number().min(0).max(1).optional(), aboutEntityId: z.string().min(1).max(60).nullable().optional() });
+  const MemoryCreate = MemoryWrite.extend({ kind: MemoryKind, content: z.string().min(1).max(20000) });
+  /** A correction may change the words and the classification; certainty is not a field, because a person fixing it makes it certain. */
+  const MemoryCorrect = MemoryWrite.omit({ confidence: true }).extend({ content: z.string().min(1).max(20000).optional(), kind: MemoryKind.optional() });
+
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/memories", tag: "knowledge", summary: "List or search memories, with the confirmation queue", query: z.object({ q: z.string().max(500).optional(), kinds: csv(MemoryKind), limit, includeSuperseded: z.enum(["true", "false"]).optional().transform((v) => v === "true") }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const memory = c.get("deps").services.forScope(scope).memory;
-    const memories = query.q ? await memory.search({ query: query.q, kinds: query.kinds, limit: query.limit }) : await memory.list({ kinds: query.kinds, limit: query.limit });
-    return c.json({ memories });
+    if (query.q) return c.json({ memories: await memory.search({ query: query.q, kinds: query.kinds, limit: query.limit }), pending: [], canManage: roleAtLeast(scope.role ?? "viewer", "admin") });
+    const [memories, pending] = await Promise.all([memory.list({ kinds: query.kinds, limit: query.limit, includeSuperseded: query.includeSuperseded }), memory.pending(20)]);
+    return c.json({ memories, pending, canManage: roleAtLeast(scope.role ?? "viewer", "admin") });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories", tag: "knowledge", summary: "Save a memory", body: z.object({ kind: MemoryKind, content: z.string().min(1).max(20000), title: z.string().max(200).optional(), tags: z.array(z.string().max(50)).max(20).optional(), importance: z.number().min(0).max(1).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories", tag: "knowledge", summary: "Save a memory", body: MemoryCreate }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
     return c.json({ memory: await c.get("deps").services.forScope(scope).memory.save({ ...body, source: { type: "user", userId: scope.userId } }) }, 201);
   });
-  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/memories/:id", tag: "knowledge", summary: "Forget a memory" }, async (c) => {
+  /** One memory and its revision history — the words it used to say, and who changed them. */
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/memories/:id", tag: "knowledge", summary: "Read a memory and its revision history" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"));
+    const memory = c.get("deps").services.forScope(scope).memory;
+    const record = await memory.get(param(c, "id"));
+    if (!record) throw new HttpError(404, "not_found", "Memory not found");
+    return c.json({ memory: record, revisions: await memory.revisions(record.id) });
+  });
+  /** Confirm: a person agrees this is true. Not an edit — certainty to the top and no expiry. */
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories/:id/confirm", tag: "knowledge", summary: "Confirm a memory" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ memory: await c.get("deps").services.forScope(scope).memory.confirm(param(c, "id")) });
+  });
+  /** Correct: change the words in place, keeping the words that were replaced as a revision. */
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/memories/:id", tag: "knowledge", summary: "Correct a memory", body: MemoryCorrect }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ memory: await c.get("deps").services.forScope(scope).memory.correct(param(c, "id"), body) });
+  });
+  /** Supersede: replace the fact with a new statement, keeping the old one readable but out of retrieval. */
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories/:id/supersede", tag: "knowledge", summary: "Supersede a memory with a newer statement", body: MemoryCreate }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ memory: await c.get("deps").services.forScope(scope).memory.supersede(param(c, "id"), { ...body, source: { type: "user", userId: scope.userId } }) }, 201);
+  });
+  /** Merge: two memories that are the same fact become one, losing nothing. */
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/memories/merge", tag: "knowledge", summary: "Merge one memory into another", body: z.object({ intoId: ID, fromId: ID }) }, async (c, { body }) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    return c.json({ memory: await c.get("deps").services.forScope(scope).memory.merge(body.intoId, body.fromId) });
+  });
+  defineRoute(app, reg, { method: "delete", path: "/companies/:companyId/memories/:id", tag: "knowledge", summary: "Forget a memory (destructive)" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"), "admin");
     return c.json({ ok: await c.get("deps").services.forScope(scope).memory.forget(param(c, "id")) });
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/documents", tag: "knowledge", summary: "List documents and playbooks", query: z.object({ folder: z.string().max(200).optional(), kind: z.enum(DOCUMENT_KINDS).optional(), projectId: ID.optional() }) }, async (c, { query }) => {

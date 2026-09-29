@@ -409,13 +409,51 @@ export const memories = pgTable("memories", {
   createdByRunId: text("created_by_run_id"),
   expiresAt: ts("expires_at"),
   supersededBy: text("superseded_by"),
+  /** When the row that replaced this one was written. Kept beside `supersededBy` so "what did we believe then" has a date. */
+  supersededAt: ts("superseded_at"),
+  /** Who corrected it and when — a correction that cannot be attributed is a sentence nobody stands behind. */
+  correctedBy: json<Record<string, unknown>>("corrected_by"),
+  correctedAt: ts("corrected_at"),
+  /** How many times a person (or a second writer) has confirmed this is true; a confirmation is a vote, not an edit. */
+  confirmations: integer("confirmations").notNull().default(0),
+  lastConfirmedAt: ts("last_confirmed_at"),
+  /**
+   * The thing a memory is *about*, when it is about one of the company's known things (ADR-0022).
+   *
+   * This does not copy the entity and it does not create one — `entities` owns identity, and a memory points at
+   * it the way every other row does. Set null rather than cascade because a fact outlives the thing it named.
+   */
+  aboutEntityId: text("about_entity_id").references(() => entities.id, { onDelete: "set null" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [
   index("memories_company_kind_idx").on(t.companyId, t.kind),
   index("memories_fts_idx").using("gin", sql`to_tsvector('english', coalesce(${t.title}, '') || ' ' || ${t.content})`),
   index("memories_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
+  /** The review queue: an automatic memory that is about to expire and has never been confirmed. */
+  index("memories_review_idx").on(t.companyId, t.expiresAt),
 ]);
+
+/**
+ * Every version a memory has had, newest last (ADR-0022).
+ *
+ * A correction is not an overwrite. When the words change, the words that were replaced are kept here with the
+ * author and the reason, so the question "what did this say before, and who changed it" has an answer that does
+ * not depend on anyone having taken a screenshot. It is the same shape as document versions, deliberately: one
+ * way of saying "this row has a history" in this product rather than two.
+ */
+export const memoryRevisions = pgTable("memory_revisions", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  memoryId: text("memory_id").notNull().references(() => memories.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default(""),
+  content: text("content").notNull(),
+  /** corrected | superseded | merged — why this version was replaced, in the writer's own vocabulary. */
+  reason: text("reason").notNull().default(""),
+  author: json<Record<string, unknown>>("author").notNull().default({}),
+  createdAt: createdAt(),
+}, (t) => [index("memory_revisions_memory_idx").on(t.memoryId, t.createdAt)]);
 
 export const decisions = pgTable("decisions", {
   id: id(),

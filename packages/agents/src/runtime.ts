@@ -1,5 +1,6 @@
 import { ProviderError, parseStructured, type ChatMessage, type ContentPart, type ToolCall } from "@steward/ai";
 import { BudgetExhaustedError } from "@steward/core";
+import { earningRule, expiryFor } from "@steward/memory";
 import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
 import { redactSecrets } from "@steward/crypto";
 import { PolicyRule, RoutingPolicy, VerificationVerdict, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
@@ -493,8 +494,20 @@ export class AgentRuntime {
     }
     if (run.conversationId && outcome.finalText) await this.s.conversations.addMessage(scope, { conversationId: run.conversationId, role: "assistant", content: outcome.finalText, runId, status: "complete" });
 
+    // A run's outcome earns a place in memory or it does not (ADR-0022 §1). The unconditional write is gone: a
+    // run that passed and changed nothing anyone can point at is already recorded as a run, and copying its
+    // summary into memory only competes with the facts a person wrote. A failure, an unverified ending or a
+    // follow-up *is* worth keeping, and it is kept with a short life a person can confirm.
+    const decision = earningRule({ status: outcome.status, verification: outcome.verification });
+    if (decision.remember) {
+      const summary = outcome.verification?.summary ?? outcome.error ?? outcome.finalText?.slice(0, 2000) ?? "";
+      if (summary.trim()) {
+        await this.s.memory
+          .save({ kind: decision.kind, title: `${agent.name}: ${run.intent.slice(0, 80)}`, content: summary, importance: decision.importance, confidence: decision.confidence, source: { type: "auto", component: "agent-runtime" }, createdByRunId: runId, tags: [agent.kind], expiresAt: expiryFor("auto") })
+          .catch(() => undefined);
+      }
+    }
     if (outcome.status === "succeeded" && outcome.verification) {
-      await this.s.memory.save({ kind: "episodic", title: `${agent.name}: ${run.intent.slice(0, 80)}`, content: outcome.verification.summary, importance: outcome.verification.passed ? 3 : 2, createdByRunId: runId, tags: [agent.kind] }).catch(() => undefined);
       for (const f of outcome.verification.followUps.slice(0, 5)) {
         const assignee = await this.s.agents.byKind(this.scope, f.assigneeKind as never).catch(() => null);
         await this.s.tasks.create(scope, { title: f.title, status: "todo", assigneeAgentId: assignee?.id ?? null, parentTaskId: run.taskId ?? null, labels: ["follow-up"] });
