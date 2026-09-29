@@ -300,11 +300,11 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
             </div>
           )}
           {pending.length > 0 && (
-            <div className="mb-4 nb-panel-flat nb-left-yellow p-3">
+            <div className="mb-4 nb-panel-flat nb-left-yellow p-3" data-testid="memory-queue">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Awaiting confirmation</div>
               <ul className="space-y-2 text-sm">
                 {pending.map((m) => (
-                  <li key={m.id} className="flex flex-wrap items-start justify-between gap-2">
+                  <li key={m.id} className="flex flex-wrap items-start justify-between gap-2" data-testid="memory-pending" data-id={m.id}>
                     <div className="min-w-0"><span className="font-medium">{m.title}</span> <span className="text-xs text-muted">{m.kind} · {expirySentence(m)}</span><p className="mt-0.5 text-muted">{m.content}</p></div>
                     <button className="btn btn-sm" disabled={busy !== null} onClick={() => confirmMemory(m.id)}>{busy === `confirm:${m.id}` ? "Confirming…" : "Confirm"}</button>
                   </li>
@@ -315,7 +315,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
           {memories.length === 0 ? <Empty>Nothing remembered yet. Memories are retrieved into every agent&rsquo;s context — a fact you write, or a run&rsquo;s surprise, is what they are made of.</Empty> : (
             <ul className="divide-y divide-line text-sm">
               {memories.map((m) => (
-                <li key={m.id} className="py-3">
+                <li key={m.id} className="py-3" data-testid="memory-row" data-id={m.id}>
                   {correcting?.id === m.id ? (
                     <form onSubmit={saveCorrection} className="space-y-2 card-inset nb-left-pink p-3">
                       <input name="title" className="input" defaultValue={m.title} placeholder="Title" />

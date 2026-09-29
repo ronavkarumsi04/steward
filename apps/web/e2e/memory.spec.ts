@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { seedAutomaticMemory } from "./memory-seed";
 import { createCompany, register, watchErrors } from "./session";
 
 /**
@@ -13,15 +14,37 @@ import { createCompany, register, watchErrors } from "./session";
  * the server and a refresh that raced the write would look like a product that quietly did nothing.
  *
  * The confirmation queue is a run's automatic memory — a failed run, an unverified ending or a run with follow-ups,
- * kept for three weeks unless a person confirms it. Automatic memories are written by the runtime, and this
- * deployment has no model provider, so the queue's own path is covered by the API suite (an `auto` row is not
- * creatable through a request); here the empty case is asserted, in the open, rather than skipped silently.
+ * kept for three weeks unless a person confirms it. No request can create one (the API's write route records a
+ * person's act; a run's own write carries `source: { type: "auto" }`), so the suite seeds the runtime's exact write
+ * through the same service the runtime uses (`./memory-seed`) and then drives what a founder sees: the queue, the
+ * sentence that says how long the memory has, confirming it into permanence, and a memory that lapsed.
  */
 
 /** A fresh company through the real onboarding, and the base path its pages live under. */
 async function company(page: Page, name: string): Promise<{ id: string; base: string }> {
   const id = await createCompany(page, name);
   return { id, base: `/app/c/${id}` };
+}
+
+/**
+ * Do something that writes, and wait for the page's own request to land before reading the store.
+ *
+ * The surface writes through the API and then re-renders from the server, so a read taken the instant the button
+ * is clicked can arrive before the write does — and a merge that had not landed yet looks exactly like a merge that
+ * did nothing. Waiting on the response the page itself is waiting for is the sync point, not a guess at a delay.
+ */
+async function writeVia(page: Page, request: { method: string; url: RegExp; status: number }, action: () => Promise<void>): Promise<void> {
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === request.method && request.url.test(r.url()) && r.status() === request.status),
+    action(),
+  ]);
+}
+
+/** The organisation a company belongs to, which the seed needs to write a row the company's own reads will find. */
+async function organization(page: Page, companyId: string): Promise<string> {
+  const response = await page.request.get(`/api/v1/companies/${companyId}`);
+  expect(response.status(), "the company's own read").toBe(200);
+  return ((await response.json()) as { company: { organizationId: string } }).company.organizationId;
 }
 
 /** Open the company's Memory tab the way a founder does: the Knowledge page, then the tab. */
@@ -110,7 +133,7 @@ test("corrects a memory keeping the words it replaced, and supersedes it keeping
   await expect(form).toBeVisible();
   await form.locator('input[name="title"]').fill("Price");
   await form.locator('textarea[name="content"]').fill("We charge $49.");
-  await form.getByRole("button", { name: "Save correction" }).click();
+  await writeVia(page, { method: "PATCH", url: /\/memories\/[0-9a-f-]+$/, status: 200 }, () => form.getByRole("button", { name: "Save correction" }).click());
 
   // The store keeps the replaced words as a revision — the reason the table exists rather than a diff at render time.
   const [afterCorrect] = await readMemories(page, id);
@@ -139,12 +162,8 @@ test("corrects a memory keeping the words it replaced, and supersedes it keeping
   await page.getByRole("button", { name: "Supersede" }).click();
   const replace = page.locator("form").filter({ has: page.getByRole("button", { name: "Supersede" }) });
   await replace.locator("textarea").fill("A seat is $59 a month.");
-  // The replaced statement is written and the old row marked in one transaction; wait for the page's own call to
-  // land rather than reading the store the instant the button is clicked.
-  await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "POST" && /\/memories\/[0-9a-f-]+\/supersede$/.test(r.url()) && r.status() === 201),
-    replace.getByRole("button", { name: "Supersede" }).click(),
-  ]);
+  // The replaced statement is written and the old row marked in one transaction, so wait for the page's own call.
+  await writeVia(page, { method: "POST", url: /\/memories\/[0-9a-f-]+\/supersede$/, status: 201 }, () => replace.getByRole("button", { name: "Supersede" }).click());
 
   const live = await readMemories(page, id);
   expect(live.map((m) => m.content)).toEqual(["A seat is $59 a month."]);
@@ -186,7 +205,7 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   await expect(page.getByRole("button", { name: "Merge selected" })).toHaveCount(0);
   await boxes.nth(1).check();
   await expect(page.getByText("Merge the two selected memories into one, keeping the first.")).toBeVisible();
-  await page.getByRole("button", { name: "Merge selected" }).click();
+  await writeVia(page, { method: "POST", url: /\/memories\/merge$/, status: 200 }, () => page.getByRole("button", { name: "Merge selected" }).click());
 
   // Merge keeps the first row of the two that were selected — the newest, which is how the list is ordered — and
   // the one it absorbed is superseded rather than gone.
@@ -215,6 +234,80 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   await showMemoryTab(page);
   await expect(page.getByText("Nothing remembered yet.")).toBeVisible();
   checkpoint("forgetting a memory");
+
+  expect(errors).toEqual([]);
+});
+
+test("shows what a run decided to remember, and confirming it stops it lapsing", async ({ page }) => {
+  const errors = watchErrors(page);
+  await register(page);
+  const { id, base } = await company(page, "Memory Queue");
+  const orgId = await organization(page, id);
+  const checkpoint = (where: string) => expect(errors, `browser errors by ${where}`).toEqual([]);
+
+  const memoryId = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The pilot pricing ends in March." });
+  await openMemory(page, base);
+
+  // A run's own memory arrives in the review queue, with the sentence that says how long it has left.
+  const queue = page.getByTestId("memory-queue");
+  await expect(queue.getByText("Awaiting confirmation")).toBeVisible();
+  const pending = page.getByTestId("memory-pending");
+  await expect(pending).toHaveAttribute("data-id", memoryId);
+  await expect(pending).toContainText("The pilot pricing ends in March.");
+  await expect(pending).toContainText("expires in 21 days unless confirmed");
+  checkpoint("the queue a run left behind");
+
+  // It is a live memory too: retrieved now, but with a life a person can cut short — and it is not something a
+  // person wrote, which is the distinction the provenance line exists to keep.
+  const row = page.getByTestId("memory-row");
+  await expect(row).toContainText("Recorded from a run");
+  await expect(row).toContainText("Uncertain · 50%");
+  await expect(row).toContainText("expires in 21 days unless confirmed");
+  const stored = (await readMemories(page, id)).find((m) => m.id === memoryId)!;
+  expect(stored).toMatchObject({ sourceType: "auto", importance: 3, confidence: 0.5 });
+  expect(stored.expiresAt).not.toBeNull();
+  checkpoint("an automatic memory that is still in its window");
+
+  // Confirming is the act the queue asks for: certainty to the top, a vote on the record, and no expiry at all.
+  await pending.getByRole("button", { name: "Confirm" }).click();
+  await expect(queue).toHaveCount(0);
+  await expect.poll(async () => (await readMemories(page, id)).find((m) => m.id === memoryId)).toMatchObject({ confirmations: 1, confidence: 1, expiresAt: null });
+  await expect(row).toContainText("Confirmed by a person");
+  await expect(row).toContainText("1 confirmation");
+  await expect(row).not.toContainText("unless confirmed");
+  await page.reload();
+  await showMemoryTab(page);
+  await expect(page.getByTestId("memory-queue")).toHaveCount(0);
+  await expect(page.getByTestId("memory-row")).toContainText("Confirmed by a person");
+  checkpoint("confirming a run's memory");
+
+  expect(errors).toEqual([]);
+});
+
+test("lets an automatic memory lapse: one past its window is neither shown nor read back", async ({ page }) => {
+  const errors = watchErrors(page);
+  await register(page);
+  const { id, base } = await company(page, "Memory Lapse");
+  const orgId = await organization(page, id);
+  const checkpoint = (where: string) => expect(errors, `browser errors by ${where}`).toEqual([]);
+
+  const lapsing = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The trial ends tomorrow.", expiresAt: new Date(Date.now() + 12 * 3_600_000) });
+  const lapsed = await seedAutomaticMemory({ organizationId: orgId, companyId: id, content: "The old pilot pricing ended in March.", expiresAt: new Date(Date.now() - 86_400_000) });
+
+  await openMemory(page, base);
+  // The one still inside its window is waiting to be confirmed, and says how little time it has.
+  const pending = page.getByTestId("memory-pending");
+  await expect(pending).toHaveCount(1);
+  await expect(pending).toContainText("The trial ends tomorrow.");
+  await expect(pending).toContainText("expires tomorrow unless confirmed");
+  // The one that lapsed is not retrieved, not reviewed, and not on the page — which is what expiring means.
+  await expect(page.getByText("The old pilot pricing ended in March.")).toHaveCount(0);
+  expect((await readMemories(page, id)).map((m) => m.id)).toEqual([lapsing]);
+  // It is not gone, though: a lapsed memory is still a row, and the read that asks for replaced rows returns it.
+  const all = (await (await page.request.get(`/api/v1/companies/${id}/memories?limit=100&includeSuperseded=true`)).json()) as { memories: Array<{ id: string; expiresAt: string | null }> };
+  expect(all.memories.map((m) => m.id).sort()).toEqual([lapsing, lapsed].sort());
+  expect(Date.parse(all.memories.find((m) => m.id === lapsed)!.expiresAt!)).toBeLessThan(Date.now());
+  checkpoint("a lapsed memory beside one still in its window");
 
   expect(errors).toEqual([]);
 });
