@@ -2,7 +2,16 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { describe, expect, it } from "vitest";
-import { describeFailure, failureExpected, networkSettled, requestFailure, responseFailure, watchErrors, type ExpectedFailure } from "../../e2e/session";
+import {
+  describeFailure,
+  failureExpected,
+  networkSettled,
+  requestFailure,
+  responseFailure,
+  unfulfilledExpectations,
+  watchErrors,
+  type ExpectedFailure,
+} from "../../e2e/session";
 
 /**
  * The e2e suite's conventions, held to by a test rather than by memory.
@@ -390,6 +399,33 @@ describe("the e2e suite keeps to its conventions", () => {
     expect(failureExpected(pattern, requestFailure("POST", entities, "net::ERR_CONNECTION_REFUSED")!)).toBe(false);
   });
 
+  it("reports an expected failure that never happened as stale", async () => {
+    const handlers = new Map<string, (argument: unknown) => void>();
+    const fakePage = {
+      on: (event: string, handler: (argument: unknown) => void) => {
+        handlers.set(event, handler);
+      },
+      evaluate: () => Promise.resolve(undefined),
+    } as unknown as Page;
+    watchErrors(fakePage, {
+      expect: [
+        { method: "POST", path: "/api/v1/auth/login", status: 401 },
+        { method: "POST", path: /\/graph\/entities\/[^/]+\/links$/, reason: "net::ERR_REQUIRED" },
+      ],
+    });
+    // An expectation whose answer is a status does not fire when a different answer arrives on the same route.
+    handlers.get("response")!({ status: () => 500, request: () => ({ method: () => "POST" }), url: () => "http://localhost:3000/api/v1/auth/login" });
+    // An expectation whose answer is a reason does not fire when the route answers at all.
+    handlers.get("response")!({ status: () => 201, request: () => ({ method: () => "POST" }), url: () => "http://localhost:3000/api/v1/companies/7/graph/entities/9/links" });
+    const remaining = unfulfilledExpectations(fakePage);
+    // Neither rule was kept.
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0]!.describe()).toBe("POST /api/v1/auth/login status 401");
+    expect(remaining[1]!.describe()).toBe("POST /\\/graph\\/entities\\/[^/]+\\/links$/ reason net::ERR_REQUIRED");
+    // A settled page with unread expectations throws.
+    await expect(networkSettled(fakePage)).rejects.toThrow(/stale allowance/);
+  });
+
   it("fails a test that asserts before the page's network has settled", () => {
     // The failure this rule exists for: the page has already acted on the response, the test has asserted, and the
     // watcher has simply not been told yet — so the test passes on a list that is about to have a failure in it.
@@ -408,6 +444,28 @@ describe("the e2e suite keeps to its conventions", () => {
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("some.spec.ts");
     expect(problems[0]).toContain("networkSettled(page)");
+  });
+
+  it("requires every expected failure to actually fire before the test settles", async () => {
+    const handlers = new Map<string, (argument: unknown) => void>();
+    const fakePage = {
+      on: (event: string, handler: (argument: unknown) => void) => {
+        handlers.set(event, handler);
+      },
+      evaluate: () => Promise.resolve(undefined),
+    } as unknown as Page;
+    watchErrors(fakePage, {
+      expect: [{ method: "POST", path: "/api/v1/auth/login", status: 401 }],
+    });
+    // A settled page with an expectation never fired fails the settle, not the assertion.
+    await expect(networkSettled(fakePage)).rejects.toThrow(/stale allowance/);
+
+    // The same expectation is fine once the failure it named actually happens.
+    watchErrors(fakePage, {
+      expect: [{ method: "POST", path: "/api/v1/things", status: 422 }],
+    });
+    handlers.get("response")!({ status: () => 422, request: () => ({ method: () => "POST" }), url: () => "http://localhost:3000/api/v1/things" });
+    await expect(networkSettled(fakePage)).resolves.toBeUndefined();
   });
 
   it("settles the page's network before a test asserts, and says so when nothing is watching", async () => {
@@ -443,6 +501,7 @@ describe("the e2e suite keeps to its conventions", () => {
       on: (event: string, handler: (argument: unknown) => void) => {
         handlers.set(event, handler);
       },
+      evaluate: () => Promise.resolve(undefined),
     } as unknown as Page;
     const errors = watchErrors(fakePage, { expect: [{ method: "POST", path: "/api/v1/mcp", status: 422 }] });
     const fire = (event: string, argument: unknown) => handlers.get(event)!(argument);
@@ -454,6 +513,7 @@ describe("the e2e suite keeps to its conventions", () => {
       failure: () => ({ errorText: "net::ERR_CONNECTION_REFUSED" }),
     });
     fire("requestfailed", { method: () => "GET", url: () => "http://localhost:3000/app?_rsc=x", failure: () => ({ errorText: "net::ERR_ABORTED" }) });
+    // The 422 on /api/v1/mcp was named, so it is dropped; the 500 and the refused request were not, so they stand.
     expect(errors).toEqual([
       "http 500 GET http://localhost:3000/api/v1/companies",
       "requestfailed GET http://localhost:3000/api/v1/companies (net::ERR_CONNECTION_REFUSED)",
