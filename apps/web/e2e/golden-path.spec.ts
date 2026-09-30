@@ -1,17 +1,20 @@
 import { expect, test } from "@playwright/test";
-import { PASSWORD, openCompanyPalette, register } from "./session";
+import { PASSWORD, openCompanyPalette, register, watchErrors } from "./session";
 
 const password = PASSWORD;
 
 test.describe.configure({ mode: "serial" });
 
 test("landing links to sign-in, register and API docs", async ({ page }) => {
+  const errors = watchErrors(page);
   await page.goto("/");
   await expect(page.getByRole("link", { name: /sign in/i }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /get started|register|create/i }).first()).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("unauthenticated workspace redirects to login; bad credentials show an error", async ({ page }) => {
+  const errors = watchErrors(page);
   await page.goto("/app");
   await page.waitForURL(/\/login/);
   await page.getByLabel("Email").fill("nobody@example.com");
@@ -19,9 +22,11 @@ test("unauthenticated workspace redirects to login; bad credentials show an erro
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
+  expect(errors).toEqual([]);
 });
 
 test("register → onboarding → dashboard → tasks → settings → providers → sign out → sign in", async ({ page }) => {
+  const errors = watchErrors(page);
   const email = await register(page);
 
   // A fresh account has no companies, so /app forwards to onboarding.
@@ -216,4 +221,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/app\/c\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
+
+  // The whole walk, from the landing page to signing back in, without a single uncaught error or console error.
+  expect(errors).toEqual([]);
 });
