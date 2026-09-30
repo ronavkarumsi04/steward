@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { BrowserService } from "../../../packages/core/dist/index.js";
-import { FakeBrowserProvider } from "../../../packages/core/dist/test/fake-browser.js";
+import { BrowserService } from "@steward/core";
+import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
 import { openSeedDb, seedScope } from "./seed";
 import { createCompany, register, watchErrors } from "./session";
 
