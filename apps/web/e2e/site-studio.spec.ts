@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The Site Studio, driven the way a founder drives it: start from the company's own words, change a headline,
@@ -96,6 +96,7 @@ test("build a page, see it, publish it, and put a version back", async ({ page }
   await versions.getByRole("button", { name: "Ship it" }).first().click();
   await expect(page.getByText(/The agent is told to write these exact bytes/i)).toBeVisible();
 
+  await networkSettled(page);
   expect(errors.filter((message) => !SANDBOX_NOTICE.test(message))).toEqual([]);
 });
 
@@ -120,5 +121,6 @@ test("fits a phone, and the preview is the only thing that scrolls", async ({ pa
 
   // A page that fits is only worth having if it also ran: the widths above were measured on a live page, preview
   // document and all.
+  await networkSettled(page);
   expect(errors.filter((message) => !SANDBOX_NOTICE.test(message))).toEqual([]);
 });

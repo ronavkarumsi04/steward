@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { seedAutomaticMemory } from "./seed";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * Memory 2.0, from the founder's side (ADR-0022).
@@ -108,6 +108,7 @@ test("files a fact a person wrote, with its provenance, its band and no expiry",
   await expect(page.getByText("We charge $49 a seat.")).toBeVisible();
   checkpoint("filing a memory");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -176,6 +177,7 @@ test("corrects a memory keeping the words it replaced, and supersedes it keeping
   await expect(page.getByText("A seat is $59 a month.")).toBeVisible();
   checkpoint("superseding a memory");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -228,6 +230,7 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   await expect(page.getByText("Nothing remembered yet.")).toBeVisible();
   checkpoint("forgetting a memory");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -273,6 +276,7 @@ test("shows what a run decided to remember, and confirming it stops it lapsing",
   await expect(page.getByTestId("memory-row")).toContainText("Confirmed by a person");
   checkpoint("confirming a run's memory");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -300,6 +304,7 @@ test("lets an automatic memory lapse: one past its window is neither shown nor r
   expect(Date.parse(all.memories.find((m) => m.id === lapsed)!.expiresAt!)).toBeLessThan(Date.now());
   checkpoint("a lapsed memory beside one still in its window");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -341,5 +346,6 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
   expect(withWiderText, `with wider text these reach past the phone: ${withWiderText.join(" | ")}`).toEqual([]);
 
   // A page that fits is only worth having if it also ran: every width above was measured on a live page.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

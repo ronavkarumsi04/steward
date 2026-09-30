@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { register, watchErrors } from "./session";
+import { networkSettled, register, watchErrors } from "./session";
 
 /**
  * The motion rules, driven in a real browser.
@@ -106,6 +106,7 @@ test("with reduced motion nothing moves, and nothing is hidden", async ({ page }
   expect(state.ambient).toBe("none");
   expect(state.hero).toBe("1");
   expect(state.running).toBe(0);
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -120,6 +121,7 @@ test("the only properties this product moves are transform and opacity", async (
   for (const property of properties) {
     expect(["opacity", "transform"]).toContain(property);
   }
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -140,6 +142,7 @@ test("an arrival ends: nothing is left in flight once the shell has arrived", as
     });
   expect(landed.opacity).toBe("1");
   expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(landed.transform);
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -189,5 +192,6 @@ test("a settling bar lands exactly on its value and leaves no frame requests beh
   for (const property of await animatedProperties(page)) {
     expect(["opacity", "transform"]).toContain(property);
   }
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

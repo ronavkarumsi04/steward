@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The knowledge graph, from the founder's side.
@@ -102,11 +102,19 @@ test("reads what the company already has, and says which column every connection
   await page.getByRole("button", { name: "Clear" }).click();
   checkpoint("searching");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
 test("records a thing, confirms the one it already knew, corrects it, connects it, merges a duplicate and forgets it", async ({ page }) => {
-  const errors = watchErrors(page);
+  // Two refusals are this test's point, and both are rendered on the page and asserted below: the graph's own rules
+  // turning down a name that says nothing, and the server refusing a claim whose target is a competitor.
+  const errors = watchErrors(page, {
+    expect: [
+      { method: "POST", path: /\/graph\/entities$/, status: 422 },
+      { method: "POST", path: /\/graph\/entities\/[^/]+\/links$/, status: 422 },
+    ],
+  });
   await register(page);
   const { base, id } = await company(page, "Graph Things");
   const checkpoint = (where: string) => expect(errors, `browser errors by ${where}`).toEqual([]);
@@ -215,6 +223,7 @@ test("records a thing, confirms the one it already knew, corrects it, connects i
   await expect(page.getByTestId("graph-links")).toContainText("Nothing has been connected yet");
   checkpoint("forgetting a thing");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -249,6 +258,7 @@ test("keeps a claim whose row is gone on the page, and lets somebody drop it", a
   await expect(page.getByTestId("graph-links")).toContainText("Nothing has been connected yet");
   checkpoint("dropping the claim");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -301,5 +311,6 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
   expect(withWiderText, `with wider text these reach past the phone: ${withWiderText.join(" | ")}`).toEqual([]);
 
   // A page that fits is only worth having if it also ran: every width above was measured on a live page.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

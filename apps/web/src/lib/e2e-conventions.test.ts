@@ -1,16 +1,19 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import type { Page } from "@playwright/test";
 import { describe, expect, it } from "vitest";
+import { describeFailure, failureExpected, networkSettled, requestFailure, responseFailure, watchErrors, type ExpectedFailure } from "../../e2e/session";
 
 /**
  * The e2e suite's conventions, held to by a test rather than by memory.
  *
  * A suite this size accretes load-bearing habits that nobody writes down: every spec registers its own account and
- * onboards its own company through `./session`; every test watches the browser for uncaught errors and console
- * errors while it drives its surface; a write made with the session cookie carries the Origin the browser itself
- * would send; navigation is by path, so `E2E_BASE_URL` decides where the suite runs; and the one file that reaches
- * past the API into Postgres is `seed.ts`. Each of those survives only until the next test is copied from its
- * neighbour with a detail missing.
+ * onboards its own company through `./session`; every test watches the browser while it drives its surface — for
+ * uncaught errors, console errors, refused responses and requests that never completed — settles the page's
+ * network, and then asserts it saw nothing; a write made with the session cookie carries the Origin the browser
+ * itself would send; navigation is by
+ * path, so `E2E_BASE_URL` decides where the suite runs; and the one file that reaches past the API into Postgres is
+ * `seed.ts`. Each of those survives only until the next test is copied from its neighbour with a detail missing.
  *
  * So this reads the suite off disk and fails with the file and the test named, and the alternative spelled out.
  * What it is not: a parser, and not a claim to cover everything — it reads text, and states only rules it can hold
@@ -49,10 +52,20 @@ const DATABASE_PACKAGES = ["@steward/db", "@steward/memory"];
 /** Another package's files, named by path instead of by package: `…/packages/core/dist/index.js`. */
 const BY_FILE_PATH = /(?:^|\/)packages\/[^/]+\/(?:dist|src)\//;
 
-/** What every test must do while it drives a surface, and what it must say about what it saw. */
-const WATCHES_ERRORS = /\bwatchErrors\(page\)/;
+/**
+ * What every test must do while it drives a surface: watch it, whether or not it also names failures it drives on
+ * purpose. Which failures a test expects is its own business; that it watched is the suite's.
+ */
+const WATCHES_ERRORS = /\bwatchErrors\(\s*page\b/;
 const ASSERTS_ERRORS = /expect\(\s*errors/;
 const ASSERTS_NONE = /toEqual\(\[\]\)/;
+
+/**
+ * What every test must do before it asserts: wait until the page's own network has caught up. A response reaches
+ * this process a moment after the browser has acted on it, so a test that asserts without settling can pass on an
+ * empty list while the page in front of it is showing a failure it just received.
+ */
+const SETTLES_NETWORK = /\bawait\s+networkSettled\(\s*page\b/;
 
 /** Where a test begins: `test("…", async ({ page }) => {`, indented or not, at the start of a line. */
 const TEST_STARTS = /^[ \t]*test\(/gm;
@@ -167,6 +180,10 @@ function errorProblems(files: SourceFile[]): string[] {
       } else if (!ASSERTS_ERRORS.test(block.source) || !ASSERTS_NONE.test(block.source)) {
         problems.push(
           `${spec.name} "${block.name}" watches for browser errors but never asserts there were none. What it collected is evidence only once it ends in expect(errors).toEqual([]) — or a checkpoint that does the same as the steps go by.`,
+        );
+      } else if (!SETTLES_NETWORK.test(block.source)) {
+        problems.push(
+          `${spec.name} "${block.name}" asserts what the browser saw without settling the page's network first. A response reaches this process a moment after the page has acted on it, so that assertion can pass while the failure the test drove is still on its way: await networkSettled(page) after the last thing the test does, and before it asserts.`,
         );
       }
     }
@@ -313,6 +330,7 @@ describe("the e2e suite keeps to its conventions", () => {
           `test("the watched one", async ({ page }) => {`,
           `  const errors = watchErrors(page);`,
           `  await page.goto("/");`,
+          `  await networkSettled(page);`,
           `  expect(errors).toEqual([]);`,
           `});`,
           ``,
@@ -335,6 +353,111 @@ describe("the e2e suite keeps to its conventions", () => {
     expect(generated).toHaveLength(1);
     expect(generated[0]).toContain("some.spec.ts");
     expect(generated[0]).toContain("no tests this guard can read");
+  });
+
+  it("fails a refused response and a request that never completed, and says each one plainly", () => {
+    // An answer is not a failure: only what the server refused, or what never arrived, is.
+    expect(responseFailure(200, "GET", "http://localhost:3000/api/v1/companies")).toBeNull();
+    expect(responseFailure(302, "GET", "http://localhost:3000/app")).toBeNull();
+    expect(describeFailure(responseFailure(422, "POST", "http://localhost:3000/api/v1/companies/abc/mcp")!)).toBe(
+      "http 422 POST http://localhost:3000/api/v1/companies/abc/mcp",
+    );
+
+    // A read the browser abandons is the page moving on: Next.js leaves a superseded prefetch behind on every
+    // navigation, so a suite that counted those would fail on its own traffic rather than on the product.
+    expect(requestFailure("GET", "http://localhost:3000/app/c/1?_rsc=abc", "net::ERR_ABORTED")).toBeNull();
+    // An abandoned write is the product asking for a change and withdrawing it, and any other reason is the network
+    // failing to deliver what the page asked for.
+    expect(requestFailure("POST", "http://localhost:3000/api/v1/things", "net::ERR_ABORTED")).not.toBeNull();
+    expect(
+      describeFailure(requestFailure("GET", "http://localhost:3000/api/v1/things", "net::ERR_CONNECTION_REFUSED")!),
+    ).toBe("requestfailed GET http://localhost:3000/api/v1/things (net::ERR_CONNECTION_REFUSED)");
+  });
+
+  it("lets a test name the failure it drives, and nothing wider", () => {
+    const refused = responseFailure(401, "POST", "http://localhost:3000/api/v1/auth/login")!;
+    const named: ExpectedFailure[] = [{ method: "POST", path: "/api/v1/auth/login", status: 401 }];
+    expect(failureExpected(named, refused)).toBe(true);
+    // The same route answering differently, or answering a different method, is not what the test named.
+    expect(failureExpected(named, responseFailure(500, "POST", "http://localhost:3000/api/v1/auth/login")!)).toBe(false);
+    expect(failureExpected(named, responseFailure(401, "GET", "http://localhost:3000/api/v1/auth/login")!)).toBe(false);
+    expect(failureExpected(named, responseFailure(401, "POST", "http://localhost:3000/api/v1/auth/logout")!)).toBe(false);
+    // A path with an id in the middle is named by a pattern, and a refusal is not a licence for a request that
+    // never came back: the two failures are different answers, and the test names the one it drives.
+    const pattern: ExpectedFailure[] = [{ method: "POST", path: /\/graph\/entities$/, status: 422 }];
+    const entities = "http://localhost:3000/api/v1/companies/1/graph/entities";
+    expect(failureExpected(pattern, responseFailure(422, "POST", entities)!)).toBe(true);
+    expect(failureExpected(pattern, requestFailure("POST", entities, "net::ERR_CONNECTION_REFUSED")!)).toBe(false);
+  });
+
+  it("fails a test that asserts before the page's network has settled", () => {
+    // The failure this rule exists for: the page has already acted on the response, the test has asserted, and the
+    // watcher has simply not been told yet — so the test passes on a list that is about to have a failure in it.
+    const problems = errorProblems([
+      {
+        name: "some.spec.ts",
+        source: [
+          `test("x", async ({ page }) => {`,
+          `  const errors = watchErrors(page);`,
+          `  await page.goto("/");`,
+          `  expect(errors).toEqual([]);`,
+          `});`,
+        ].join("\n"),
+      },
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("some.spec.ts");
+    expect(problems[0]).toContain("networkSettled(page)");
+  });
+
+  it("settles the page's network before a test asserts, and says so when nothing is watching", async () => {
+    const handlers = new Map<string, (argument: unknown) => void>();
+    const fakePage = {
+      on: (event: string, handler: (argument: unknown) => void) => {
+        handlers.set(event, handler);
+      },
+      evaluate: () => Promise.resolve(undefined),
+    } as unknown as Page;
+    // A page the watcher was never put on has nothing to settle; saying so beats asserting against a list nobody is
+    // filling.
+    await expect(networkSettled(fakePage)).rejects.toThrow(/watchErrors/);
+
+    watchErrors(fakePage);
+    // A request still in flight at assertion time is waited for, bounded by the timeout...
+    const request = { method: () => "GET" };
+    handlers.get("request")!(request);
+    const started = Date.now();
+    await networkSettled(fakePage, 40);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(30);
+    // ...and once its answer has arrived there is nothing left to wait for.
+    handlers.get("response")!({ request: () => request, status: () => 200, url: () => "http://localhost:3000/api/v1/companies" });
+    const answered = Date.now();
+    await networkSettled(fakePage, 40);
+    expect(Date.now() - answered).toBeLessThan(100);
+  });
+
+  it("reads the page's network, not only its exceptions, and drops exactly what the test named", () => {
+    // The wiring, held to account without a browser: what watchErrors subscribes to, and what reaches the list.
+    const handlers = new Map<string, (argument: unknown) => void>();
+    const fakePage = {
+      on: (event: string, handler: (argument: unknown) => void) => {
+        handlers.set(event, handler);
+      },
+    } as unknown as Page;
+    const errors = watchErrors(fakePage, { expect: [{ method: "POST", path: "/api/v1/mcp", status: 422 }] });
+    const fire = (event: string, argument: unknown) => handlers.get(event)!(argument);
+    fire("response", { status: () => 500, request: () => ({ method: () => "GET" }), url: () => "http://localhost:3000/api/v1/companies" });
+    fire("response", { status: () => 422, request: () => ({ method: () => "POST" }), url: () => "http://localhost:3000/api/v1/mcp" });
+    fire("requestfailed", {
+      method: () => "GET",
+      url: () => "http://localhost:3000/api/v1/companies",
+      failure: () => ({ errorText: "net::ERR_CONNECTION_REFUSED" }),
+    });
+    fire("requestfailed", { method: () => "GET", url: () => "http://localhost:3000/app?_rsc=x", failure: () => ({ errorText: "net::ERR_ABORTED" }) });
+    expect(errors).toEqual([
+      "http 500 GET http://localhost:3000/api/v1/companies",
+      "requestfailed GET http://localhost:3000/api/v1/companies (net::ERR_CONNECTION_REFUSED)",
+    ]);
   });
 
   it("sends the browser's own origin with every write, and navigates by path", () => {
