@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { BrowserService } from "@steward/core";
 import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
 import { openSeedDb, seedScope } from "./seed";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * Watching an agent browse, from the founder's side.
@@ -89,6 +89,7 @@ test("shows an agent's session as it happens, and stops it for real", async ({ p
     );
     expect(refusal?.code).toBe("stopped");
 
+    await networkSettled(page);
     expect(errors).toEqual([]);
   } finally {
     await provider.dispose();

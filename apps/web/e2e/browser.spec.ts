@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The browser page's first run.
@@ -54,6 +54,7 @@ test("says whether it has a browser, and offers only what that allows", async ({
     await expect(page.getByTestId("browser-run")).toHaveCount(0);
   }
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -71,5 +72,6 @@ test("fits a phone without scrolling sideways", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 
   // A page that fits is only worth having if it also ran: the width was measured on a live page.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

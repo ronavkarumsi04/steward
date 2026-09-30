@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The workflow builder, from the founder's side.
@@ -62,6 +62,7 @@ test("draws a workflow, publishes it, and the rule it publishes is a real rule",
   await page.goto(`/app/c/${companyId}/signals`);
   await expect(page.locator("[data-reaction-rule]").filter({ hasText: "Payment watch" })).toContainText("paused");
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -81,5 +82,6 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 
   // A page that fits is only worth having if it also ran: the width was measured on a live page.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

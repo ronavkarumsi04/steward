@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The code IDE's first run.
@@ -41,6 +41,7 @@ test("with no source control connected, the page says what to connect and offers
   await expect(page.getByRole("heading", { name: "Files" })).toHaveCount(0);
 
   // It navigates without a single uncaught error or console error from the app itself.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -58,5 +59,6 @@ test("fits a phone without scrolling sideways", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 
   // A page that fits is only worth having if it also ran: the width was measured on a live page.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

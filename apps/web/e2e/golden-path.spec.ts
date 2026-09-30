@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { PASSWORD, openCompanyPalette, register, watchErrors } from "./session";
+import { PASSWORD, networkSettled, openCompanyPalette, register, watchErrors } from "./session";
 
 const password = PASSWORD;
 
@@ -10,11 +10,14 @@ test("landing links to sign-in, register and API docs", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: /sign in/i }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /get started|register|create/i }).first()).toBeVisible();
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
 test("unauthenticated workspace redirects to login; bad credentials show an error", async ({ page }) => {
-  const errors = watchErrors(page);
+  // The refused sign-in is this test's point, so it is named here; every other failure the page makes is still a
+  // failure of this test.
+  const errors = watchErrors(page, { expect: [{ method: "POST", path: "/api/v1/auth/login", status: 401 }] });
   await page.goto("/app");
   await page.waitForURL(/\/login/);
   await page.getByLabel("Email").fill("nobody@example.com");
@@ -22,6 +25,7 @@ test("unauthenticated workspace redirects to login; bad credentials show an erro
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -223,5 +227,6 @@ test("register → onboarding → dashboard → tasks → settings → providers
   await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
 
   // The whole walk, from the landing page to signing back in, without a single uncaught error or console error.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });

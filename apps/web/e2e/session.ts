@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 
 /** These suites are disposable: every run registers its own account, so no test depends on another's data. */
 export const PASSWORD = "correct-horse-battery-staple";
@@ -61,20 +61,182 @@ export async function openCompanyPalette(page: Page): Promise<void> {
   }).toPass({ timeout: 15_000 });
 }
 
+/** One failure the browser saw, in the terms a test can name it by. */
+export interface ResponseFailure {
+  kind: "http";
+  method: string;
+  /** The pathname alone, so an expectation never pins the host the suite happens to run against. */
+  path: string;
+  /** The URL as the page saw it, for the message a failing assertion prints. */
+  url: string;
+  status: number;
+}
+
+/** A request the page made that never came back. */
+export interface UnfinishedRequest {
+  kind: "requestfailed";
+  method: string;
+  path: string;
+  url: string;
+  /** The browser's own reason, e.g. `net::ERR_CONNECTION_REFUSED`. */
+  reason: string;
+}
+
+export type NetworkFailure = ResponseFailure | UnfinishedRequest;
+
 /**
- * Uncaught exceptions are never acceptable, whatever the page is doing.
- *
- * Resource-loading noise is filtered out because a missing image or a favicon is a broken asset, not a broken
- * runtime, and this suite is about the runtime; the golden path covers the surfaces where an asset matters.
+ * A failure a test drove on purpose, named tightly enough that nothing else can hide behind it: the method, the
+ * pathname (a string for an exact path, a regular expression when an id sits in the middle) and the answer it got —
+ * the status for a refusal, the browser's reason for a request that never came back.
  */
-export function watchErrors(page: Page): string[] {
+export type ExpectedFailure =
+  | { method: string; path: string | RegExp; status: number }
+  | { method: string; path: string | RegExp; reason: string };
+
+/** The pathname of a URL, whatever shape the URL arrived in. */
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * A response the page should never have been shown, or nothing when the status is an answer.
+ *
+ * The line is at 400: 4xx is the request being refused and 5xx is the server failing what it promised, while a 3xx
+ * is a route and everything below is a response. A request that never arrived at all is `requestFailure`'s business.
+ */
+export function responseFailure(status: number, method: string, url: string): ResponseFailure | null {
+  if (status < 400) return null;
+  return { kind: "http", method, path: pathOf(url), url, status };
+}
+
+/**
+ * A request that never completed, or nothing when the page itself abandoned a read.
+ *
+ * `net::ERR_ABORTED` is the browser cancelling a request the page stopped wanting: Next.js supersedes every prefetch
+ * whose link it has moved past, and a page being closed abandons its open streams — so for a read it is the page's
+ * own decision, says nothing about the server, and on a suite that navigates at all is constant (thousands a run).
+ * An abandoned write is different: the product asked for it and then withdrew it, which is a change of state some
+ * test has to answer for, so it is reported. Every other reason is the network failing to deliver what the page
+ * asked for — a refused connection, a name that does not resolve, a timeout — and is reported too.
+ */
+export function requestFailure(method: string, url: string, reason: string | undefined): UnfinishedRequest | null {
+  const text = reason ?? "unknown";
+  const read = method.toUpperCase() === "GET" || method.toUpperCase() === "HEAD";
+  if (text === "net::ERR_ABORTED" && read) return null;
+  return { kind: "requestfailed", method, path: pathOf(url), url, reason: text };
+}
+
+/** How a failure reads in the assertion's output: what happened, to which method, at which URL. */
+export function describeFailure(failure: NetworkFailure): string {
+  return failure.kind === "http"
+    ? `http ${failure.status} ${failure.method} ${failure.url}`
+    : `requestfailed ${failure.method} ${failure.url} (${failure.reason})`;
+}
+
+/** Whether the test wrote this failure down as one it was driving. */
+export function failureExpected(expected: ExpectedFailure[], failure: NetworkFailure): boolean {
+  const sameMethod = (rule: ExpectedFailure) => rule.method.toUpperCase() === failure.method.toUpperCase();
+  const samePath = (rule: ExpectedFailure) =>
+    typeof rule.path === "string" ? rule.path === failure.path : rule.path.test(failure.path);
+  const sameAnswer = (rule: ExpectedFailure) =>
+    failure.kind === "http" ? "status" in rule && rule.status === failure.status : "reason" in rule && rule.reason === failure.reason;
+  return expected.some((rule) => sameMethod(rule) && samePath(rule) && sameAnswer(rule));
+}
+
+/** How a test tells the watcher about a failure it drives on purpose. */
+export interface WatchOptions {
+  /** These failures are part of what the test proves; every other one fails it. */
+  expect?: ExpectedFailure[];
+}
+
+/** The requests a watched page has started and not yet had an answer to, by page. */
+const inFlight = new WeakMap<Page, Set<Request>>();
+
+/**
+ * Watch the page for the ways a surface can be wrong, and hold the test to the list.
+ *
+ * Four things are collected while the test drives the surface, and the test asserts the list is empty before it
+ * finishes: an uncaught exception, a console error, a response with a 4xx or 5xx status, and a request the browser
+ * could not complete. The first two are the runtime's own account of what happened; the last two are read from the
+ * page's network, so a refused API call or a connection that dies mid-flight fails the test instead of disappearing
+ * into the console messages that used to be filtered out.
+ *
+ * What the browser echoes about a failed request is filtered from the console stream, because the response and
+ * requestfailed listeners report the same failure with its method, URL and status — one entry per failure, and one
+ * a test can name exactly.
+ *
+ * A test that drives a failure on purpose — bad credentials, a server refusing a record — names it in `expect`, so
+ * the failure stays part of what the test proves instead of something the watcher was taught to ignore:
+ *
+ *   const errors = watchErrors(page, {
+ *     expect: [{ method: "POST", path: "/api/v1/auth/login", status: 401 }],
+ *   });
+ *
+ * The expectation has to match the method, the pathname and the answer, so it is a statement about that request
+ * rather than a mute button: a 500 on the same route still fails the test.
+ *
+ * Assert the list only after `networkSettled(page)`: a failure reaches this process a moment after the page has
+ * already acted on it, so an assertion made first can pass on a page that is showing the failure it drove.
+ */
+export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
+  const expected = options.expect ?? [];
   const errors: string[] = [];
+  const pending = new Set<Request>();
+  inFlight.set(page, pending);
+  const record = (failure: NetworkFailure | null) => {
+    if (failure && !failureExpected(expected, failure)) errors.push(describeFailure(failure));
+  };
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
+    // The browser's echo of a request it could not make is the two listeners below restated without the method,
+    // the URL or the status — so it is dropped here and the failure itself is reported there.
     if (/Failed to load resource|net::ERR_/i.test(text)) return;
     errors.push(`console: ${text}`);
   });
+  page.on("request", (request) => pending.add(request));
+  page.on("response", (response) => {
+    pending.delete(response.request());
+    record(responseFailure(response.status(), response.request().method(), response.url()));
+  });
+  page.on("requestfailed", (request) => {
+    pending.delete(request);
+    record(requestFailure(request.method(), request.url(), request.failure()?.errorText));
+  });
   return errors;
+}
+
+/**
+ * Wait until the page's own network has caught up, then let the test say what it saw.
+ *
+ * A response reaches this process a moment after the browser has acted on it: the page can render the refusal the
+ * API just returned, and the test can assert everything it means to see, while the watcher's response listener has
+ * not heard about the failure at all — so `expect(errors).toEqual([])` can pass with the failure the test drove
+ * still invisible to it. This makes that moment impossible to skip: it drains what the browser has already sent
+ * with one round trip, then waits for every request the page had in flight to be answered or to fail.
+ *
+ * Bounded, because a page can keep a request open for as long as it lives — `browser-live.spec.ts` holds an SSE
+ * stream attached for its whole test — and the point is to catch up with the network, not to wait for a quiet one.
+ */
+export async function networkSettled(page: Page, timeoutMs = 1_000): Promise<void> {
+  const pending = inFlight.get(page);
+  if (!pending) {
+    throw new Error("networkSettled(page) waits on the requests watchErrors watches, so watchErrors(page) has to have been called on this page first.");
+  }
+  try {
+    // A round trip the browser answers after it has sent the events it already had: whatever the watcher was
+    // about to be told, it has been told by the time this returns.
+    await page.evaluate(() => undefined);
+  } catch {
+    // The page may be navigating or gone; there is no queue left to drain in that case.
+  }
+  const until = Date.now() + timeoutMs;
+  while (pending.size > 0 && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }

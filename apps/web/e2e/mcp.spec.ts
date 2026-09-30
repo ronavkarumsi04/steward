@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { createCompany, register, watchErrors } from "./session";
+import { createCompany, networkSettled, register, watchErrors } from "./session";
 
 /**
  * The marketplace, from the founder's side.
@@ -32,7 +32,9 @@ async function installStdio(page: import("@playwright/test").Page, opts: { name:
 }
 
 test("installs a server, sees what it may do, and decides who may call it", async ({ page }) => {
-  const errors = watchErrors(page);
+  // The refused install is this test's point: the API turns the slug down and the page has to say so in the API's
+  // words. The later install of the fixed slug is a different request, and a different answer.
+  const errors = watchErrors(page, { expect: [{ method: "POST", path: /\/mcp$/, status: 422 }] });
   await register(page);
   const companyId = await createCompany(page, "Marketplace");
   await page.goto(`/app/c/${companyId}/mcp`);
@@ -110,6 +112,7 @@ test("installs a server, sees what it may do, and decides who may call it", asyn
   await expect(page.getByText("No server is installed.")).toBeVisible();
   await expect(page.getByTestId("mcp-server")).toHaveCount(0);
 
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
 
@@ -154,6 +157,7 @@ test("says a server is out of reach instead of showing an empty list as if it we
   await expect(card.getByTestId("mcp-standing")).toContainText("Inspected");
   await expect(card.getByTestId("mcp-tool")).toHaveCount(6);
   checkpoint("a second inspection, of the address it now points at");
+  await networkSettled(page);
 });
 
 test("opens on a phone without scrolling sideways", async ({ page }) => {
@@ -200,5 +204,6 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
 
   // A page that fits is only worth having if it also ran: every width above was measured on a live page, tools
   // listed and all.
+  await networkSettled(page);
   expect(errors).toEqual([]);
 });
