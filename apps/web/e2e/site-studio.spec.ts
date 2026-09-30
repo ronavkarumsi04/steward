@@ -13,6 +13,14 @@ import { createCompany, register, watchErrors } from "./session";
  */
 test.describe.configure({ mode: "serial" });
 
+/**
+ * The preview is rendered in an iframe with no permissions at all, and the dev server's overlay still tries to
+ * insert its own script into every document it can see: the browser refuses it and says so. That message is the
+ * sandbox doing its job, not a fault in the page — and the bundle itself carries no script to run either way. Both
+ * tests drop it from what they saw; everything else the page said has to be nothing.
+ */
+const SANDBOX_NOTICE = /Blocked script execution in 'about:srcdoc'/;
+
 test("build a page, see it, publish it, and put a version back", async ({ page }) => {
   const errors = watchErrors(page);
   await register(page);
@@ -88,10 +96,7 @@ test("build a page, see it, publish it, and put a version back", async ({ page }
   await versions.getByRole("button", { name: "Ship it" }).first().click();
   await expect(page.getByText(/The agent is told to write these exact bytes/i)).toBeVisible();
 
-  // The preview is rendered in an iframe with no permissions at all, and the dev server's overlay still tries to
-  // insert its own script into every document it can see: the browser refuses it and says so. That message is the
-  // sandbox doing its job, not a fault in the page — and the bundle itself carries no script to run either way.
-  expect(errors.filter((message) => !/Blocked script execution in 'about:srcdoc'/.test(message))).toEqual([]);
+  expect(errors.filter((message) => !SANDBOX_NOTICE.test(message))).toEqual([]);
 });
 
 /**
@@ -99,6 +104,7 @@ test("build a page, see it, publish it, and put a version back", async ({ page }
  * most common way a two-column editor breaks at 390 px, and the failure is invisible on a laptop.
  */
 test("fits a phone, and the preview is the only thing that scrolls", async ({ page }) => {
+  const errors = watchErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page);
   const companyId = await createCompany(page, "Site Studio Phone");
@@ -111,4 +117,8 @@ test("fits a phone, and the preview is the only thing that scrolls", async ({ pa
   await expect(page.getByRole("button", { name: "Save draft" })).toBeInViewport();
   await expect(page.getByRole("button", { name: "Publish a version" })).toBeInViewport();
   await expect(page.locator("[data-block=hero]").getByLabel("Headline")).toBeVisible();
+
+  // A page that fits is only worth having if it also ran: the widths above were measured on a live page, preview
+  // document and all.
+  expect(errors.filter((message) => !SANDBOX_NOTICE.test(message))).toEqual([]);
 });

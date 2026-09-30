@@ -304,6 +304,7 @@ test("lets an automatic memory lapse: one past its window is neither shown nor r
 });
 
 test("opens on a phone without scrolling sideways", async ({ page }) => {
+  const errors = watchErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page);
   const { id, base } = await company(page, "Memory Phone");
@@ -338,4 +339,7 @@ test("opens on a phone without scrolling sideways", async ({ page }) => {
     document.documentElement.style.fontSize = "";
   });
   expect(withWiderText, `with wider text these reach past the phone: ${withWiderText.join(" | ")}`).toEqual([]);
+
+  // A page that fits is only worth having if it also ran: every width above was measured on a live page.
+  expect(errors).toEqual([]);
 });

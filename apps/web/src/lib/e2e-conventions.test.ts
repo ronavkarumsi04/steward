@@ -6,16 +6,16 @@ import { describe, expect, it } from "vitest";
  * The e2e suite's conventions, held to by a test rather than by memory.
  *
  * A suite this size accretes load-bearing habits that nobody writes down: every spec registers its own account and
- * onboards its own company through `./session`; every spec watches the browser for uncaught errors and console
- * errors while it drives a surface; a write made with the session cookie carries the Origin the browser itself
+ * onboards its own company through `./session`; every test watches the browser for uncaught errors and console
+ * errors while it drives its surface; a write made with the session cookie carries the Origin the browser itself
  * would send; navigation is by path, so `E2E_BASE_URL` decides where the suite runs; and the one file that reaches
- * past the API into Postgres is `seed.ts`. Each of those survives only until the next spec is copied from its
+ * past the API into Postgres is `seed.ts`. Each of those survives only until the next test is copied from its
  * neighbour with a detail missing.
  *
- * So this reads the suite off disk and fails with the file named and the alternative spelled out. What it is not: a
- * parser, and not a claim to cover everything — it reads text, and states only rules it can hold plainly. Every rule
- * is exercised against a file that breaks it, because a seatbelt that is tested is worth more than one that is
- * trusted.
+ * So this reads the suite off disk and fails with the file and the test named, and the alternative spelled out.
+ * What it is not: a parser, and not a claim to cover everything — it reads text, and states only rules it can hold
+ * plainly. Every rule is exercised against a file that breaks it, because a seatbelt that is tested is worth more
+ * than one that is trusted.
  */
 
 /** `apps/web/e2e`, found from this file rather than from the working directory. */
@@ -49,10 +49,13 @@ const DATABASE_PACKAGES = ["@steward/db", "@steward/memory"];
 /** Another package's files, named by path instead of by package: `…/packages/core/dist/index.js`. */
 const BY_FILE_PATH = /(?:^|\/)packages\/[^/]+\/(?:dist|src)\//;
 
-/** What every spec must do while it drives a surface, and what it must say about what it saw. */
+/** What every test must do while it drives a surface, and what it must say about what it saw. */
 const WATCHES_ERRORS = /\bwatchErrors\(page\)/;
 const ASSERTS_ERRORS = /expect\(\s*errors/;
 const ASSERTS_NONE = /toEqual\(\[\]\)/;
+
+/** Where a test begins: `test("…", async ({ page }) => {`, indented or not, at the start of a line. */
+const TEST_STARTS = /^[ \t]*test\(/gm;
 
 /** The origin the page itself would send. A host written into a spec would pin the suite to one machine. */
 const BROWSERS_ORIGIN = /origin:\s*new URL\(page\.url\(\)\)\.origin/;
@@ -97,6 +100,28 @@ function configSource(): string {
   return readFileSync(CONFIG_FILE, "utf8");
 }
 
+/** One test, with the source it runs: from its own line to the next test, or the end of the file. */
+interface TestBlock {
+  name: string;
+  source: string;
+}
+
+/**
+ * A spec split into the tests it declares, read left to right.
+ *
+ * Test by test and not file by file, because a watched test beside an unwatched one is exactly the shape a
+ * copy-and-edit leaves behind, and a whole file answers only "somebody watched something here". Each block runs
+ * from its own `test(` to the next one — the plain reading a person does when they scan the file. It is also the
+ * reason a spec has to declare its tests where this can see them, rather than generating them in a loop.
+ */
+function testBlocks(source: string): TestBlock[] {
+  const starts = [...source.matchAll(TEST_STARTS)];
+  return starts.map((start, index) => {
+    const block = source.slice(start.index, starts[index + 1]?.index ?? source.length);
+    return { name: block.match(/\btest\(\s*"([^"]+)"/)?.[1] ?? "a test this guard could not name", source: block };
+  });
+}
+
 /** The suite's shape: the files it consists of, and how each spec signs itself up. */
 function shapeProblems(files: SourceFile[]): string[] {
   const problems: string[] = [];
@@ -123,18 +148,27 @@ function shapeProblems(files: SourceFile[]): string[] {
   return problems;
 }
 
-/** Every spec watches the surfaces it drives, and says at the end that it saw nothing. */
+/** Every test watches the surface it drives, and says at the end that it saw nothing. */
 function errorProblems(files: SourceFile[]): string[] {
   const problems: string[] = [];
   for (const spec of files.filter((file) => file.name.endsWith(".spec.ts"))) {
-    if (!WATCHES_ERRORS.test(spec.source)) {
+    const tests = testBlocks(spec.source);
+    if (tests.length === 0) {
       problems.push(
-        `${spec.name} never watches the browser for errors. Call watchErrors(page) while it drives its surface and assert the list is empty: a page that throws while this test is looking at something else must not pass here.`,
+        `${spec.name} declares no tests this guard can read. These rules are held test by test, so a spec with nothing to read is either dead weight or generated in a shape that would go unchecked — declare its tests plainly.`,
       );
-    } else if (!ASSERTS_ERRORS.test(spec.source) || !ASSERTS_NONE.test(spec.source)) {
-      problems.push(
-        `${spec.name} watches for browser errors but never asserts there were none. What it collected is evidence only once it ends in expect(errors).toEqual([]) — or a checkpoint that does the same as the steps go by.`,
-      );
+      continue;
+    }
+    for (const block of tests) {
+      if (!WATCHES_ERRORS.test(block.source)) {
+        problems.push(
+          `${spec.name} "${block.name}" never watches the browser for errors. Call watchErrors(page) as it starts driving its surface and assert the list is empty before it finishes: a page that throws while this test is looking at something else must not pass here.`,
+        );
+      } else if (!ASSERTS_ERRORS.test(block.source) || !ASSERTS_NONE.test(block.source)) {
+        problems.push(
+          `${spec.name} "${block.name}" watches for browser errors but never asserts there were none. What it collected is evidence only once it ends in expect(errors).toEqual([]) — or a checkpoint that does the same as the steps go by.`,
+        );
+      }
     }
   }
   return problems;
@@ -251,20 +285,56 @@ describe("the e2e suite keeps to its conventions", () => {
     expect(problems[0]).toContain("./session");
   });
 
-  it("watches for browser errors everywhere, and asserts there were none", () => {
+  it("watches for browser errors in every test, and asserts there were none", () => {
     expect(errorProblems(suiteFiles())).toEqual([]);
   });
 
-  it("fails a spec that stops watching the browser, and one that watches without asserting", () => {
+  it("fails a test that stops watching the browser, and one that watches without asserting", () => {
     const silent = errorProblems([{ name: "some.spec.ts", source: `test("x", async ({ page }) => { await page.goto("/"); });` }]);
     expect(silent).toHaveLength(1);
     expect(silent[0]).toContain("some.spec.ts");
     expect(silent[0]).toContain("watchErrors(page)");
 
-    const watched = errorProblems([{ name: "some.spec.ts", source: `const errors = watchErrors(page);` }]);
+    const watched = errorProblems([
+      { name: "some.spec.ts", source: `test("x", async ({ page }) => { const errors = watchErrors(page); await page.goto("/"); });` },
+    ]);
     expect(watched).toHaveLength(1);
     expect(watched[0]).toContain("some.spec.ts");
     expect(watched[0]).toContain("expect(errors)");
+  });
+
+  it("holds the watching rule test by test, not for the file as a whole", () => {
+    // The shape a copy-and-edit leaves behind: a watched test, then a second one with the watching left out. The
+    // file as a whole still contains watchErrors(page), and the second test still has to answer for itself.
+    const problems = errorProblems([
+      {
+        name: "some.spec.ts",
+        source: [
+          `test("the watched one", async ({ page }) => {`,
+          `  const errors = watchErrors(page);`,
+          `  await page.goto("/");`,
+          `  expect(errors).toEqual([]);`,
+          `});`,
+          ``,
+          `test("the uncovered one", async ({ page }) => {`,
+          `  await page.goto("/");`,
+          `});`,
+        ].join("\n"),
+      },
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("some.spec.ts");
+    expect(problems[0]).toContain("the uncovered one");
+    expect(problems[0]).not.toContain("the watched one");
+  });
+
+  it("fails a spec with no test this guard can read", () => {
+    // A file whose tests are generated is invisible to a reading this plain; a file with none is dead weight. Saying
+    // so is what keeps every other rule here from being vacuous on a spec this cannot see into.
+    const generated = errorProblems([{ name: "some.spec.ts", source: `for (const route of routes) { it(route, async () => {}); }` }]);
+    expect(generated).toHaveLength(1);
+    expect(generated[0]).toContain("some.spec.ts");
+    expect(generated[0]).toContain("no tests this guard can read");
   });
 
   it("sends the browser's own origin with every write, and navigates by path", () => {
