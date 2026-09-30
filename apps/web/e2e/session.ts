@@ -228,6 +228,62 @@ export interface WatchOptions {
 const inFlight = new WeakMap<Page, Set<Request>>();
 
 /**
+ * A console line the watcher dropped as the browser's echo of a failed request, and what would prove it.
+ *
+ * Chromium prints a failed resource load as `Failed to load resource: the server responded with a status of 404
+ * (Not Found)` or `Failed to load resource: net::ERR_CONNECTION_REFUSED`: the resource's URL is not in the text at
+ * all — it is the message's own location — while the answer is named in the text. Reading both is what lets the
+ * dropped line be held to the network entry that reports the same failure instead of being taken on trust.
+ */
+interface ConsoleEcho {
+  /** The line as the browser printed it, so a failure message can quote it. */
+  text: string;
+  /** The resource the line was about: the message's own location, which is where the browser met the failure. */
+  url: string;
+  /** The answer the line names, when it names one, so the proof has to match the answer and not only the URL. */
+  status: number | null;
+  reason: string | null;
+}
+
+/** A failed entry the network listeners have reported, in the form an echo has to be corroborated by. */
+type ObservedFailure =
+  | { kind: "http"; url: string; status: number }
+  | { kind: "requestfailed"; url: string; reason: string };
+
+/** What the console filter needs per page: the lines it has not proven, and what could prove them. */
+interface EchoState {
+  /** The list the test asserts on, so a line that turns out to be unproven is reported where every failure is. */
+  errors: string[];
+  /** Dropped lines still waiting for a network entry that reports the same failure. */
+  pending: ConsoleEcho[];
+  /** What the response and requestfailed listeners have reported, in case a line arrives after its failure. */
+  reported: ObservedFailure[];
+}
+
+/** The console filter's pending proof, by page. */
+const echoesByPage = new WeakMap<Page, EchoState>();
+
+/** The echo a console line is, read from the line's own text and the message's own location. */
+function consoleEcho(text: string, url: string): ConsoleEcho {
+  const status = Number(/status of (\d{3})/.exec(text)?.[1]);
+  return {
+    text,
+    url,
+    status: Number.isFinite(status) ? status : null,
+    reason: /net::ERR_[A-Z_]+/i.exec(text)?.[0] ?? null,
+  };
+}
+
+/** Whether a network entry is the failure a dropped console line echoed. */
+function echoReportedBy(echo: ConsoleEcho, failure: ObservedFailure): boolean {
+  if (failure.url !== echo.url) return false;
+  if (echo.status !== null) return failure.kind === "http" && failure.status === echo.status;
+  if (echo.reason !== null) return failure.kind === "requestfailed" && failure.reason.toLowerCase() === echo.reason.toLowerCase();
+  // A line that names neither answer is held to any failed entry at the URL it names.
+  return true;
+}
+
+/**
  * Watch the page for the ways a surface can be wrong, and hold the test to the list.
  *
  * Four things are collected while the test drives the surface, and the test asserts the list is empty before it
@@ -236,9 +292,11 @@ const inFlight = new WeakMap<Page, Set<Request>>();
  * page's network, so a refused API call or a connection that dies mid-flight fails the test instead of disappearing
  * into the console messages that used to be filtered out.
  *
- * What the browser echoes about a failed request is filtered from the console stream, because the response and
- * requestfailed listeners report the same failure with its method, URL and status — one entry per failure, and one
- * a test can name exactly.
+ * What the browser echoes about a failed request is filtered from the console stream — but only while the response
+ * and requestfailed listeners report the same failure. The echo restates one of them without the method or the
+ * status, so its own location and the answer it names are read to hold it to that entry; a line nothing reported is
+ * not an echo of anything, and the settle reports it rather than letting the filter swallow the only account of a
+ * failure.
  *
  * A test that drives a failure on purpose — bad credentials, a server refusing a record — names it in `expect`, so
  * the failure stays part of what the test proves instead of something the watcher was taught to ignore:
@@ -264,6 +322,12 @@ export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
   inFlight.set(page, pending);
   const remaining = new Set<ExpectedRule>(expected.map(ruleFrom));
   expectedByPage.set(page, remaining);
+  const echoes: EchoState = { errors, pending: [], reported: [] };
+  echoesByPage.set(page, echoes);
+  const corroborate = (failure: ObservedFailure) => {
+    echoes.reported.push(failure);
+    echoes.pending = echoes.pending.filter((echo) => !echoReportedBy(echo, failure));
+  };
   const record = (failure: NetworkFailure | null) => {
     if (failure) {
       if (!failureExpected(expected, failure)) errors.push(describeFailure(failure));
@@ -276,19 +340,28 @@ export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
-    // The browser's echo of a request it could not make is the two listeners below restated without the method,
-    // the URL or the status — so it is dropped here and the failure itself is reported there.
-    if (/Failed to load resource|net::ERR_/i.test(text)) return;
+    // The browser's echo of a request it could not make is the two listeners below restated without the method or
+    // the status, so it is dropped here — but only while one of those listeners reports the same failure. A line
+    // nothing reported is not an echo of anything: it is the only account of that failure, and the settle reports it.
+    if (/Failed to load resource|net::ERR_/i.test(text)) {
+      const echo = consoleEcho(text, message.location().url);
+      if (!echoes.reported.some((failure) => echoReportedBy(echo, failure))) echoes.pending.push(echo);
+      return;
+    }
     errors.push(`console: ${text}`);
   });
   page.on("request", (request) => pending.add(request));
   page.on("response", (response) => {
     pending.delete(response.request());
-    record(responseFailure(response.status(), response.request().method(), response.url()));
+    const status = response.status();
+    if (status >= 400) corroborate({ kind: "http", url: response.url(), status });
+    record(responseFailure(status, response.request().method(), response.url()));
   });
   page.on("requestfailed", (request) => {
     pending.delete(request);
-    record(requestFailure(request.method(), request.url(), request.failure()?.errorText));
+    const reason = request.failure()?.errorText;
+    corroborate({ kind: "requestfailed", url: request.url(), reason: reason ?? "unknown" });
+    record(requestFailure(request.method(), request.url(), reason));
   });
   return errors;
 }
@@ -305,6 +378,9 @@ export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
  * A test that named an expected failure and never fired it — the route the test named never returned the answer it
  * named — fails here rather than passing with the allowance still sitting in the suite. The expectation is a promise
  * the test made about what would happen, and settling checks it was kept.
+ *
+ * A line the console filter dropped is held to the same settle: the response or requestfailed entry that reports the
+ * same failure has to have arrived by now, or the line is reported as a console error instead of staying filtered.
  *
  * Bounded, because a page can keep a request open for as long as it lives — `browser-live.spec.ts` holds an SSE
  * stream attached for its whole test — and the point is to catch up with the network, not to wait for a quiet one.
@@ -324,6 +400,18 @@ export async function networkSettled(page: Page, timeoutMs = 1_000): Promise<voi
   const until = Date.now() + timeoutMs;
   while (pending.size > 0 && Date.now() < until) {
     await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  // The console filter's proof, made at the same settle: a line dropped as the browser's echo of a failed request
+  // stays dropped only while the network listeners report the same failure. One nothing reported is not an echo of
+  // anything — it is the only account of that failure — so it is reported here rather than swallowed by the filter.
+  const echoes = echoesByPage.get(page);
+  if (echoes) {
+    for (const echo of echoes.pending.splice(0)) {
+      const where = echo.url ? ` (${echo.url})` : "";
+      echoes.errors.push(
+        `console: ${echo.text}${where} — dropped as the browser's echo of a failed request, but no response or requestfailed entry reported the failure it echoes: this line is the only account of it.`,
+      );
+    }
   }
   // Checked after the drain, not before it: a response reaches this process a moment after the page has acted on
   // it, so a rule tested before the round trip would read as stale only because its event had not arrived yet.
