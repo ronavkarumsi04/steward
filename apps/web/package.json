@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "@steward/core": "workspace:*",
     "@steward/db": "workspace:*",
     "@steward/memory": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",

@@ -108,6 +108,8 @@ Nearly everything a spec needs, it creates the way a founder does, and then chec
 
 `apps/web/e2e/seed.ts` is the single seam for that class of state, and it is deliberately narrow. It calls the product's own service with the product's own values, never hand-written SQL, and each seeder names the real write it reproduces (a change to that write's meaning is a change in the seeder); it seeds the same Postgres the running stack was given, and closes what it opens; and it stays test-only — `e2e/` is outside the Next build and the app's `tsconfig`, nothing in it is reachable from `src`, and the packages it needs are dev dependencies for that reason alone. `browser-live.spec.ts` drives `BrowserService` against that same connection, under the same rule that the service is the writer. Everything else a spec can create through a request, it creates in the spec.
 
+That rule is enforced rather than trusted: `apps/web/src/lib/e2e-seeding.test.ts` reads the suite off disk and fails a spec that imports `@steward/db` or `@steward/memory` itself, or that reaches into another package's build output by file path, naming the file and the alternative in the failure rather than leaving it to a review. It also exercises those rules against files that break them, so the guard cannot pass by being vacuous — a fixture path handed to the stack (the MCP server the API spawns) is deliberately not an import, and stays allowed.
+
 ## Extension points
 
 - AI providers: `packages/ai/src/catalog.ts` + adapter.

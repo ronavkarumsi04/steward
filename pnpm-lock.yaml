@@ -148,6 +148,9 @@ importers:
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
+      '@steward/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@steward/db':
         specifier: workspace:*
         version: link:../../packages/db
