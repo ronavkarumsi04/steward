@@ -58,6 +58,7 @@ test("says whether it has a browser, and offers only what that allows", async ({
 });
 
 test("fits a phone without scrolling sideways", async ({ page }) => {
+  const errors = watchErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page);
   const companyId = await createCompany(page, "Browser Phone");
@@ -68,4 +69,7 @@ test("fits a phone without scrolling sideways", async ({ page }) => {
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+
+  // A page that fits is only worth having if it also ran: the width was measured on a live page.
+  expect(errors).toEqual([]);
 });
