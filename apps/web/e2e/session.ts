@@ -85,15 +85,86 @@ export interface UnfinishedRequest {
 export type NetworkFailure = ResponseFailure | UnfinishedRequest;
 
 /**
- * A failure a test drove on purpose, named tightly enough that nothing else can hide behind it: the method, the
- * pathname (a string for an exact path, a regular expression when an id sits in the middle) and the answer it got —
- * the status for a refusal, the browser's reason for a request that never came back.
+ * What the watcher was taught to allow, but not yet told actually happened: the method, the pathname and the
+ * answer it was waiting for. A rule the page never honoured stays in this list until the test settles, and then
+ * fails the test instead of sitting in the suite unnoticed.
  */
-export type ExpectedFailure =
-  | { method: string; path: string | RegExp; status: number }
-  | { method: string; path: string | RegExp; reason: string };
+export interface ExpectedRule {
+  /** The method the test was willing to see fail, uppercased before comparison. */
+  method: string;
+  /** The pathname the test was willing to see fail, as a string for an exact path or a RegExp when an id sits
+   * in the middle. Stored as a pair so the rule can be identified without serialising a RegExp, which would not
+   * round-trip through JSON the way the test wrote it.
+   */
+  pathKind: "string" | "regexp";
+  pathString: string;
+  /** The answer the test was waiting for: a status for a refusal, a reason for a request that never came back. */
+  answerKind: "status" | "reason";
+  answerValue: number | string;
+  /** Enough to describe the rule in an assertion message without reconstructing the whole ExpectedFailure. */
+  describe(): string;
+}
 
-/** The pathname of a URL, whatever shape the URL arrived in. */
+/** The expected failures a test named, keyed by page, so a rule can be removed when it fires. */
+const expectedByPage = new WeakMap<Page, Set<ExpectedRule>>();
+
+/**
+ * Every expected failure the test named but the page never produced.
+ *
+ * A test that writes `expect: [{ method: "POST", path: "/api/v1/auth/login", status: 401 }]` and then never
+ * fires that exact failure — or an expectation whose path matched but whose answer did not, e.g. a 500 on the
+ * same route — the rule never leaves this set, and the test fails when it settles rather than passing with the
+ * allowance still sitting in it.
+ */
+export function unfulfilledExpectations(page: Page): ExpectedRule[] {
+  const set = expectedByPage.get(page);
+  if (!set) return [];
+  return [...set];
+}
+
+function ruleFrom(expected: ExpectedFailure): ExpectedRule {
+  const method = expected.method;
+  if ("status" in expected) {
+    return {
+      method,
+      pathKind: typeof expected.path === "string" ? "string" : "regexp",
+      pathString: typeof expected.path === "string" ? expected.path : expected.path.source,
+      answerKind: "status",
+      answerValue: expected.status,
+      describe() {
+        return `${method} ${this.pathKind === "string" ? this.pathString : `/${this.pathString}/`} ${this.answerKind} ${this.answerValue}`;
+      },
+    };
+  }
+  return {
+    method,
+    pathKind: typeof expected.path === "string" ? "string" : "regexp",
+    pathString: typeof expected.path === "string" ? expected.path : expected.path.source,
+    answerKind: "reason",
+    answerValue: expected.reason,
+    describe() {
+      return `${method} ${this.pathKind === "string" ? this.pathString : `/${this.pathString}/`} ${this.answerKind} ${this.answerValue}`;
+    },
+  };
+}
+
+/** Whether the page actually produced a failure the test wrote down as one it was driving. */
+function ruleMatched(rule: ExpectedRule, failure: NetworkFailure): boolean {
+  const sameMethod = rule.method.toUpperCase() === failure.method.toUpperCase();
+  const samePath =
+    rule.pathKind === "string"
+      ? rule.pathString === failure.path
+      : new RegExp(rule.pathString).test(failure.path);
+  const sameAnswer =
+    failure.kind === "http"
+      ? rule.answerKind === "status" && rule.answerValue === failure.status
+      : rule.answerKind === "reason" && rule.answerValue === failure.reason;
+  return sameMethod && samePath && sameAnswer;
+}
+
+/**
+ * The pathname of a URL, whatever shape the URL arrived in.
+ */
 function pathOf(url: string): string {
   try {
     return new URL(url).pathname;
@@ -179,6 +250,10 @@ const inFlight = new WeakMap<Page, Set<Request>>();
  * The expectation has to match the method, the pathname and the answer, so it is a statement about that request
  * rather than a mute button: a 500 on the same route still fails the test.
  *
+ * A test that names an expected failure and then never fires it — the route it named never returns the answer it
+ * named — fails when it settles. The allowance is not a mute button that can be left in the suite; it is a promise
+ * the test made about what would happen, and the suite checks it was kept.
+ *
  * Assert the list only after `networkSettled(page)`: a failure reaches this process a moment after the page has
  * already acted on it, so an assertion made first can pass on a page that is showing the failure it drove.
  */
@@ -187,8 +262,15 @@ export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
   const errors: string[] = [];
   const pending = new Set<Request>();
   inFlight.set(page, pending);
+  const remaining = new Set<ExpectedRule>(expected.map(ruleFrom));
+  expectedByPage.set(page, remaining);
   const record = (failure: NetworkFailure | null) => {
-    if (failure && !failureExpected(expected, failure)) errors.push(describeFailure(failure));
+    if (failure) {
+      if (!failureExpected(expected, failure)) errors.push(describeFailure(failure));
+      for (const rule of [...remaining]) {
+        if (ruleMatched(rule, failure)) remaining.delete(rule);
+      }
+    }
   };
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
@@ -220,6 +302,10 @@ export function watchErrors(page: Page, options: WatchOptions = {}): string[] {
  * still invisible to it. This makes that moment impossible to skip: it drains what the browser has already sent
  * with one round trip, then waits for every request the page had in flight to be answered or to fail.
  *
+ * A test that named an expected failure and never fired it — the route the test named never returned the answer it
+ * named — fails here rather than passing with the allowance still sitting in the suite. The expectation is a promise
+ * the test made about what would happen, and settling checks it was kept.
+ *
  * Bounded, because a page can keep a request open for as long as it lives — `browser-live.spec.ts` holds an SSE
  * stream attached for its whole test — and the point is to catch up with the network, not to wait for a quiet one.
  */
@@ -239,4 +325,22 @@ export async function networkSettled(page: Page, timeoutMs = 1_000): Promise<voi
   while (pending.size > 0 && Date.now() < until) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
+  // Checked after the drain, not before it: a response reaches this process a moment after the page has acted on
+  // it, so a rule tested before the round trip would read as stale only because its event had not arrived yet.
+  const unfulfilled = unfulfilledExpectations(page);
+  if (unfulfilled.length > 0) {
+    const listed = unfulfilled.map((rule) => rule.describe()).join(", ");
+    throw new Error(
+      `watchErrors was told to expect ${listed}, but none of those failures happened on this page before it settled. An expectation that never fires is a stale allowance, not a proof — either the test drives the failure it named, or it stops naming it.`,
+    );
+  }
 }
+
+/**
+ * A failure a test drove on purpose, named tightly enough that nothing else can hide behind it: the method, the
+ * pathname (a string for an exact path, a regular expression when an id sits in the middle) and the answer it got —
+ * the status for a refusal, the browser's reason for a request that never came back.
+ */
+export type ExpectedFailure =
+  | { method: string; path: string | RegExp; status: number }
+  | { method: string; path: string | RegExp; reason: string };
