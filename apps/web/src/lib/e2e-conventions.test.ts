@@ -520,6 +520,70 @@ describe("the e2e suite keeps to its conventions", () => {
     ]);
   });
 
+  it("makes the console filter prove the failure it drops was reported by the network", async () => {
+    // The filter's own rule: the browser echoes a failed resource load as a console error with no method, URL or
+    // status in the text, so the watcher reads the message's location and the answer the line names, and holds the
+    // dropped line to the network entry that reports the same failure. A line nothing reported is not an echo of
+    // anything — it is the only account of that failure, and it has to reach the list at the settle.
+    const handlers = new Map<string, (argument: unknown) => void>();
+    const fakePage = {
+      on: (event: string, handler: (argument: unknown) => void) => {
+        handlers.set(event, handler);
+      },
+      evaluate: () => Promise.resolve(undefined),
+    } as unknown as Page;
+    const fire = (event: string, argument: unknown) => handlers.get(event)!(argument);
+    const echo = (text: string, url: string) => fire("console", { type: () => "error", text: () => text, location: () => ({ url }) });
+    const missing = "http://localhost:3000/api/v1/missing";
+
+    // A dropped line with no entry behind it fails the test, naming the URL the message's own location carried.
+    const uncorroborated = watchErrors(fakePage);
+    echo("Failed to load resource: the server responded with a status of 404 (Not Found)", missing);
+    await networkSettled(fakePage);
+    expect(uncorroborated).toHaveLength(1);
+    expect(uncorroborated[0]).toContain("console: Failed to load resource");
+    expect(uncorroborated[0]).toContain(missing);
+    expect(uncorroborated[0]).toContain("no response or requestfailed entry");
+
+    // The ordinary order: the response listener heard the refusal first, and the echo that follows is dropped
+    // because it is the same failure restated — not because console lines of that shape always are.
+    const afterTheResponse = watchErrors(fakePage, { expect: [{ method: "GET", path: "/api/v1/missing", status: 404 }] });
+    fire("response", { status: () => 404, request: () => ({ method: () => "GET" }), url: () => missing });
+    echo("Failed to load resource: the server responded with a status of 404 (Not Found)", missing);
+    await networkSettled(fakePage);
+    expect(afterTheResponse).toEqual([]);
+
+    // And the other order, because the two events arrive in whichever order the browser sends them.
+    const offline = "http://localhost:3000/api/v1/offline";
+    const beforeTheResponse = watchErrors(fakePage, {
+      expect: [{ method: "GET", path: "/api/v1/offline", reason: "net::ERR_CONNECTION_REFUSED" }],
+    });
+    echo("Failed to load resource: net::ERR_CONNECTION_REFUSED", offline);
+    fire("requestfailed", { method: () => "GET", url: () => offline, failure: () => ({ errorText: "net::ERR_CONNECTION_REFUSED" }) });
+    await networkSettled(fakePage);
+    expect(beforeTheResponse).toEqual([]);
+
+    // The URL alone is not the proof: a line naming a 404 is not corroborated by a 500 on the same route.
+    const mismatched = watchErrors(fakePage, { expect: [{ method: "GET", path: "/api/v1/missing", status: 500 }] });
+    fire("response", { status: () => 500, request: () => ({ method: () => "GET" }), url: () => missing });
+    echo("Failed to load resource: the server responded with a status of 404 (Not Found)", missing);
+    await networkSettled(fakePage);
+    expect(mismatched).toHaveLength(1);
+    expect(mismatched[0]).toContain("no response or requestfailed entry");
+
+    // An aborted read is not one of the failures the watcher reports, but the requestfailed listener did report it,
+    // which is what the proof asks — so an echo of it has an account behind it and stays dropped.
+    const aborted = watchErrors(fakePage);
+    echo("Failed to load resource: net::ERR_ABORTED", "http://localhost:3000/api/v1/stream");
+    fire("requestfailed", {
+      method: () => "GET",
+      url: () => "http://localhost:3000/api/v1/stream",
+      failure: () => ({ errorText: "net::ERR_ABORTED" }),
+    });
+    await networkSettled(fakePage);
+    expect(aborted).toEqual([]);
+  });
+
   it("sends the browser's own origin with every write, and navigates by path", () => {
     expect(requestProblems(suiteFiles())).toEqual([]);
   });
