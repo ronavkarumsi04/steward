@@ -150,7 +150,32 @@ does not have, said out loud because the alternative is a founder discovering it
 is unset, so public registration is open — set it to `false` once the owner's account exists. The public door
 is the project's assigned domain; the `*.vercel.app` system domains stay behind Vercel Authentication.
 Deployments are created through the Vercel API for now: the git integration did not deploy any of the commits
-to `main` between 2026-09-26 and this one, which is how the deployed bundle came to lag the repository.
+to `main` between 2026-09-26 and this one, which is how the deployed bundle came to lag the repository — a lag
+nothing could see, because the one fact that would have said so did not exist anywhere outside. It does now
+(PR #47): `GET /health` answers with `commit`, seven characters of `VERCEL_GIT_COMMIT_SHA` (confirmed present
+at the function's runtime, not only at build time, so nothing has to be baked into the bundle) or of
+`GIT_COMMIT_SHA` for an image built by this repository's Dockerfiles, and `unknown` rather than a guess — the
+field exists so a checker can compare it against a repository, and a plausible-looking sha would make that
+comparison lie in the one direction that matters. The checker is `pnpm hosted:check`
+(`scripts/hosted-check.mjs`), which needs no account and no token: the landing page, `/legal/terms`, the
+document list the sign-up form accepts (every required agreement must be a document, at the version, that the
+same response serves — 15 documents, 3 required, all of them served), a login attempt that must be refused as
+a wrong password rather than answered from a fixture, `/health`, and then the reported commit against this
+checkout's `HEAD`. Verified in both directions: against the deployment built from `9932427` all six checks
+passed, the last of them printing `the deployment is running 9932427`; pointed at any other commit it fails with `the deployment is running
+9932427, this checkout is at c4fef21 — the hosted instance is not this repository's commit` and exits 1; a
+deployment behind Vercel Authentication is reported as six failures led by Vercel's own `Protected by Vercel
+Authentication` instead of being mistaken for a healthy instance; and against the pre-field deployment
+`ef63b83` it said `the deployment reports no commit: it was built before /health carried one`, which is exactly
+the state the five-day lag was. Two edges of the check were fixed the moment they were visible: an unreachable
+deployment is one failure rather than two (the second one blamed the build for an answer that never arrived),
+and the commit sentence no longer names a direction it cannot know, since a past release can be pointed at as
+easily as a current one. `.github/workflows/hosted-check.yml` runs the same script daily and on demand — not
+on push, because after every push the difference is expected until someone deploys it and a check that is red
+after every merge is a check nobody reads. `main` still does not deploy itself: making the lag visible is the
+half a repository owns, and reconnecting the project's Git settings (Root Directory `apps/web`) is the other
+one — until then a merge reaches production when someone deploys that commit, and the check says so within a
+day.
 
 ## Standing rules
 

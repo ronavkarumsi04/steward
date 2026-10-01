@@ -123,7 +123,12 @@ const expected =
     : EXPECT;
 const short = (sha) => String(sha ?? "").trim().slice(0, 7).toLowerCase();
 
-if (reported === null) {
+if (health.status !== 200 || health.json === null) {
+  // The health answer itself is already reported above. Saying "no commit" here as well would blame the
+  // build for an answer that never arrived — a deployment behind Vercel Authentication answers 302, and its
+  // HTML would otherwise be read as an old build with an honest-looking second failure on top.
+  bad("which commit is running cannot be checked: /health did not answer with JSON");
+} else if (reported === null) {
   bad("the deployment reports no commit: it was built before /health carried one, so which commit is being served cannot be checked");
 } else if (EXPECT === "any") {
   ok(`the deployment is running ${reported === "unknown" ? "an unnamed commit (built without VERCEL_GIT_COMMIT_SHA or GIT_COMMIT_SHA)" : reported} (not compared)`);
@@ -132,7 +137,10 @@ if (reported === null) {
 } else if (reported !== "unknown" && reported === short(expected)) {
   ok(`the deployment is running ${reported}`);
 } else {
-  bad(`the deployment reports ${reported}, this checkout is at ${short(expected)} — the hosted instance lags the repository`);
+  // Direction-free on purpose: the expected commit can be older than the deployed one as easily as newer
+  // (that is what pointing the check at a past release does), and a sentence that names the wrong direction
+  // is worse than one that only says the two disagree.
+  bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
 }
 
 console.log("");
