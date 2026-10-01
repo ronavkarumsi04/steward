@@ -260,12 +260,22 @@ comparison for a deployment that is deliberately older. `.github/workflows/hoste
 script daily and on demand; deliberately not on push, since after every push to `main` the difference is
 expected until someone deploys, and a check that is red after every merge is a check nobody reads.
 
+One more distinction the check had to learn, from the first merge after it existed: Vercel refuses to build
+a commit at all when the project's `ignoreCommand` (`npx turbo-ignore`, declared in `apps/web/vercel.json`)
+says nothing the web app or its dependencies consume has changed — the deployment comes back `CANCELED` with
+`ignored-build-step` and production stays where it was. A deployment that is behind `HEAD` by such files is
+current in the only sense that matters, so the check passes and names them (`the deployment is running
+9932427, and the 2 file(s) changed after it are ones no build reads (docs/ROADMAP.md,
+scripts/hosted-check.mjs)`); anything else is treated as a difference that matters. The rule is deliberately
+conservative — `docs/`, `.github/`, `scripts/` and `*.md` are the only paths it will call unread — so it can
+be wrong by complaining, never by staying quiet.
+
 **Deploying this repository's own instance.** Project `steward` has no git connection, so pushing to `main`
-does not rebuild production: deployments are created from the commit being deployed — through the Vercel API, or `vercel --prod` from a
-checkout — and the field above is what makes the result checkable afterwards. To
-restore self-deploying `main`, connect `ronavkarumsi04/steward` to the project in Vercel's Git settings with
-the settings §2 describes (Root Directory `apps/web`); the per-deployment `*.vercel.app` URLs stay behind
-Vercel Authentication either way, and the assigned domain is the door (§2.1).
+does not rebuild production: deployments are created from the commit being deployed — through the Vercel
+API, or `vercel --prod` from a checkout — and the field above is what makes the result checkable afterwards.
+To restore self-deploying `main`, connect `ronavkarumsi04/steward` to the project in Vercel's Git settings
+with the settings §2 describes (Root Directory `apps/web`); the per-deployment `*.vercel.app` URLs stay
+behind Vercel Authentication either way, and the assigned domain is the door (§2.1).
 
 ## 3. Email (invitations, password reset)
 

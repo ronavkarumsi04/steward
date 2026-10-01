@@ -56,6 +56,32 @@ async function request(path, init) {
 const get = (path) => request(path);
 const post = (path, body) => request(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
+/**
+ * The files the commits between two revisions changed, when every one of them is a file no build reads.
+ *
+ * A Vercel project answers this question for itself before every build: `ignoreCommand` in
+ * `apps/web/vercel.json` is `npx turbo-ignore`, so a merge that touches nothing the web app (or its
+ * dependencies) consumes is not deployed at all — Vercel cancels it with `ignored-build-step`. That makes
+ * "the deployment is not HEAD" a normal, correct state after a docs-only merge, and calling it drift would
+ * leave this check red after every such merge, which is how a check stops being read.
+ *
+ * This is the conservative half of that rule and nothing more: docs, workflows and helper scripts, and
+ * markdown cannot change what is served; anything else is treated as if it could. Being wrong here means
+ * complaining about a deployment that was in fact current, never staying quiet about one that is not.
+ */
+function changedSince(from, to) {
+  try {
+    const files = execFileSync("git", ["diff", "--name-only", `${from}..${to}`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+    if (files.length === 0) return { kind: "same", files };
+    const unread = files.filter((f) => /^(docs|\.github|scripts)\//.test(f) || /\.md$/.test(f));
+    return { kind: unread.length === files.length ? "unread" : "relevant", files };
+  } catch {
+    // The revision is not in this checkout (a shallow clone, or a deployment built from somewhere else), so
+    // the question cannot be answered here; the caller says that instead of assuming either way.
+    return { kind: "unknown", files: [] };
+  }
+}
+
 step(`the product, on the public origin (${BASE})`);
 
 const home = await get("/");
@@ -134,13 +160,27 @@ if (health.status !== 200 || health.json === null) {
   ok(`the deployment is running ${reported === "unknown" ? "an unnamed commit (built without VERCEL_GIT_COMMIT_SHA or GIT_COMMIT_SHA)" : reported} (not compared)`);
 } else if (short(expected) === "") {
   bad(`EXPECT=${EXPECT} but there is no commit to compare against; use EXPECT=any if that is intended`);
-} else if (reported !== "unknown" && reported === short(expected)) {
+} else if (reported === "unknown") {
+  bad(`the deployment cannot name its commit, so it cannot be compared against ${short(expected)}`);
+} else if (reported === short(expected)) {
   ok(`the deployment is running ${reported}`);
 } else {
-  // Direction-free on purpose: the expected commit can be older than the deployed one as easily as newer
-  // (that is what pointing the check at a past release does), and a sentence that names the wrong direction
-  // is worse than one that only says the two disagree.
-  bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
+  const diff = changedSince(reported, short(expected));
+  if (diff.kind === "unread") {
+    // Vercel's own ignoreCommand cancels exactly these builds, so a deployment that is behind by them is
+    // current in the only sense that matters: nothing a build reads has changed.
+    const shown = diff.files.slice(0, 3).join(", ");
+    ok(`the deployment is running ${reported}, and the ${diff.files.length} file(s) changed after it are ones no build reads (${shown}${diff.files.length > 3 ? ", …" : ""})`);
+  } else if (diff.kind === "same") {
+    ok(`the deployment is running ${reported}, whose tree is the same as this checkout's ${short(expected)}`);
+  } else if (diff.kind === "relevant") {
+    // Direction-free on purpose: the expected commit can be older than the deployed one as easily as newer
+    // (that is what pointing the check at a past release does), and a sentence that names the wrong direction
+    // is worse than one that only says the two are not the same commit.
+    bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
+  } else {
+    bad(`the deployment is running ${reported} and this checkout is at ${short(expected)}; whether they differ in anything a build reads cannot be checked from here (git could not compare ${reported} with ${short(expected)})`);
+  }
 }
 
 console.log("");
