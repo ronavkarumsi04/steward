@@ -138,6 +138,22 @@ back to 2-second polling (it is built for that — see `streamEvents` in `apps/a
 SSE connection is closed when the function hits its duration limit and reconnects from its last event
 id, and agent runs need a real Temporal endpoint, which this mode does not provide.
 
+#### What this repository's own hosted instance sets
+
+The deployment this repository runs (Vercel project `steward`, team `novara-exosystems-projects`) is this mode,
+for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `steward-prod`, reached through the
+`aws-0-…` pooler with `uselibpqcompat=true&sslmode=require`), `STEWARD_MASTER_KEY`, `SESSION_SECRET`,
+`APP_URL=https://steward-eosin.vercel.app`, `DATABASE_POOL_MAX=2`, `RUN_MIGRATIONS_ON_START=false`,
+`TEMPORAL_DISABLED=true`, `TRUST_PROXY=true`. Migrations are applied from a checkout with the same
+`DATABASE_URL` (`pnpm db:migrate`), never on cold start.
+
+`steward-eosin.vercel.app` is the project's assigned public domain, and it is the only public door: the
+`*.vercel.app` system domains (including the per-deployment URLs) stay behind Vercel Authentication, so the
+canonical domain is what `APP_URL` names and what a user should be given. Two things this mode does not have,
+said out loud rather than implied: email is the console (`RESEND_API_KEY` unset), so invitation and
+password-reset links land in the function log instead of an inbox, and Temporal is absent, so a call that
+would start a run answers `503` with the reason rather than pretending to start one.
+
 ### 2.2 Managed Postgres (Supabase)
 
 The database is ordinary PostgreSQL. It needs the `vector` and `pgcrypto` extensions, which
@@ -190,6 +206,22 @@ Steward never uses the Data API, so RLS policies are unnecessary — the absence
 The browser only ever talks to `app.example.com`. Vercel forwards `/api/v1/*` to the API, so the session cookie the API sets is a first-party cookie on `app.example.com`, `SameSite=Lax` works, and there is no cross-origin CORS/credentials dance. SSE streams pass through Vercel's rewrite layer unbuffered.
 
 ---
+
+### 2.3 The build environment is part of the build
+
+A deployment is a build, and a build reads the environment. `next.config.ts` chooses the `/api/v1/*` rewrite
+from `EMBEDDED_API` at build time, which means a bundle built with the switch off can never be repaired by
+switching it on: the variable has to be part of what distinguishes one build from another. Turborepo's cache
+key only includes the variables the build task declares in `turbo.json`, so every variable a build-critical
+file reads is named there, and `apps/web/src/lib/build-env.test.ts` reads `next.config.ts`,
+`src/lib/server.ts` and `src/app/layout.tsx` off disk and fails when one is missing.
+
+This is not a hypothetical: the first hosted deployment of this repository was a **cache hit** from a build
+made before `EMBEDDED_API` existed. The landing page served `200`, and every `/api/v1/*` call answered with
+Vercel's `DNS_HOSTNAME_RESOLVED_PRIVATE` page, because the restored bundle still rewrote to
+`http://localhost:4000`. Redeploying the same commit with the variable set changed nothing — the cache key was
+identical. If a hosted deployment serves pages and no API, check what the build was given (and what it was
+keyed by) before checking the network.
 
 ## 3. Email (invitations, password reset)
 
