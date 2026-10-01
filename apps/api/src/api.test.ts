@@ -2296,6 +2296,9 @@ describe("openapi + health", () => {
     expect(doc.components.securitySchemes).toHaveProperty("cookieAuth");
     expect(doc.components.securitySchemes).toHaveProperty("bearerAuth");
     const health = await app.request("http://api.test/health");
-    expect(await health.json()).toMatchObject({ ok: true, db: "ok" });
+    // `commit` is `unknown` here because this suite's environment deliberately sets neither variable a
+    // deployment fills in; what a real deployment answers is what `scripts/hosted-check.sh` compares
+    // against the repository.
+    expect(await health.json()).toMatchObject({ ok: true, db: "ok", commit: "unknown" });
   });
 });

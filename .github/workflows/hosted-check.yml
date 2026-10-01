@@ -1,0 +1,33 @@
+name: Hosted check
+
+# The hosted deployment is only self-describing, not self-deploying: the Vercel project has no git
+# connection, so a merge to main does not rebuild production and the instance can quietly lag the
+# repository — which is exactly what happened for five days, with CI green throughout. This runs the
+# outside check on a schedule so that disagreement is reported instead of discovered.
+#
+# Daily and manual only, deliberately not on push: every push to main would be *expected* to differ from
+# the deployment until someone deploys it, and a check that is red after every merge is a check nobody
+# reads. `scripts/hosted-check.mjs` is the same script, runnable locally as `pnpm hosted:check`.
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hosted:
+    name: Hosted deployment serves the product, its API, and main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No install and no build: fetch, git and node are all this needs.
+      - name: Check the hosted deployment
+        run: node scripts/hosted-check.mjs

@@ -17,7 +17,8 @@
     "db:generate": "pnpm --filter @steward/db generate",
     "db:migrate": "pnpm --filter @steward/db migrate",
     "db:seed": "pnpm --filter @steward/db seed",
-    "verify:boot": "bash scripts/verify-boot.sh"
+    "verify:boot": "bash scripts/verify-boot.sh",
+    "hosted:check": "node scripts/hosted-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
