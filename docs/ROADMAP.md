@@ -196,8 +196,14 @@ drift, while a run that asked for a deployment on purpose fails and names what i
 asserted with no token and no network (`node --test "scripts/*.test.mjs"`, 14 tests: the exact `gitSource`
 request, a token refused the team parameter and accepted without it, a READY deployment, an ignored build, a
 failed build, an unexplained cancellation, a run that gives up on one still building, a missing token on a
-push against one on a manual run, a branch name refused as a commit, and Vercel unreachable) — the one thing
-tests cannot stand in for is Vercel's own answer, which the first real push reports.
+push against one on a manual run, a branch name refused as a commit, and Vercel unreachable). Its first real
+run was the push of `df51f44` itself (`Deploy to production` #1, six seconds, `success`): with no
+`VERCEL_TOKEN` stored yet it created no deployment and said so in the run's own words — `nothing can be
+deployed: VERCEL_TOKEN is not set. Create a token in Vercel (Account Settings → Tokens, scoped to the team
+that owns steward) and add it here with gh secret set VERCEL_TOKEN` — while `pnpm hosted:check` went on
+calling production current, because the files that had changed by then (`docs/`, `.github/`, `scripts/`) are
+ones no build reads and production stayed on `9932427` without pretending otherwise. The token's half is the
+one branch a stub fetch cannot stand in for, and the next push after the secret exists is what exercises it.
 
 ## Standing rules
 
