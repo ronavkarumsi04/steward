@@ -131,9 +131,14 @@ knows, driven through the page. The three Docker image builds passed in the same
 
 ## Launch
 
-🚧 Hosted deployment: the Vercel project serves pages but its API rewrite target was never set, so the live
-URL cannot serve the API. The embedded-API path is built and needs the hosted environment variables plus a
-deploy. Blocked on connector access to the team scope.
+🚧 Hosted deployment: the Vercel project (`steward`, public domain `https://steward-eosin.vercel.app`) now has
+the environment it needs and a database behind it — Supabase `steward-prod` is migrated to the same journal as
+`main` (18 migrations, 70 tables) and the deployment is built from `78ab971`. What it still cannot do is serve
+its own API: the build is restored from a Turborepo cache entry made before `EMBEDDED_API` existed, so the
+bundle rewrites `/api/v1/*` to `http://localhost:4000` and Vercel answers with its
+`DNS_HOSTNAME_RESOLVED_PRIVATE` page. The cache key is the bug, not the environment; the fix (declaring every
+build-affecting variable in `turbo.json`, with a test that fails when one is missing) is PR #45, and the
+deployment that follows it is what makes this line ✅.
 
 ## Standing rules
 

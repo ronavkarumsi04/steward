@@ -151,6 +151,12 @@ export class DisabledBrowserProvider implements BrowserProvider {
 export const NO_BROWSER_REASON =
   "This deployment has no browser. Install Chromium in the worker image (npx playwright install --with-deps chromium) and set BROWSER_PROVIDER=playwright, or run an agent that reads a page over HTTP instead — Steward reports what it has rather than offering a click that cannot happen.";
 
+/**
+ * The engine module as the loader returns it, named so that the loader's contract is readable and a test can be
+ * handed a loader that fails the way a real deployment does.
+ */
+type EngineModule = typeof import("./playwright-provider.js");
+
 export interface ProviderChoice {
   provider: BrowserProvider;
   /** The configured mode, for the record: `auto`, `playwright` or `none`. */
@@ -165,11 +171,32 @@ export interface ProviderChoice {
  * stack that installed Chromium should not need a second env var to be allowed to use it. `none` is explicit and
  * refuses with the same sentence as an auto stack that found nothing.
  */
-export async function browserProviderFromEnv(env: NodeJS.ProcessEnv = process.env): Promise<ProviderChoice> {
+export async function browserProviderFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  /**
+   * The engine's loader, injectable so that the one failure a stack cannot recover from by itself — the engine's
+   * own module not being resolvable at all — is testable without breaking a real installation.
+   */
+  loadEngine: () => Promise<EngineModule> = () => import("./playwright-provider.js"),
+): Promise<ProviderChoice> {
   const mode = (env.BROWSER_PROVIDER ?? "auto").trim().toLowerCase() || "auto";
   if (mode === "none" || mode === "disabled") return { provider: new DisabledBrowserProvider(NO_BROWSER_REASON), mode };
 
-  const { PlaywrightBrowserProvider } = await import("./playwright-provider.js");
+  let engine: EngineModule;
+  try {
+    engine = await loadEngine();
+  } catch (e) {
+    // A missing engine is a fact about this machine, not a reason for the API to stop answering. The three
+    // things that make a provider absent (no Chromium installed, `BROWSER_PROVIDER=none`, a bundle that does
+    // not carry the engine) all end in the same place: a refusal that names the reason.
+    const detail = e instanceof Error ? e.message : String(e);
+    return {
+      provider: new DisabledBrowserProvider(`${NO_BROWSER_REASON} (The engine could not be loaded here: ${detail})`),
+      mode,
+    };
+  }
+
+  const { PlaywrightBrowserProvider } = engine;
   const provider = new PlaywrightBrowserProvider();
   const check = await provider.availability();
   if (!check.available) {
