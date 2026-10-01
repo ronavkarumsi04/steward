@@ -273,11 +273,58 @@ be wrong by complaining, never by staying quiet. The workflow checks out full hi
 with a failure rather than a guess — correct, and useless if it is what every scheduled run says.
 
 **Deploying this repository's own instance.** Project `steward` has no git connection, so pushing to `main`
-does not rebuild production: deployments are created from the commit being deployed — through the Vercel
-API, or `vercel --prod` from a checkout — and the field above is what makes the result checkable afterwards.
-To restore self-deploying `main`, connect `ronavkarumsi04/steward` to the project in Vercel's Git settings
-with the settings §2 describes (Root Directory `apps/web`); the per-deployment `*.vercel.app` URLs stay
-behind Vercel Authentication either way, and the assigned domain is the door (§2.1).
+does not rebuild production: deployments are created from the commit being deployed — §2.5 is that path now,
+and `vercel --prod` from a checkout is the same thing by hand. Connecting `ronavkarumsi04/steward` to the
+project in Vercel's Git settings (Root Directory `apps/web`, the settings §2 describes) remains the
+dashboard alternative; the per-deployment `*.vercel.app` URLs stay behind Vercel Authentication either way,
+and the assigned domain is the door (§2.1).
+
+### 2.5 How `main` reaches production
+
+Project `steward` has no git connection (§2.4), so pushes build nothing and production moves only when a
+deployment is created for one exact commit. `.github/workflows/deploy-production.yml` does that on every push
+to `main`, and on demand:
+
+```sh
+gh workflow run deploy-production.yml                    # the tip of main
+gh workflow run deploy-production.yml -f sha=9932427     # or one particular commit
+```
+
+It runs `scripts/deploy-production.mjs`, which is runnable by hand (`VERCEL_TOKEN=… node
+scripts/deploy-production.mjs`) and covered by `node --test "scripts/*.test.mjs"`. Every outcome below is
+asserted there, because this path's failure mode is silence — production staying on an older commit — and the
+token it needs is the one thing a test cannot have.
+
+What it asks Vercel for is a deployment of the pushed commit: `POST /v13/deployments` with a `gitSource`
+naming `ronavkarumsi04/steward@main` and the full sha. The `commit` that `/health` reports at runtime (§2.4)
+then comes from that same fact rather than being a second thing kept in step by hand. The request is made with
+the documented team parameter and, if the token is not scoped that way, again without it: which of the two a
+token answers to is not knowable from here, and a first run should not report a broken token when the token is
+fine. Runs are serialized by a `concurrency` group, so two merges landing together cannot finish in the other
+order and leave the assigned domain on the older commit. The workflow is deliberately not gated on CI: a
+flake in an image build is not a reason to strand production on an older commit, and every commit reaching
+`main` has passed CI on its pull request.
+
+Whether a commit deserves a build is not decided here. The project already answers it — `ignoreCommand` is
+`npx turbo-ignore` (§2.4) — so a deployment that comes back `CANCELED` with `ignored-build-step` is a
+**success** and says so: production is current by definition, and a second answer to that question could only
+disagree with the one that decides. A cancellation for any other reason, an `ERROR` (reported with the
+build's own message and inspector link), or a deployment still running after 15 minutes are failures: a run
+that cannot say production moved does not claim it did.
+
+The one piece that cannot be committed is the token. Create one in Vercel (Account Settings → Tokens, scoped
+to the team that owns the project) and add it as a repository secret — the command prompts for the value and
+writes nothing to this repository:
+
+```sh
+gh secret set VERCEL_TOKEN
+```
+
+Until it exists, a push is a **warning**, not a failure: `main` does not go red for a capability nobody has
+switched on, and the daily `pnpm hosted:check` is still what reports production lagging the repository. A
+`workflow_dispatch` run — a deployment that was asked for on purpose — fails instead, naming the command
+above. With a token in hand and none stored anywhere, a checkout can deploy a commit right now:
+`VERCEL_TOKEN=… node scripts/deploy-production.mjs`.
 
 ## 3. Email (invitations, password reset)
 

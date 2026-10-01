@@ -1,0 +1,58 @@
+name: Deploy to production
+
+# A merge to main is a release nobody has to remember to make. Project `steward` has no git connection —
+# pushes never reached Vercel, which is how production came to serve a five-day-old bundle while every check
+# was green — so the only thing that moves the site is a deployment created for one exact commit. This
+# creates that deployment for the commit that just landed, through the Vercel API, and reports what Vercel
+# decided (`scripts/deploy-production.mjs`, tests beside it).
+#
+# It needs one repository secret: VERCEL_TOKEN (Vercel → Account Settings → Tokens, scoped to the team that
+# owns the project), set with `gh secret set VERCEL_TOKEN`. Without it a push is a warning rather than a
+# failure — `main` does not go red for a capability nobody has switched on, and the daily hosted check is
+# still the thing that reports production lagging the repository — while a run that was asked for explicitly
+# fails and says what is missing.
+#
+# Whether a commit deserves a build is deliberately not decided here: Vercel answers that for itself
+# (`ignoreCommand` is `npx turbo-ignore`), and a deployment that comes back cancelled-for-that-reason is a
+# success. Two answers to one question can disagree, and then nobody knows which one production follows.
+#
+# Nor is it gated on the CI workflow: an image build that flakes on the runner is not a reason to strand
+# production on an older commit, and every commit that reaches main has already passed CI on its pull request.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to deploy (full or short sha); defaults to the tip of the chosen ref
+        required: false
+
+# One deployment at a time, in the order they landed: two runs overlapping could finish in the other order and
+# leave the assigned domain pointing at the older commit.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy this commit to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No install and no build: the deployment is Vercel's to make, and this only asks for it and reads back
+      # what happened to it.
+      - name: Create the deployment for this commit and read it back
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SHA: ${{ inputs.sha || github.sha }}
+          REQUIRE_TOKEN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node scripts/deploy-production.mjs
