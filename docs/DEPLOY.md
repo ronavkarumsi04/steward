@@ -144,15 +144,19 @@ The deployment this repository runs (Vercel project `steward`, team `novara-exos
 for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `steward-prod`, reached through the
 `aws-0-…` pooler with `uselibpqcompat=true&sslmode=require`), `STEWARD_MASTER_KEY`, `SESSION_SECRET`,
 `APP_URL=https://steward-eosin.vercel.app`, `DATABASE_POOL_MAX=2`, `RUN_MIGRATIONS_ON_START=false`,
-`TEMPORAL_DISABLED=true`, `TRUST_PROXY=true`. Migrations are applied from a checkout with the same
+`TEMPORAL_DISABLED=true`, `BROWSER_PROVIDER=none`, `TRUST_PROXY=true`. Migrations are applied from a checkout with the same
 `DATABASE_URL` (`pnpm db:migrate`), never on cold start.
 
 `steward-eosin.vercel.app` is the project's assigned public domain, and it is the only public door: the
 `*.vercel.app` system domains (including the per-deployment URLs) stay behind Vercel Authentication, so the
-canonical domain is what `APP_URL` names and what a user should be given. Two things this mode does not have,
-said out loud rather than implied: email is the console (`RESEND_API_KEY` unset), so invitation and
-password-reset links land in the function log instead of an inbox, and Temporal is absent, so a call that
-would start a run answers `503` with the reason rather than pretending to start one.
+canonical domain is what `APP_URL` names and what a user should be given.Three things this mode does not have, said out loud rather than implied: email is the console
+(`RESEND_API_KEY` unset), so invitation and password-reset links land in the function log instead of an inbox;
+Temporal is absent, so a call that would start a run answers `503` with the reason rather than pretending to
+start one; and there is no browser, so `BROWSER_PROVIDER=none` is set and a browsing run is refused with the
+package's own sentence. That last one was learned the hard way — a serverless bundle carries `playwright-core`
+without its files, so `auto`'s probe threw during the API's own start-up and every route answered
+`api_unavailable`, including the ones that have nothing to do with a browser; `browserProviderFromEnv` now
+turns a missing engine into `DisabledBrowserProvider` rather than an exception that takes the API down.
 
 ### 2.2 Managed Postgres (Supabase)
 
