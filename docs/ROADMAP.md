@@ -182,17 +182,27 @@ past it, and it is also why the unread-path rule is deliberately conservative �
 `.github/workflows/hosted-check.yml` runs the same script daily and on demand — not on push, because after
 every push the difference is expected until someone deploys it and a check that is red after every merge is a
 check nobody reads. Making the lag visible was the half a repository owns; the other half is a deploy path
-that does not need the dashboard: `.github/workflows/deploy-production.yml` runs on every push to `main` and
-creates a deployment of that exact commit through the Vercel API (`scripts/deploy-production.mjs` —
+nobody has to remember to use: `.github/workflows/deploy-production.yml` runs on every push to `main`, and in
+the state the project is in today it creates a deployment of that exact commit through the Vercel API
+(`scripts/deploy-production.mjs` —
 `POST /v13/deployments` with a `gitSource` naming the sha, then the deployment read back until it reaches a
 state that means something), serialized by a `concurrency` group so two merges cannot finish out of order and
 leave the assigned domain on the older commit, and asking no question the project already answers: whether a
 commit deserves a build stays `npx turbo-ignore`'s answer, so a deployment Vercel cancels with
 `ignored-build-step` is reported as the success it is, while an `ERROR`, a cancellation for any other reason,
-or a deployment still running after 15 minutes fails the run rather than claiming production moved. It needs
-one repository secret, `VERCEL_TOKEN` (`gh secret set VERCEL_TOKEN`); until that exists a push is a warning
-rather than a failure — `main` stays green — and the daily check above remains the thing that reports real
-drift, while a run that asked for a deployment on purpose fails and names what is missing. Every outcome is
+or a deployment still running after 15 minutes fails the run rather than claiming production moved. That path needs
+one repository secret, `VERCEL_TOKEN` (`gh secret set VERCEL_TOKEN`), and it is one of two ways production can
+move: the project's own Git connection would deploy pushes by itself, and the API that offers
+one can only *create* linked projects — which would abandon this project's domains, variables and history —
+so both are supported and the repository variable `DEPLOY_MODE` chooses between them. That choice is a setting
+rather than a commit because it changes when a person connects the project, not when a merge lands. Whichever
+ran, the workflow ends by asking the deployment itself which commit it is running and comparing that with the
+commit that was pushed, retrying every 30 seconds for up to twelve minutes while Vercel builds: a merge that
+changes nothing a build reads passes on the first attempt — Vercel ignores those builds by design — and a
+build-relevant merge that nothing picks up fails the run in minutes instead of being found by the daily check
+the next morning. Without a token the create step warns and names the command, and the verdict still comes
+from that same outside check, so `main` goes red only when production genuinely does not serve what was
+merged. Every outcome is
 asserted with no token and no network (`node --test "scripts/*.test.mjs"`, 14 tests: the exact `gitSource`
 request, a token refused the team parameter and accepted without it, a READY deployment, an ignored build, a
 failed build, an unexplained cancellation, a run that gives up on one still building, a missing token on a
