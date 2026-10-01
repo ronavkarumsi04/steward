@@ -24,6 +24,22 @@ import { registerSignalRoutes, registerSignalWebhookRoutes } from "./routes/sign
 
 export const API_VERSION = "0.1.0";
 
+/**
+ * Which commit this process is running, when the deployment can say, as a seven-character short sha.
+ *
+ * A hosted instance that cannot name its own commit cannot be told apart from the one before it, which is
+ * how this project's own deployment came to serve a five-day-old bundle with every check green. Vercel
+ * sets `VERCEL_GIT_COMMIT_SHA` for the build and for the function runtime; `GIT_COMMIT_SHA` is the same
+ * fact for an image built by the repository's own Dockerfiles. Anything else is reported as `unknown`
+ * rather than guessed at: the field exists so that a checker can compare it against a repository
+ * (`scripts/hosted-check.sh`), and a wrong sha would make that comparison lie in the one direction that
+ * matters — the bundle claiming to be newer than it is.
+ */
+export function commitOf(env: NodeJS.ProcessEnv): string {
+  const sha = (env.VERCEL_GIT_COMMIT_SHA || env.GIT_COMMIT_SHA || "").trim().toLowerCase();
+  return /^[0-9a-f]{7,40}$/.test(sha) ? sha.slice(0, 7) : "unknown";
+}
+
 export function createApp(deps: ApiDeps, bus: EventBus | null) {
   const app = new Hono<AppEnv>();
   const v1 = new Hono<AppEnv>();
@@ -56,7 +72,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     } catch {
       db = "down";
     }
-    return c.json({ ok: db === "ok", version: API_VERSION, db, temporal: deps.workflows ? "connected" : "disabled" }, db === "ok" ? 200 : 503);
+    return c.json({ ok: db === "ok", version: API_VERSION, commit: commitOf(deps.env), db, temporal: deps.workflows ? "connected" : "disabled" }, db === "ok" ? 200 : 503);
   });
 
   app.use("/webhooks/*", rateLimit({ capacity: 180, refillPerSec: 3 }));

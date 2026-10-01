@@ -68,8 +68,10 @@ The `backend` profile starts Postgres, Redis, Temporal, the API, the worker and 
 
 ```sh
 curl https://api.example.com/health
-# {"ok":true,"version":"0.1.0","db":"ok","temporal":"connected"}
+# {"ok":true,"version":"0.1.0","commit":"unknown","db":"ok","temporal":"connected"}
 ```
+
+`commit` is the field §2.4 describes: an image that was built with `GIT_COMMIT_SHA` (a `--build-arg`) names its commit, and one that was not says `unknown` rather than guessing.
 
 Caddy is configured (`infra/caddy/Caddyfile`) with `flush_interval -1` and no read/write timeouts on the upstream so Server-Sent Events (`/v1/.../events`) and long approval polls stream through unbuffered.
 
@@ -149,7 +151,9 @@ for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `stew
 
 `steward-eosin.vercel.app` is the project's assigned public domain, and it is the only public door: the
 `*.vercel.app` system domains (including the per-deployment URLs) stay behind Vercel Authentication, so the
-canonical domain is what `APP_URL` names and what a user should be given.Three things this mode does not have, said out loud rather than implied: email is the console
+canonical domain is what `APP_URL` names and what a user should be given.
+
+Three things this mode does not have, said out loud rather than implied: email is the console
 (`RESEND_API_KEY` unset), so invitation and password-reset links land in the function log instead of an inbox;
 Temporal is absent, so a call that would start a run answers `503` with the reason rather than pretending to
 start one; and there is no browser, so `BROWSER_PROVIDER=none` is set and a browsing run is refused with the
@@ -226,6 +230,42 @@ Vercel's `DNS_HOSTNAME_RESOLVED_PRIVATE` page, because the restored bundle still
 `http://localhost:4000`. Redeploying the same commit with the variable set changed nothing — the cache key was
 identical. If a hosted deployment serves pages and no API, check what the build was given (and what it was
 keyed by) before checking the network.
+
+### 2.4 Which commit is being served
+
+A hosted instance that cannot name its own commit cannot be told apart from the one before it — and this
+one proved it: every check was green for five days while production served a bundle older than `main`. So
+`/health` states one:
+
+```sh
+curl -s https://app.example.com/health
+# {"ok":true,"version":"0.1.0","commit":"ef63b83","db":"ok","temporal":"connected"}
+```
+
+`commit` is the seven-character short sha of `VERCEL_GIT_COMMIT_SHA`, the variable Vercel sets for the build
+and for the function (the same variable is available at runtime, so nothing has to be baked into the bundle
+to read it). An image built by this repository's own Dockerfiles can pass the same fact as `GIT_COMMIT_SHA`.
+When neither is set the answer is `unknown`, never a guess: the field exists so that a checker can compare it
+against a repository, and a plausible-looking sha would make that comparison lie in the one direction that
+matters. Because it is read at **runtime**, it is deliberately absent from Turborepo's build cache key
+(§2.3): nothing about the bundle depends on it, and adding it would throw the cache away on every deployment
+without changing a byte.
+
+The other half is the check that reads it from outside the deployment: `pnpm hosted:check`
+(`scripts/hosted-check.mjs`) fetches the landing page, a legal page, the document list the sign-up form
+accepts, a login attempt that must be refused as a wrong password, and `/health` — then compares the reported
+commit against this checkout's `HEAD` and fails when they disagree, because "the hosted instance lags the
+repository" is otherwise a fact nobody sees. It needs no account and no token, and `EXPECT=any` skips the
+comparison for a deployment that is deliberately older. `.github/workflows/hosted-check.yml` runs the same
+script daily and on demand; deliberately not on push, since after every push to `main` the difference is
+expected until someone deploys, and a check that is red after every merge is a check nobody reads.
+
+**Deploying this repository's own instance.** Project `steward` has no git connection, so pushing to `main`
+does not rebuild production: deployments are created from the commit being deployed — through the Vercel API, or `vercel --prod` from a
+checkout — and the field above is what makes the result checkable afterwards. To
+restore self-deploying `main`, connect `ronavkarumsi04/steward` to the project in Vercel's Git settings with
+the settings §2 describes (Root Directory `apps/web`); the per-deployment `*.vercel.app` URLs stay behind
+Vercel Authentication either way, and the assigned domain is the door (§2.1).
 
 ## 3. Email (invitations, password reset)
 
