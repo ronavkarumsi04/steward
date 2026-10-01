@@ -131,14 +131,26 @@ knows, driven through the page. The three Docker image builds passed in the same
 
 ## Launch
 
-🚧 Hosted deployment: the Vercel project (`steward`, public domain `https://steward-eosin.vercel.app`) now has
-the environment it needs and a database behind it — Supabase `steward-prod` is migrated to the same journal as
-`main` (18 migrations, 70 tables) and the deployment is built from `78ab971`. What it still cannot do is serve
-its own API: the build is restored from a Turborepo cache entry made before `EMBEDDED_API` existed, so the
-bundle rewrites `/api/v1/*` to `http://localhost:4000` and Vercel answers with its
-`DNS_HOSTNAME_RESOLVED_PRIVATE` page. The cache key is the bug, not the environment; the fix (declaring every
-build-affecting variable in `turbo.json`, with a test that fails when one is missing) is PR #45, and the
-deployment that follows it is what makes this line ✅.
+✅ Hosted deployment: `https://steward-eosin.vercel.app` serves the product **and its own API from the same
+Vercel deployment** (project `steward`, team `novara-exosystems-projects`) — the web app's `/api/v1/*` rewrite
+points inward at the API runtime (`EMBEDDED_API=true`), which talks to Supabase `steward-prod` (migrated to the
+same journal as `main`: 18 migrations, 70 tables) through its pooler. Verified on the deployment built from
+`ef63b83` (PR #45): `/` 200, `/health` `{"ok":true,"version":"0.1.0","db":"ok","temporal":"disabled"}`,
+`/api/v1/legal/documents` 200 with the documents' own text, and `POST /api/v1/auth/login` answering the API's
+`invalid_credentials` 401 — all of it through the public origin. Getting there found two defects rather than
+one missing setting: the build was restored from a Turborepo cache entry made before `EMBEDDED_API` existed
+(the switch was not in the build task's cache key, so the bundle kept rewriting to `http://localhost:4000` and
+Vercel answered `DNS_HOSTNAME_RESOLVED_PRIVATE`), and `BROWSER_PROVIDER=auto`'s probe threw inside the API's
+own start-up on a bundle that carries `playwright-core` without its files, taking every route down with it.
+Both are fixed in PR #45, each with a test that fails if it comes back. What the hosted instance deliberately
+does not have, said out loud because the alternative is a founder discovering it: no Temporal
+(`TEMPORAL_DISABLED=true`), so a call that would start a run answers `503` with the reason; no browser
+(`BROWSER_PROVIDER=none`), refused with the package's own sentence; email is the console until
+`RESEND_API_KEY` is set, so invitation and password-reset links land in the function log; and `ALLOW_SIGNUP`
+is unset, so public registration is open — set it to `false` once the owner's account exists. The public door
+is the project's assigned domain; the `*.vercel.app` system domains stay behind Vercel Authentication.
+Deployments are created through the Vercel API for now: the git integration did not deploy any of the commits
+to `main` between 2026-09-26 and this one, which is how the deployed bundle came to lag the repository.
 
 ## Standing rules
 
