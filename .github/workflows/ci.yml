@@ -48,6 +48,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # The deploy path is a script rather than a package, so `pnpm test` never reaches it — and it is the
+      # piece that decides whether a merge reaches production, which is not a thing to find out in production.
+      # No install and no database needed: a stub fetch stands in for Vercel.
+      - name: Deploy path tests
+        run: node --test "scripts/*.test.mjs"
+
       - name: Build
         run: pnpm build
 

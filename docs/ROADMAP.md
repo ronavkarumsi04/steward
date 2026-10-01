@@ -181,9 +181,23 @@ past it, and it is also why the unread-path rule is deliberately conservative �
 `scripts/`, `*.md`, nothing else — so that it can be wrong by complaining, never by staying quiet.
 `.github/workflows/hosted-check.yml` runs the same script daily and on demand — not on push, because after
 every push the difference is expected until someone deploys it and a check that is red after every merge is a
-check nobody reads. `main` still does not deploy itself: making the lag visible is the half a repository
-owns, and reconnecting the project's Git settings (Root Directory `apps/web`) is the other one — until then a
-merge reaches production when someone deploys that commit, and the check says so within a day.
+check nobody reads. Making the lag visible was the half a repository owns; the other half is a deploy path
+that does not need the dashboard: `.github/workflows/deploy-production.yml` runs on every push to `main` and
+creates a deployment of that exact commit through the Vercel API (`scripts/deploy-production.mjs` —
+`POST /v13/deployments` with a `gitSource` naming the sha, then the deployment read back until it reaches a
+state that means something), serialized by a `concurrency` group so two merges cannot finish out of order and
+leave the assigned domain on the older commit, and asking no question the project already answers: whether a
+commit deserves a build stays `npx turbo-ignore`'s answer, so a deployment Vercel cancels with
+`ignored-build-step` is reported as the success it is, while an `ERROR`, a cancellation for any other reason,
+or a deployment still running after 15 minutes fails the run rather than claiming production moved. It needs
+one repository secret, `VERCEL_TOKEN` (`gh secret set VERCEL_TOKEN`); until that exists a push is a warning
+rather than a failure — `main` stays green — and the daily check above remains the thing that reports real
+drift, while a run that asked for a deployment on purpose fails and names what is missing. Every outcome is
+asserted with no token and no network (`node --test "scripts/*.test.mjs"`, 14 tests: the exact `gitSource`
+request, a token refused the team parameter and accepted without it, a READY deployment, an ignored build, a
+failed build, an unexplained cancellation, a run that gives up on one still building, a missing token on a
+push against one on a manual run, a branch name refused as a commit, and Vercel unreachable) — the one thing
+tests cannot stand in for is Vercel's own answer, which the first real push reports.
 
 ## Standing rules
 
