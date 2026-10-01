@@ -22,7 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Full history, not the default single commit: the check compares the deployed commit with this
+      # checkout's HEAD, and a shallow clone does not contain the deployed commit to compare against. It
+      # reports that honestly ("whether they differ in anything a build reads cannot be checked from here")
+      # and fails, which is the right answer for a check that cannot see what it was asked about — but it
+      # is not the answer anyone wants at 6am.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

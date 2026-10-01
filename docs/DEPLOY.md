@@ -268,7 +268,9 @@ current in the only sense that matters, so the check passes and names them (`the
 9932427, and the 2 file(s) changed after it are ones no build reads (docs/ROADMAP.md,
 scripts/hosted-check.mjs)`); anything else is treated as a difference that matters. The rule is deliberately
 conservative — `docs/`, `.github/`, `scripts/` and `*.md` are the only paths it will call unread — so it can
-be wrong by complaining, never by staying quiet.
+be wrong by complaining, never by staying quiet. The workflow checks out full history for that comparison
+(`fetch-depth: 0`): a single-commit clone does not contain the deployed commit, and the check answers that
+with a failure rather than a guess — correct, and useless if it is what every scheduled run says.
 
 **Deploying this repository's own instance.** Project `steward` has no git connection, so pushing to `main`
 does not rebuild production: deployments are created from the commit being deployed — through the Vercel
