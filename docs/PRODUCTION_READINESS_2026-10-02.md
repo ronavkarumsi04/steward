@@ -108,7 +108,11 @@ deployment secret was configured, and [release 37057280790](https://github.com/r
 successfully deployed `5f4da7d`. Six exact-commit hosted checks passed; signup policy now reports closed,
 invitation-only, and `/ready` correctly returns structured 503 while execution is disabled. Subsequent
 runtime-log inspection exposed the separate server-rendered loopback defect, addressed by the follow-up
-described in `docs/HOSTED_RELEASE_2026-10-02.md`.
+described in `docs/HOSTED_RELEASE_2026-10-02.md`. That fix merged through PR #56 as `1920cd8`, deployed
+successfully and passed six exact-commit hosted checks plus real desktop/mobile Chromium checks.
+Its later main CI failed an existing browser frame-equality test; a static-frame fixture follow-up needs
+fresh protected PR/merge CI. Full release evidence, failure history and log-visibility limits are in the
+hosted release document; a successful deployment is not substituted for that failed main CI.
 Direct GitHub application access fails, but Composio GitHub access works. The direct Vercel connector
 lists no teams; Composio's Vercel connection now accesses the owning team/project. The managed workspace has no application
 credentials or outbound cloud identities configured. The direct Supabase connector does expose `steward-prod`;

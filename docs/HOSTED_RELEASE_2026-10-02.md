@@ -54,6 +54,34 @@ protected PR/merge CI and Docker builds must pass. Hosted Chromium must render t
 on desktop/mobile, show invalid-login errors, and inspect live runtime logs. The branch/PR records those
 outcomes; this pre-merge document does not assert they have already passed.
 
+## Follow-up release actually exercised
+
+[PR #56](https://github.com/ronavkarumsi04/steward/pull/56) merged as `1920cd8` after all four
+[exact-head CI jobs](https://github.com/ronavkarumsi04/steward/actions/runs/37060349806) passed.
+[Production release 37063984794](https://github.com/ronavkarumsi04/steward/actions/runs/37063984794)
+created `dpl_7E3yNz2gNpv8zGK114PeXgDTQ7nW`, reached READY and assigned the public alias. Six hosted
+checks passed for that exact merge. Real Chromium rendered home and invitation-only registration,
+checked phone overflow and visible invalid-login errors at 1280px and 390px, with reduced motion and
+zero page errors. API checks refused valid signup (403), refused an unauthenticated organization route
+(401), and confirmed execution-unavailable readiness (503, no-store). Execution-required smoke exited 1,
+with six checks passed and the execution check failed; production agents remain UNVERIFIED.
+
+The merged source matches tested tree `5c24822e7b1438585238ca2e0e1290946402fc1a`. Final local lint,
+typecheck, unit/integration and production boot passed, including 29/29 browser E2E tests in embedded
+mode with an unreachable HTTP API address. Reported Vitest totals are 760 assertions in 60 files;
+the final repeated Turbo gates include cached suites (18 lint, 34 typecheck and 34 test tasks).
+
+The subsequent [main CI](https://github.com/ronavkarumsi04/steward/actions/runs/37063984720) failed
+the existing frame-equality browser test before boot: after a click on the full native-control form,
+a wait returned a different JPEG. Forty local repetitions and a fresh full browser suite did not
+reproduce the difference; the exact pixel cause is not claimed known. The follow-up isolates pixel
+equality on a static page with an explicitly styled accessible button and a visible content mutation.
+It preserves exact frame/digest assertions and strengthens unchanged checks across three actions.
+The remaining full-form interaction tests and production browser watcher are unchanged. Required CI
+on this follow-up and its merge must still pass; the previous PR success does not erase the main failure.
+
+The new deployment's runtime-log request returned an empty sample. It does not prove there are no errors.
+
 ## Observability and remaining service limits
 
 The deployment checks API returned no external checks. The generic drains endpoint returned 404; the

@@ -255,10 +255,14 @@ Verification and remaining blockers are recorded in `docs/PRODUCTION_READINESS_2
 The authenticated [production release](https://github.com/ronavkarumsi04/steward/actions/runs/37057280790)
 deployed `5f4da7d`, with six hosted checks passing, public signup closed, and execution readiness returning
 503 while Temporal is disabled. Hosted verification exposed server-rendered pages calling nonexistent
-`localhost:4000`; the `codex/embedded-server-transport` follow-up shares the embedded runtime with server
-pages and unsubscribe handlers, displays unavailable registration policy honestly, and boots its browser
-suite with the HTTP API address deliberately unreachable. See `docs/HOSTED_RELEASE_2026-10-02.md` for the
-release, defect and follow-up verification contract. This does not establish hosted agent execution.
+`localhost:4000`; [PR #56](https://github.com/ronavkarumsi04/steward/pull/56), merged as `1920cd8`, shares
+the embedded runtime with server pages and unsubscribe handlers, displays unavailable registration policy
+honestly, and boots its browser suite with the HTTP API address deliberately unreachable. Its production
+release and six exact-commit hosted checks passed; real Chromium verified invitation-only registration
+and login errors on desktop/phone. Main CI then exposed a pre-existing frame-equality test failure; a
+static-frame fixture follow-up preserves and strengthens the assertions and requires fresh PR/merge CI.
+See `docs/HOSTED_RELEASE_2026-10-02.md` for evidence and remaining limits. This does not establish hosted
+agent execution, delivered email or the full founder-to-production loop.
 No new item is ✅ before the required check passes on a merge commit. Real hosted execution, Temporal Cloud,
 production browser sessions, delivered platform email, and backup restore remain
 **UNVERIFIED** until exercised with the required service access.

@@ -56,6 +56,14 @@ export async function startFixtureSite(): Promise<FixtureSite> {
         <p id="bottom">You reached the bottom.</p>`),
       );
     }
+    if (url.pathname === "/frames") {
+      // Pixel equality needs a static canvas, rather than the full form's native control states,
+      // scrollbar and focus/hover painting. Keep a real, accessible button and a visible DOM mutation.
+      return send(200, PAGE(
+        '<p id="frame-status">Before change</p><button id="change-frame" onclick="document.getElementById(\'frame-status\').textContent = \'After change\'">Change frame</button>',
+        '<style>body { margin: 24px; font: 16px monospace; background: white; color: black; } button { appearance: none; font: inherit; color: black; background: white; border: 2px solid black; padding: 8px; } button:focus-visible { outline: 2px solid blue; outline-offset: 2px; }</style>',
+      ));
+    }
     if (url.pathname === "/pricing") return send(200, PAGE('<p id="starter">Starter $19 a month.</p><a id="home" href="/">Home</a>'));
     if (url.pathname === "/search") return send(200, PAGE(`<p id="query">You searched for ${url.searchParams.get("q") ?? url.searchParams.get("password") ?? "nothing"}.</p>`));
     if (url.pathname === "/console-error") return send(200, PAGE("<p>This page logs an error.</p>", "<script>console.error('fixture: something went wrong')</script>"));
