@@ -81,7 +81,7 @@ Caddy is configured (`infra/caddy/Caddyfile`) with `flush_interval -1` and no re
 | --- | --- |
 | Upgrade | `git pull && docker compose --profile backend up -d --build` (migrations are forward-only and run on API start; run `pnpm db:migrate` out of band if you set `RUN_MIGRATIONS_ON_START=false`) |
 | Roll back | `git checkout <previous-tag> && docker compose --profile backend up -d --build`. Schema migrations are additive, so an older API keeps working against a newer schema for one release. |
-| Back up | `docker compose exec postgres pg_dump -U steward steward \| gzip > steward-$(date +%F).sql.gz` on a cron. Also back up `.env` (the master key) and the `artifacts` volume. |
+| Back up | Follow [Backup and Disaster Recovery](compliance/BACKUP_AND_DR.md): non-TTY database archives, coordinated Temporal persistence, the actual artifact volume, and separately held master-key versions. Verify a scratch restore before trusting the backup. |
 | Restore | `gunzip -c dump.sql.gz \| docker compose exec -T postgres psql -U steward steward` |
 | Rotate the master key | Set the new `STEWARD_MASTER_KEY` and put the old one in `STEWARD_PREVIOUS_MASTER_KEYS` (`{"<keyId>":"<old hex>"}`; the key id is the first 8 hex chars of `sha256(rawKeyBytes)`: `echo -n "<old hex>" | xxd -r -p | sha256sum | cut -c1-8`). Restart. Existing secrets stay readable with the old key; anything saved from now on uses the new key. Keep the old key listed until every provider key has been re-saved. |
 | Temporal UI | Bound to `127.0.0.1:8233`; reach it with `ssh -L 8233:127.0.0.1:8233 user@host`. |
