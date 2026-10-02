@@ -1,115 +1,429 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getMeOptional } from "@/lib/server";
+import type { Metadata } from "next";
+import { getMeOptional, getAuthConfig } from "@/lib/server";
 import { Icon } from "@/components/icons";
 import { landingArrival } from "@/lib/arrivals";
+import { ScrollShowcase } from "@/components/showcase/scroll";
+import {
+  ArrowGlyph,
+  BrandMark,
+  CompanyCanvas,
+  PlanScene,
+  BuildScene,
+  VerifyScene,
+  ApprovalScene,
+  StudioArt,
+} from "@/components/showcase/scenes";
+import s from "@/components/showcase/showcase.module.css";
 
-const PILLARS = [
-  [Icon.Agents, "Persistent agents", "Orchestrator, research, engineering, marketing, sales, support, finance and operations agents that plan and execute against your goals — on a schedule or on demand."],
-  [Icon.Runs, "Durable by design", "Every run is a Temporal workflow: retries, approval pauses, timers and crash recovery are first-class. Nothing is lost when a worker restarts."],
-  [Icon.Lock, "You hold the keys", "Bring your own model providers (OpenAI, Anthropic, Gemini, Bedrock, Ollama and 20+ more). Secrets are encrypted at rest and never leave your deployment."],
-  [Icon.Approvals, "Explicit permissions", "Autonomy levels 0–4, per-dimension policies, budgets with hard stops, and approval gates for anything externally visible."],
-  [Icon.Eye, "Total observability", "Every model call, tool call, decision, artifact and cost is recorded and streamed live. Inspect what happened, why, and under which authorization."],
-  [Icon.Server, "Self-hosted, open source", "Postgres + Redis + Temporal. One docker compose. Your data, your infrastructure, your rules."],
-] as const;
-
-const PIPELINE = ["Event", "Plan", "Policy", "Route", "Execute", "Verify", "Persist"];
-
-/** The page's arrival, from the house schedules. Asserted against the page band in `motion.test.ts`. */
+export const metadata: Metadata = {
+  title: { absolute: "Steward — Big ideas. Real momentum." },
+  description:
+    "An AI-native operating system for building and operating companies. Bring agents, studios, workflows and company knowledge together, with you in control.",
+};
 const ARRIVAL = landingArrival();
-
-/**
- * The one ambient layer in the product, on the one surface a visitor sees once: a slow wash of light across
- * the hero, meant to be felt rather than watched. It carries no information, sits under the text, and drifts
- * at the ambient duration (18 s) — long enough that it reads as paper catching the light, not as animation.
- */
-const AMBIENT_WASH =
-  "radial-gradient(70% 65% at 84% 6%, rgba(255,255,255,0.85), rgba(255,255,255,0) 62%), " +
-  "radial-gradient(55% 55% at 6% 96%, rgba(255,255,255,0.55), rgba(255,255,255,0) 60%)";
+const CHAPTERS = [
+  {
+    id: "intent",
+    title: "Start with intent.",
+    number: "01",
+    label: "Give it direction",
+    copy: "A business starts with a point of view. Give your agents the goal, the context and the boundaries. Make the plan visible before the work begins.",
+    Scene: PlanScene,
+  },
+  {
+    id: "build",
+    title: "Make it tangible.",
+    number: "02",
+    label: "Build in context",
+    copy: "Move between Site Studio and Code IDE. Work with the design, inspect the source and review proposed changes in your company’s workspace.",
+    Scene: BuildScene,
+  },
+  {
+    id: "verify",
+    title: "Evidence over instinct.",
+    number: "03",
+    label: "Inspect the work",
+    copy: "Use browser traces, test output and run records to understand what happened. A finished-looking screen is the start of verification, not the end.",
+    Scene: VerifyScene,
+  },
+  {
+    id: "decide",
+    title: "You call the shots.",
+    number: "04",
+    label: "Keep control",
+    copy: "Policies and budgets define the room to act. Approvals govern the consequential steps. Inspect the proposal before a change leaves your workspace.",
+    Scene: ApprovalScene,
+  },
+];
+const STUDIOS = [
+  {
+    id: "site-studio",
+    name: "A place to build.",
+    tag: "SITE STUDIO + CODE IDE",
+    copy: "Visual editing, owned source, versions and proposed changes. Design and engineering can share the same starting point.",
+    kind: "site" as const,
+  },
+  {
+    id: "workflow-studio",
+    name: "A way to operate.",
+    tag: "WORKFLOW STUDIO + AGENTS",
+    copy: "Turn repeatable work into inspectable workflows. Connect agents and tools behind explicit policies and approval gates.",
+    kind: "workflow" as const,
+  },
+  {
+    id: "company-memory",
+    name: "A memory to grow.",
+    tag: "KNOWLEDGE GRAPH + MEMORY",
+    copy: "Keep company context close to the work: facts, relationships, provenance and memories that can be reviewed and corrected.",
+    kind: "memory" as const,
+  },
+];
 
 export default async function Landing() {
-  const me = await getMeOptional();
+  const [me, auth] = await Promise.all([getMeOptional(), getAuthConfig()]);
   if (me.user) redirect("/app");
+  const open = auth?.signupOpen === true;
+  const entry = open ? "/register" : "/login";
+  const entryLabel = open ? "Create your company" : "Enter workspace";
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-line bg-panel">
-        <nav className="mx-auto flex h-13 max-w-6xl items-center justify-between px-4 sm:px-6" aria-label="Primary">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <Icon.Logo size={22} />
-            Steward
+    <ScrollShowcase className={s.home}>
+      <a className={s.skipLink} href="#main">
+        Skip to content
+      </a>
+      <header className={s.header}>
+        <nav className={s.nav} aria-label="Primary">
+          <Link href="/" className={s.brand} aria-label="Steward home">
+            <BrandMark /> steward
           </Link>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="btn btn-ghost">Sign in</Link>
-            <Link href="/register" className="btn btn-primary">Get started</Link>
+          <div className={s.navMiddle}>
+            <a href="#story">The story</a>
+            <a href="#studios">The workspace</a>
+            <a href="#control">Your control</a>
           </div>
+          <Link href={entry} className={s.navCta}>
+            {open ? "Get started" : "Sign in"}
+            <Icon.ArrowRight size={15} />
+          </Link>
         </nav>
       </header>
-
-      <main className="mx-auto max-w-6xl px-4 pb-24 pt-20 sm:px-6 md:pt-28">
-        <section className="nb-hero rise-in mx-auto max-w-5xl text-left">
-          <span
-            aria-hidden="true"
-            className="ambient pointer-events-none absolute inset-0"
-            style={{ background: AMBIENT_WASH }}
-          />
-          <div className="relative">
-            <span className="pill pill-accent mb-6">
-              <Icon.Sparkle size={14} />
-              Open source · Apache-2.0
+      <main id="main">
+        <section className={s.hero} aria-labelledby="hero-title" data-hero>
+          <div className={`${s.heroEyebrow} rise-in`}>
+            <span className={s.tinyStar}>✳︎</span> THE COMPANY OPERATING SYSTEM{" "}
+            <span className={s.edition}>BUILT FOR WHAT’S NEXT / 001</span>
+          </div>
+          <h1
+            id="hero-title"
+            className={`${s.heroTitle} rise-in`}
+            style={
+              { "--enter-delay": `${ARRIVAL.delayMs(1)}ms` } as CSSProperties
+            }
+          >
+            Big ideas.
+            <br />
+            <span>
+              Real <em>momentum.</em>
             </span>
-            <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-6xl">
-              An autonomous operating system for your company — that you actually control.
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted">
-              Describe a business. Steward builds a team of AI agents that research, build, ship and grow it — running unattended, pausing for your approval when it matters, and leaving a complete audit trail.
+          </h1>
+          <div
+            className={`${s.heroBottom} rise-in`}
+            style={
+              { "--enter-delay": `${ARRIVAL.delayMs(2)}ms` } as CSSProperties
+            }
+          >
+            <p>
+              One place to build and operate your company.
+              <br />
+              AI agents, connected tools, and you at the controls.
             </p>
-            <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-              <Link href="/register" className="btn btn-primary h-11 px-5 text-[15px]">
-                Create your first company
-                <Icon.ArrowRight size={16} />
+            <div className={s.heroActions}>
+              <Link href={entry} className={s.button}>
+                {entryLabel}
+                <Icon.ArrowRight size={18} />
               </Link>
-              <a href="/api/v1/openapi.json" className="btn h-11 px-5 text-[15px]">API reference</a>
+              <a className={s.textLink} href="#story">
+                Explore the story <span>↓</span>
+              </a>
+            </div>
+          </div>
+          <div className={s.heroMeta}>
+            <span>OPEN SOURCE. SELF-HOSTABLE.</span>
+            <span>
+              {open
+                ? "YOUR INFRASTRUCTURE. YOUR RULES."
+                : auth
+                  ? "HOSTED ACCESS BY INVITATION."
+                  : "HOSTED ACCESS STATUS UNAVAILABLE."}
+            </span>
+          </div>
+        </section>
+        <section
+          className={s.zoom}
+          data-zoom
+          aria-label="A closer look at the company workspace"
+        >
+          <div className={s.zoomSticky}>
+            <div className={s.zoomBackdrop} aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className={s.orbitLabel}>
+              An idea.
+              <br />
+              <em>A whole operating system.</em>
+              <span>
+                <ArrowGlyph direction="down-right" />
+              </span>
+            </div>
+            <div className={s.canvasTransform}>
+              <CompanyCanvas />
+            </div>
+            <span className={s.zoomHint}>
+              SCROLL TO LOOK CLOSER <span>↓</span>
+            </span>
+            <span className={s.canvasDisclaimer}>
+              Illustrative product preview · not a live company
+            </span>
+          </div>
+        </section>
+        <section className={s.bridge}>
+          <span className={s.eyebrow}>LESS FRAGMENTATION. MORE FORWARD.</span>
+          <h2>
+            Your company doesn’t
+            <br />
+            happen in <em>one tab.</em>
+          </h2>
+          <div className={s.bridgeBottom}>
+            <span className={s.bridgeSymbol} aria-hidden="true">
+              ↳
+            </span>
+            <p>
+              Give the work a shared home. Bring your agents, your context and
+              your decisions into one connected system.
+            </p>
+            <a
+              href="#story"
+              className={s.circleLink}
+              aria-label="Explore the workflow story"
+            >
+              <span aria-hidden="true">↓</span>
+            </a>
+          </div>
+        </section>
+        <section
+          className={s.story}
+          id="story"
+          data-story
+          aria-label="From idea to authorized action"
+        >
+          <div className={s.storySticky}>
+            <div className={s.storyIntro}>
+              <span className={s.eyebrow}>THE STEWARD WAY</span>
+              <h2>
+                From “what if”
+                <br />
+                to <em>what’s next.</em>
+              </h2>
+              <nav className={s.chapterNav} aria-label="Workflow chapters">
+                {CHAPTERS.map((chapter, index) => (
+                  <a
+                    href={`#${chapter.id}`}
+                    data-chapter-link={index}
+                    key={chapter.id}
+                  >
+                    <span>{chapter.number}</span>
+                    {chapter.label}
+                    <span className={s.chapterArrow}>
+                      <ArrowGlyph />
+                    </span>
+                  </a>
+                ))}
+              </nav>
+              <div className={s.storyMeter} aria-hidden="true">
+                <span />
+              </div>
+              <p className={s.storyDisclaimer}>
+                An illustrated journey through Steward’s tools.
+                <br />
+                Execution depends on your configured services.
+              </p>
+            </div>
+            <div className={s.chapterStage}>
+              {CHAPTERS.map(({ id, title, copy, Scene, number }) => (
+                <article
+                  className={s.chapter}
+                  id={id}
+                  key={id}
+                  data-chapter-panel
+                >
+                  <div className={s.chapterCopy}>
+                    <span>{number} / FOUR CHAPTERS</span>
+                    <h3>{title}</h3>
+                    <p>{copy}</p>
+                  </div>
+                  <Scene />
+                </article>
+              ))}
             </div>
           </div>
         </section>
-
         <section
-          className="rise-in mx-auto mt-12 max-w-5xl"
-          aria-label="How a run flows"
-          style={{ "--enter-delay": `${ARRIVAL.delayMs(1)}ms` } as CSSProperties}
+          className={s.studios}
+          id="studios"
+          data-rail
+          aria-labelledby="studios-title"
         >
-          <div className="card nb-left-purple flex flex-wrap items-center justify-center gap-y-3 px-4 py-4 sm:justify-between sm:px-6">
-            {PIPELINE.map((step, i) => (
-              <span key={step} className="flex items-center gap-2 text-sm">
-                <span className={`mono text-[13px] ${i === 0 || i === PIPELINE.length - 1 ? "text-accent" : "text-fg-2"}`}>{step}</span>
-                {i < PIPELINE.length - 1 && <Icon.ChevronRight size={14} className="text-faint" />}
-              </span>
-            ))}
+          <div className={s.railSticky}>
+            <div className={s.studioHeading}>
+              <div>
+                <span className={s.eyebrow}>
+                  ONE SYSTEM. MANY WAYS FORWARD.
+                </span>
+                <h2 id="studios-title">
+                  Space for your
+                  <br />
+                  <em>whole company.</em>
+                </h2>
+              </div>
+              <div className={s.studioNav}>
+                <span>
+                  EXPLORE THE WORKSPACE <ArrowGlyph />
+                </span>
+                <nav aria-label="Workspace showcase">
+                  {STUDIOS.map((studio, index) => (
+                    <a
+                      key={studio.id}
+                      href={`#${studio.id}`}
+                      data-rail-link={index}
+                      aria-label={`0${index + 1}: Explore ${studio.tag}`}
+                    >
+                      0{index + 1}
+                    </a>
+                  ))}
+                </nav>
+              </div>
+            </div>
+            <div className={s.railViewport}>
+              <div className={s.studioTrack} data-track>
+                {STUDIOS.map((studio, index) => (
+                  <article
+                    className={s.studioCard}
+                    key={studio.id}
+                    id={studio.id}
+                  >
+                    <div className={s.studioCardTop}>
+                      <span>{studio.tag}</span>
+                      <span>0{index + 1} / 03</span>
+                    </div>
+                    <StudioArt kind={studio.kind} />
+                    <div className={s.studioCardCopy}>
+                      <h3>{studio.name}</h3>
+                      <p>{studio.copy}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+            <div className={s.railMeter} aria-hidden="true">
+              <span />
+            </div>
           </div>
-          <p className="mt-3 text-center text-xs text-muted">Every step is recorded with its model, tool, cost and authorization — then persisted before the next event fires.</p>
         </section>
-
         <section
-          className="rise-in mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-          aria-label="Capabilities"
-          style={{ "--enter-delay": `${ARRIVAL.delayMs(2)}ms` } as CSSProperties}
+          className={s.control}
+          id="control"
+          aria-labelledby="control-title"
         >
-          {PILLARS.map(([Glyph, title, body]) => (
-            <article key={title} className="card nb-left-blue">
-              <span className="nb-panel-flat mb-4 flex h-10 w-10 items-center justify-center p-0 text-accent">
-                <Glyph size={18} />
-              </span>
-              <h2 className="text-[15px] font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
-            </article>
-          ))}
+          <div className={s.controlTop}>
+            <span className={s.eyebrow}>AUTONOMY NEEDS A FOUNDATION.</span>
+            <h2 id="control-title">
+              Ambitious by nature.
+              <br />
+              <em>Accountable by design.</em>
+            </h2>
+            <p>
+              Give your company room to move without losing sight of the work.
+            </p>
+          </div>
+          <div className={s.controlGrid}>
+            {[
+              [
+                Icon.Approvals,
+                "You set the boundaries.",
+                "Per-company policies, budgets and approval gates define what your agents are authorized to do.",
+              ],
+              [
+                Icon.Eye,
+                "The record stays with you.",
+                "Inspect runs, steps, tool calls and decisions. Every step is recorded so you can trace the work and diagnose failures.",
+              ],
+              [
+                Icon.Server,
+                "Your stack. Your choice.",
+                "Self-host with PostgreSQL, Redis and Temporal. Configure your model providers and keep credentials encrypted at rest.",
+              ],
+            ].map(([Glyph, title, copy]) => {
+              const G = Glyph as typeof Icon.Eye;
+              return (
+                <article key={title as string}>
+                  <G size={24} />
+                  <h3>{title as string}</h3>
+                  <p>{copy as string}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+        <section className={s.finalCta}>
+          <span className={s.eyebrow}>
+            FOR THE THING YOU CAN’T STOP THINKING ABOUT.
+          </span>
+          <h2>
+            Let’s give it
+            <br />
+            <em>some momentum.</em>
+            <span aria-hidden="true">
+              <ArrowGlyph />
+            </span>
+          </h2>
+          <div className={s.finalBottom}>
+            <p>
+              The idea is yours.
+              <br />
+              Make Steward your place to move it forward.
+            </p>
+            <Link href={entry} className={s.button}>
+              {entryLabel}
+              <Icon.ArrowRight size={20} />
+            </Link>
+          </div>
         </section>
       </main>
-
-      <footer className="hairline mx-auto max-w-6xl border-x-0 border-b-0 px-4 py-8 text-xs text-muted sm:px-6">
-        Steward is open source (Apache-2.0). Self-host it anywhere Docker runs.
+      <footer className={s.footer}>
+        <Link href="/" className={s.brand}>
+          <BrandMark /> steward
+        </Link>
+        <span>
+          A COMPANY OS, BUILT WITH INTENT.
+          <br />
+          Apache-2.0 · Self-hostable
+        </span>
+        <nav aria-label="Footer">
+          <a href="/api/v1/openapi.json">
+            API reference <ArrowGlyph />
+          </a>
+          <Link href="/legal/terms">Terms</Link>
+          <Link href="/legal/privacy">Privacy</Link>
+          <Link href="/login">Sign in</Link>
+        </nav>
+        <a href="#main" className={s.backTop}>
+          BACK TO TOP ↑
+        </a>
       </footer>
-    </div>
+    </ScrollShowcase>
   );
 }

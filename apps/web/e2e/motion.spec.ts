@@ -92,18 +92,18 @@ test("with reduced motion nothing moves, and nothing is hidden", async ({ page }
 
   const heading = page.getByRole("heading", { level: 1 });
   await expect(heading).toBeVisible();
-  await expect(page.getByRole("link", { name: /get started|create/i }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /get started|create|enter workspace/i }).first()).toBeVisible();
   await expect(page.getByText(/every step is recorded/i)).toBeVisible();
   // The banner is the last thing scheduled to arrive; under this preference it is simply there.
   await expect(page.getByText(/every step is recorded/i)).toHaveCSS("opacity", "1");
 
   const state = await page.evaluate(() => ({
     running: document.getAnimations().filter((animation) => animation.playState === "running").length,
-    ambient: getComputedStyle(document.querySelector(".ambient") as Element).animationName,
-    hero: getComputedStyle(document.querySelector(".nb-hero") as Element).opacity,
+    enhanced: document.querySelector("[data-motion]")?.getAttribute("data-motion"),
+    hero: getComputedStyle(document.querySelector("[data-hero]") as Element).opacity,
   }));
 
-  expect(state.ambient).toBe("none");
+  expect(state.enhanced).toBe("false");
   expect(state.hero).toBe("1");
   expect(state.running).toBe(0);
   await networkSettled(page);
@@ -115,7 +115,7 @@ test("the only properties this product moves are transform and opacity", async (
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  // The landing page is the busiest storefront surface: an entrance and the one ambient layer.
+  // The landing page has finite entrances; its scroll choreography runs only in response to scrolling.
   const properties = await animatedProperties(page);
   expect(properties.length).toBeGreaterThan(0);
   for (const property of properties) {

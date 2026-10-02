@@ -52,6 +52,7 @@ const SUITE_FILES = [
   SEAM,
   "session.ts",
   "site-studio.spec.ts",
+  "showcase.spec.ts",
   "workflows.spec.ts",
 ];
 

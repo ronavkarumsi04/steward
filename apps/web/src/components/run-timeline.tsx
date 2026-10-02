@@ -41,8 +41,8 @@ const KIND: Record<TimelineKind, { label: string; edge: string }> = {
   artifact: { label: "artifact", edge: "nb-left-green" },
 };
 
-export function RunTimeline({ detail, companyId }: { detail: RunDetail; companyId: string }) {
-  const inspection = inspectRun(detail, { now: Date.now(), companyId });
+export function RunTimeline({ detail, companyId, observedAt }: { detail: RunDetail; companyId: string; observedAt: number }) {
+  const inspection = inspectRun(detail, { now: observedAt, companyId });
   const { verdict, timeline, totals } = inspection;
   const outcome = OUTCOME[verdict.outcome];
   const slowestMs = inspection.slowest?.durationMs ?? 0;

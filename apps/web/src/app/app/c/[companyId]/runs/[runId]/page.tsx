@@ -11,5 +11,5 @@ export default async function RunPage({ params }: { params: Promise<{ companyId:
     api.get<{ agents: Agent[] }>(`/companies/${companyId}/agents`),
   ]);
   if (!detail) notFound();
-  return <RunDetailView companyId={companyId} initial={detail} agents={agents} />;
+  return <RunDetailView companyId={companyId} initial={detail} agents={agents} observedAt={Date.now()} />;
 }
