@@ -19,6 +19,7 @@ export NODE_ENV=production
 export DATABASE_URL=${DATABASE_URL:-postgres://steward:steward@localhost:5432/steward}
 export REDIS_URL=${REDIS_URL:-redis://localhost:6379}
 export TEMPORAL_ADDRESS=${TEMPORAL_ADDRESS:-localhost:7233}
+export TEMPORAL_TASK_QUEUE="steward-boot-$$"
 export STEWARD_MASTER_KEY=${STEWARD_MASTER_KEY:-$(openssl rand -hex 32)}
 export SESSION_SECRET=${SESSION_SECRET:-$(openssl rand -hex 32)}
 export API_PORT=${API_PORT:-4100}
@@ -83,18 +84,23 @@ wait_http "$API_URL/health" 60
 curl -fsS "$API_URL/health"; echo
 curl -fsS "$API_URL/health" | grep -q '"db":"ok"' || { echo "api db check failed"; exit 1; }
 curl -fsS "$API_URL/health" | grep -q '"temporal":"connected"' || { echo "api temporal check failed"; exit 1; }
+# A freshly named queue has no workers. Serving HTTP must not imply that agents can execute.
+[ "$(curl -s -o "$LOGS/ready-before-worker.json" -w '%{http_code}' "$API_URL/ready")" = "503" ] || { echo "execution readiness passed without a worker"; exit 1; }
 
 step "start worker"
 spawn node apps/worker/dist/main.js >"$LOGS/worker.log" 2>&1
 WORKER_PID=$LAST_PID
 for _ in $(seq 1 60); do grep -q "steward worker ready" "$LOGS/worker.log" 2>/dev/null && break; kill -0 $WORKER_PID 2>/dev/null || { echo "worker exited"; cat "$LOGS/worker.log"; exit 1; }; sleep 1; done
 grep -q "steward worker ready" "$LOGS/worker.log" || { echo "worker did not report ready"; tail -50 "$LOGS/worker.log"; exit 1; }
+wait_http "$API_URL/ready" 60
+curl -fsS "$API_URL/ready" | grep -q '"executions":"ready"' || { echo "worker queues are not ready"; exit 1; }
 
 step "worker crash recovery (SIGKILL → restart)"
 kill -9 -- "-$WORKER_PID"; sleep 1
 spawn node apps/worker/dist/main.js >"$LOGS/worker2.log" 2>&1
 for _ in $(seq 1 60); do grep -q "steward worker ready" "$LOGS/worker2.log" 2>/dev/null && break; sleep 1; done
 grep -q "steward worker ready" "$LOGS/worker2.log" || { echo "restarted worker did not report ready"; tail -50 "$LOGS/worker2.log"; exit 1; }
+wait_http "$API_URL/ready" 60
 
 step "start web (standalone build)"
 # same layout as infra/docker/web.Dockerfile: static assets live next to the standalone server

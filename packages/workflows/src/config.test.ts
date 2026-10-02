@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { temporalConfigFromEnv, temporalConnectTimeoutMs, temporalTlsMaterial } from "./client.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Configuration is read in exactly one place and shared by the API, the worker and the embedded runtime. These
@@ -33,6 +36,15 @@ describe("temporal configuration", () => {
   it("uses api-key TLS only when a key is present", async () => {
     expect(await temporalTlsMaterial({ address: "a:7233", namespace: "default", taskQueue: "q", tls: null })).toBeUndefined();
     expect(await temporalTlsMaterial({ address: "a:7233", namespace: "default", taskQueue: "q", tls: null, apiKey: "k" })).toBe(true);
+  });
+
+  it("honours a custom server CA even without a client certificate pair", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "steward-ca-"));
+    try {
+      const ca = join(dir, "ca.pem");
+      await writeFile(ca, "server CA fixture");
+      expect(await temporalTlsMaterial({ address: "a:7233", namespace: "default", taskQueue: "q", tls: { serverRootCACertPath: ca } })).toEqual({ serverRootCACertificate: Buffer.from("server CA fixture") });
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 
   it("clamps the connect timeout so a typo cannot hang a boot", () => {

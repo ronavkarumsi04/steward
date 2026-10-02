@@ -6,7 +6,7 @@
  * composite foreign key, which is precisely how the tenancy gaps that migration 0009 fixes were introduced
  * — a promise in a document is not enforcement, and a test that reads the live catalog is.
  *
- * Live checks are skipped when the database is unreachable, so unit-only runs still pass.
+ * Live checks explicitly skip when the database is unreachable outside CI; CI requires a live database.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -49,12 +49,13 @@ describe("migration journal", () => {
 
 let pool: pg.Pool | null = null;
 beforeAll(async () => {
+  const probe = new pg.Pool({ connectionString: url, connectionTimeoutMillis: 1500 });
   try {
-    const probe = new pg.Pool({ connectionString: url, connectionTimeoutMillis: 1500 });
     await probe.query("select 1");
     pool = probe;
-  } catch {
-    pool = null;
+  } catch (error) {
+    await probe.end();
+    if (process.env.CI) throw error;
   }
 });
 afterAll(async () => {
@@ -63,11 +64,8 @@ afterAll(async () => {
 
 /** Runs only when a database is reachable; skipped (not silently passed) otherwise. */
 const live = (name: string, fn: () => Promise<void>) =>
-  it(name, async () => {
-    if (!pool) {
-      console.warn(`skipped (no database at ${url}): ${name}`);
-      return;
-    }
+  it(name, async (context) => {
+    if (!pool) return context.skip();
     await fn();
   });
 

@@ -24,10 +24,39 @@ describe("loadConfig", () => {
     }
   });
 
+  it("preserves supported hex/base64 keys and validates rotated keys before opening resources", () => {
+    const encoded = Buffer.alloc(32, 7).toString("base64");
+    expect(loadConfig({ ...base, STEWARD_MASTER_KEY: encoded }).masterKey).toBe(encoded);
+    expect(loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: encoded }) }).previousMasterKeys).toEqual({ previous: encoded });
+    expect(() => loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: "secret" }) })).toThrow(/STEWARD_PREVIOUS_MASTER_KEYS/);
+    try { loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: "secret" }) }); }
+    catch (error) { expect((error as Error).message).not.toContain("secret"); }
+  });
+
   it("parses ALLOW_SIGNUP and NODE_ENV", () => {
     expect(loadConfig({ ...base }).allowSignup).toBe(true);
     expect(loadConfig({ ...base, ALLOW_SIGNUP: "false" }).allowSignup).toBe(false);
     expect(loadConfig({ ...base, NODE_ENV: "production" }).env).toBe("production");
-    expect(loadConfig({ ...base, NODE_ENV: "staging" }).env).toBe("development");
+    expect(loadConfig({ ...base, NODE_ENV: "production" }).allowSignup).toBe(false);
+    expect(loadConfig({ ...base, NODE_ENV: "production", ALLOW_SIGNUP: "true" }).allowSignup).toBe(true);
+    expect(() => loadConfig({ ...base, NODE_ENV: "staging" })).toThrow(/NODE_ENV/);
+  });
+
+  it("rejects malformed keys, secrets and URLs without echoing their values", () => {
+    for (const [key, value] of Object.entries({ DATABASE_URL: "https://secret@example.com", STEWARD_MASTER_KEY: "secret", SESSION_SECRET: "secret", APP_URL: "https://secret@example.com", API_URL: "ftp://secret", API_INTERNAL_URL: "https://x.test/?secret" })) {
+      try { loadConfig({ ...base, [key]: value }); throw new Error("expected validation failure"); }
+      catch (error) { expect((error as Error).message).toContain(key); expect((error as Error).message).not.toContain(value); }
+    }
+    expect(() => loadConfig({ ...base, APP_URL: "https://x.test/path" })).toThrow(/origin only/);
+    expect(() => loadConfig({ ...base, SESSION_SECRET: "   " })).toThrow(/Missing/);
+  });
+
+  it("normalizes optional blank URLs consistently", () => {
+    expect(loadConfig({ ...base, APP_URL: " ", API_INTERNAL_URL: "", API_URL: " https://api.test/ " })).toMatchObject({ appUrl: "http://localhost:3000", apiUrl: "https://api.test", apiInternalUrl: "https://api.test" });
+  });
+
+  it("honours bounded per-process pool limits for serverless hosts", () => {
+    expect(loadConfig({ ...base, DATABASE_POOL_MAX: "2" }).databasePoolMax).toBe(2);
+    for (const value of ["0", "101", "1.5", "NaN"]) expect(() => loadConfig({ ...base, DATABASE_POOL_MAX: value })).toThrow(/DATABASE_POOL_MAX/);
   });
 });

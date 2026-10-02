@@ -37,4 +37,6 @@ jobs:
 
       # No install and no build: fetch, git and node are all this needs.
       - name: Check the hosted deployment
+        env:
+          REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '0' }}
         run: node scripts/hosted-check.mjs

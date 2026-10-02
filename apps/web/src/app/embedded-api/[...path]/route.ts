@@ -46,8 +46,10 @@ async function handle(request: Request): Promise<Response> {
     url.pathname = apiPath(url.pathname);
     return await runtime.app.fetch(new Request(url, request));
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return Response.json({ error: { code: "api_unavailable", message: `The API could not start: ${message}` } }, { status: 503 });
+    // Startup errors may contain database URLs or provider credentials. Keep details server-side too:
+    // only a fixed diagnostic belongs here; the dependency owner logs its safe failure category.
+    void e;
+    return Response.json({ error: { code: "api_unavailable", message: "The API is temporarily unavailable. Please retry." } }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
   }
 }
 

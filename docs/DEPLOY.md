@@ -51,7 +51,7 @@ Edit `.env`. Values that **must** change from the example:
 | `API_DOMAIN` | `api.example.com` — Caddy requests a Let's Encrypt certificate for this name. |
 | `ACME_EMAIL` | your email, for certificate expiry notices (optional but recommended) |
 | `TRUST_PROXY` | `true` — the API sits behind Caddy; this makes rate limits and audit logs use the real client IP from `X-Forwarded-For`. |
-| `ALLOW_SIGNUP` | `true` until you have registered the first owner, then `false` (see §4). |
+| `ALLOW_SIGNUP` | `false` (also the production default). The first owner can bootstrap; later accounts require an invitation. Set `true` only when public registration is intended. |
 | `PLATFORM_EMAIL_PROVIDER` / `PLATFORM_EMAIL_FROM` / `RESEND_API_KEY` | see §3 |
 | `SANDBOX_PROVIDER` | `none` unless you have a dedicated Docker host for agent code execution (see §5) |
 
@@ -81,13 +81,44 @@ Caddy is configured (`infra/caddy/Caddyfile`) with `flush_interval -1` and no re
 | --- | --- |
 | Upgrade | `git pull && docker compose --profile backend up -d --build` (migrations are forward-only and run on API start; run `pnpm db:migrate` out of band if you set `RUN_MIGRATIONS_ON_START=false`) |
 | Roll back | `git checkout <previous-tag> && docker compose --profile backend up -d --build`. Schema migrations are additive, so an older API keeps working against a newer schema for one release. |
-| Back up | `docker compose exec postgres pg_dump -U steward steward \| gzip > steward-$(date +%F).sql.gz` on a cron. Also back up `.env` (the master key) and the `artifacts` volume. |
+| Back up | Follow [Backup and Disaster Recovery](compliance/BACKUP_AND_DR.md): non-TTY database archives, coordinated Temporal persistence, the actual artifact volume, and separately held master-key versions. Verify a scratch restore before trusting the backup. |
 | Restore | `gunzip -c dump.sql.gz \| docker compose exec -T postgres psql -U steward steward` |
 | Rotate the master key | Set the new `STEWARD_MASTER_KEY` and put the old one in `STEWARD_PREVIOUS_MASTER_KEYS` (`{"<keyId>":"<old hex>"}`; the key id is the first 8 hex chars of `sha256(rawKeyBytes)`: `echo -n "<old hex>" | xxd -r -p | sha256sum | cut -c1-8`). Restart. Existing secrets stay readable with the old key; anything saved from now on uses the new key. Keep the old key listed until every provider key has been re-saved. |
 | Temporal UI | Bound to `127.0.0.1:8233`; reach it with `ssh -L 8233:127.0.0.1:8233 user@host`. |
 | Logs | JSON (pino) on stdout: `docker compose logs -f api worker`. Point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector for traces. |
 
 Worker crashes and restarts are safe — runs are Temporal workflows and resume from their last completed activity (`pnpm verify:boot` exercises a SIGKILL mid-run).
+
+#### Availability versus execution readiness
+
+`GET /health` answers whether the UI/API database is reachable. It reports Temporal as `disabled`,
+`unavailable`, or `connected` using a live namespace RPC, rather than the existence of a client object.
+A healthy UI can still be unable to execute work.
+
+`GET /ready` returns 200 only when the database and Temporal namespace answer and both workflow and
+activity queues report a poller seen within 90 seconds. It returns 503 for a disabled engine, a failed RPC,
+or an idle queue. Both responses forbid caching. These are bounded dependency checks; poller presence is
+an operational signal, not proof of an agent's model credentials, available capacity, browser installation,
+or a completed workflow. A crashed worker can remain visible until that 90-second window expires.
+
+The API retries a failed boot connection every 30 seconds. Requests also drive retries after the cooldown,
+because serverless platforms can suspend timers. The SDK bounds each attempt with
+`TEMPORAL_CONNECT_TIMEOUT_MS`; in-flight attempts are shared and connections are closed on shutdown.
+An existing SDK connection handles later transport reconnection. Approval signalling uses the current
+connection, so a recovered boot restores that path too.
+
+For an embedded deployment, `/ready` is rewritten to the same API runtime as `/health`. Run
+`REQUIRE_EXECUTIONS=1 pnpm hosted:check` to require execution readiness in addition to the UI smoke.
+The repository variable `REQUIRE_EXECUTIONS=1` enables this requirement in the daily and deployment
+checks. Enable it once a real worker is provisioned; its absence leaves the check explicitly limited to
+UI/API availability. Production agent execution remains **UNVERIFIED** until a hosted run is exercised
+with real model credentials, required approvals, and its persisted audit trail.
+
+Configuration now validates key lengths/formats, URL schemes, empty values, pool bounds, and boolean
+settings before connecting. `DATABASE_POOL_MAX` applies to the runtime pool (including embedded hosts),
+and new database connections have a three-second acquisition timeout. Console mail does not log message
+bodies or bearer links. In production it reports delivery unavailable; configure Resend to deliver mail.
+Embedded startup failures return a fixed 503 message, without raw environment/provider errors.
 
 ### 1.5 Managed alternatives
 

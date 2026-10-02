@@ -826,9 +826,9 @@ export class GraphService {
       const targetNode = target.kind === "entity" && target.id === ref.id ? node : nodeOf(target);
       const missing = target.id !== ref.id && !resolved.has(`${target.kind}:${target.id}`);
       if (missing) dangling += 1;
-      const isOutgoing = link.entityId === ref.id;
-      const from = isOutgoing ? entityNode : targetNode;
-      const to = isOutgoing ? targetNode : entityNode;
+      // Direction belongs to the stored claim, not to whichever endpoint the founder selected.
+      const from = entityNode;
+      const to = targetNode;
       recorded.push({
         id: link.id,
         relation: link.relation,

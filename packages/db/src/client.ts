@@ -22,8 +22,8 @@ export function getDb(connectionString?: string): Db {
   return db;
 }
 
-export function createDb(connectionString: string): { db: Db; pool: pg.Pool } {
-  const p = new pg.Pool({ connectionString, max: 5 });
+export function createDb(connectionString: string, max = 5): { db: Db; pool: pg.Pool } {
+  const p = new pg.Pool({ connectionString, max, connectionTimeoutMillis: 3_000 });
   return { db: drizzle(p, { schema }), pool: p };
 }
 

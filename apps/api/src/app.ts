@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { parseBoolean } from "@steward/core";
 import { cors } from "hono/cors";
 import { AuthError, BrowserError, CodeError, GraphError, McpError, SiteError, WorkflowError, type EventBus } from "@steward/core";
 import { MemoryError } from "@steward/memory";
@@ -65,14 +66,31 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     }),
   );
 
-  app.get("/health", async (c) => {
+  const health = async (includeWorkers: boolean) => {
     let db = "ok";
     try {
-      await deps.core.pool.query("select 1");
+      const probe = { text: "select 1", query_timeout: 3_000 };
+      await deps.core.pool.query(probe);
     } catch {
       db = "down";
     }
-    return c.json({ ok: db === "ok", version: API_VERSION, commit: commitOf(deps.env), db, temporal: deps.workflows ? "connected" : "disabled" }, db === "ok" ? 200 : 503);
+    const workflows = deps.workflows;
+    const state = workflows ? await workflows.readiness(includeWorkers) : { connected: false, workers: false };
+    const temporal = state.connected ? "connected" : parseBoolean(deps.env.TEMPORAL_DISABLED, false) ? "disabled" : "unavailable";
+    const ok = db === "ok" && (!includeWorkers || (state.connected && state.workers));
+    return { ok, version: API_VERSION, commit: commitOf(deps.env), db, temporal, ...(includeWorkers ? { executions: state.workers ? "ready" : "unavailable" } : {}) };
+  };
+  app.get("/health", async (c) => {
+    c.header("cache-control", "no-store");
+    const state = await health(false);
+    return c.json(state, state.ok ? 200 : 503);
+  });
+  // UI availability and workflow execution readiness are different contracts. A UI-only host stays
+  // healthy, but cannot pass this check until the namespace and both worker queues actually answer.
+  app.get("/ready", async (c) => {
+    c.header("cache-control", "no-store");
+    const state = await health(true);
+    return c.json(state, state.ok ? 200 : 503);
   });
 
   app.use("/webhooks/*", rateLimit({ capacity: 180, refillPerSec: 3 }));

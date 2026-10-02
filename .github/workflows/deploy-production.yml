@@ -68,6 +68,7 @@ jobs:
         env:
           SHA: ${{ inputs.sha || github.sha }}
           ATTEMPTS: "24"
+          REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '0' }}
         run: |
           for attempt in $(seq 1 "$ATTEMPTS"); do
             if EXPECT="$SHA" node scripts/hosted-check.mjs; then
