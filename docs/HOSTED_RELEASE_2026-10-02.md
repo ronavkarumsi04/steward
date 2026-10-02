@@ -41,6 +41,10 @@ Six regression cases cover cookie/query preservation without network fetches, st
 retry/redaction, standalone URL selection, unavailable registration policy and authorization errors.
 Production boot defaults to embedded mode and gives the web process an unreachable HTTP API address,
 so the real browser/tenant/company workflow suite must exercise the embedded server path.
+The first stronger run passed 26 browser tests, failed two, and left one unrun: the standalone bundle
+omitted Playwright's dynamically loaded `browsers.json`, and the embedded stream waited 25 seconds for
+notifications despite LISTEN being disabled. Explicit metadata tracing and the existing two-second
+polling path address those defects without weakening the browser watcher.
 
 Before this follow-up is accepted: lint, typecheck, production build, unit/integration, boot/browser,
 protected PR/merge CI and Docker builds must pass. Hosted Chromium must render the invitation-only page
