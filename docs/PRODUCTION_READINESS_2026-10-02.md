@@ -37,6 +37,8 @@ hash-verified for main and deployed `9932427` to run the repository's actual hos
 - `packages/core/src/{context,mailer,graph}.ts`: strict environment validation, closed production signup default,
   actual pool bounds, no bearer-link logging or provider-body exceptions, and stable recorded-edge direction.
 - `packages/db/src/client.ts`: runtime pool maximum and bounded connection acquisition.
+- `packages/db/src/migrations.test.ts`: unreachable live checks explicitly skip outside CI and fail CI;
+  close failed probe pools and never log a credential-bearing database URL.
 - `apps/worker/src/main.ts`: same Temporal-disabled boolean parsing as the API.
 - `apps/web/next.config.ts` and embedded API route: hosted `/ready` mapping and fixed, non-cacheable startup 503.
 - Boot/hosted scripts and hosting workflows: refuse readiness without workers; optional execution requirement.
@@ -64,7 +66,12 @@ checks. Browser E2E covers live controlled sessions, cancellation, graph/memory/
 Site Studio publishing/version restore, executable workflow publishing, phone layouts and reduced motion.
 These are local controlled fixtures, not production provider validation.
 
-PR/merge CI will be recorded after the remote checks finish; it is not yet represented as passed.
+[PR #55](https://github.com/ronavkarumsi04/steward/pull/55) carries the source changes.
+Its initial remote upload dropped the boot script's executable mode; a follow-up restores it, and the
+GitHub tree `1712d83d7bbb8e8edfa49d8323ba196e614157a9` matches the local tested tree exactly.
+The migration-verifier correction was then exercised separately: live database 8/8 passed; unavailable
+outside CI 3 static checks passed and 5 live checks explicitly skipped; unavailable in CI exited 1 with
+the failed connection hook. Database lint/typecheck passed. PR/merge CI is still pending as of this record.
 The new live recovery test passed both individually and in the full suite against real Temporal: boot failed to connect; a loopback relay
 subsequently made the endpoint reachable; the same API instance recovered after its retry cooldown and
 reported connected, while refusing execution readiness on its fresh workerless queue. Its configured
@@ -79,9 +86,27 @@ test now asserts exact direction from both endpoints, and the real event-stream 
 
 No hosted application code or production resources were changed during local implementation.
 Direct GitHub application access fails, but Composio GitHub access works. The direct Vercel connector
-lists no teams; Composio has no active Vercel connection. The managed workspace has no application credentials
-or outbound cloud identities configured. No production Temporal/worker, browser host, email provider,
-model provider or backup store was authorized/exercised in this session.
+lists no teams; Composio's Vercel authentication is pending. The managed workspace has no application
+credentials or outbound cloud identities configured. The direct Supabase connector does expose `steward-prod`;
+its project status, migration journal, role flags, table privileges and security/performance advisors were
+inspected read-only. No production Temporal/worker, browser host, email provider, model provider or backup
+store was exercised in this session.
+
+Production database evidence:
+
+- Project `zxnsdiyptiaigiteumwb` is `ACTIVE_HEALTHY`, Postgres `17.6.1.166`, 70 public tables.
+- All 18 migration timestamps agree with the current journal. All SQL hashes agree after accounting for
+  CRLF in 17 deployed files and LF in `0008`; the initial raw-hash mismatch was investigated, not overwritten.
+  All 862 column definitions and all 224 constraints match the clean local migrated catalog exactly.
+- `steward_app` is neither a superuser nor a BYPASSRLS role. The application owns its tables, so RLS does
+  not replace its existing organization/company checks and composite tenant foreign keys.
+- `anon` and `authenticated` have no privileges on any of the 70 tables. 54 have RLS enabled without
+  policies (closed to non-owner roles); 16 later tables lack RLS, showing that the documented manual guard
+  was not repeated after later migrations. No permissive policies were added to silence the advisor.
+- The security advisor also warns about [`vector` in public](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public). Performance advisors report 86 unindexed
+  foreign keys and 67 unused indexes; these are findings, not measured production bottlenecks.
+- The [current Supabase changelog](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes) announces PostgreSQL 17.11 security fixes. The project's older version
+  needs a provider upgrade review and a measured backup/restore before maintenance. No upgrade was attempted.
 
 **UNVERIFIED:** Temporal Cloud API-key/mTLS authentication, hosted worker execution/reconciliation, real
 model evals, production controlled browser actions, Resend delivery, deployment creation/Git integration,

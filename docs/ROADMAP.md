@@ -235,7 +235,7 @@ show the create step skipped and the wait step passing on a deployment Vercel's 
 
 ## Production readiness tranche — 2026-10-02
 
-🚧 Branch `codex/production-runtime-readiness`, based on current protected main `81f720f`.
+🚧 Branch [PR #55](https://github.com/ronavkarumsi04/steward/pull/55) (`codex/production-runtime-readiness`), based on current protected main `81f720f`.
 This is not P3 completion and does not upgrade the historical P0/P1/P2 counts into a claim that the hosted
 company OS can execute work. Merge-commit CI and hosted execution are separate verification requirements.
 
@@ -246,6 +246,7 @@ company OS can execute work. Merge-commit CI and hosted execution are separate v
   bodies excluded from exceptions, and embedded startup responses no longer expose raw failures.
 - Baseline graph defect repaired: an incoming recorded relationship keeps its stored source/target direction.
 - Event streams flush before database reads and release subscriptions/timers on every exit.
+- Migration verification explicitly skips unavailable live checks outside CI, fails CI without Postgres, and closes failed probes.
 - Boot verification checks refusal before worker startup and readiness after startup/restart; hosted checks
   can require execution readiness with `REQUIRE_EXECUTIONS=1`.
 
