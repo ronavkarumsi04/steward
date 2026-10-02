@@ -3,8 +3,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ApiError, createClient, type ApiClient } from "./api";
 import type { Me } from "./types";
+import { serverTransport } from "./server-transport";
 
-export const API_URL = (process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+const transport = serverTransport();
+export const API_URL = transport.baseUrl;
+export const serverFetch = transport.fetchImpl;
 
 /** API client bound to the current request's session cookie. */
 export async function serverApi(): Promise<ApiClient> {
@@ -13,7 +16,7 @@ export async function serverApi(): Promise<ApiClient> {
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  return createClient({ baseUrl: `${API_URL}/v1`, cookie });
+  return createClient({ baseUrl: `${API_URL}/v1`, cookie, fetchImpl: serverFetch });
 }
 
 export async function getMe(): Promise<Me> {
@@ -30,8 +33,8 @@ async function withFallback<T>(what: string, fn: (api: ApiClient) => Promise<T>,
   try {
     return await fn(api);
   } catch (e) {
-    if (e instanceof ApiError) throw e;
-    console.error(`steward ${what} unavailable`, e instanceof Error ? e.message : e);
+    if (e instanceof ApiError && !(e.status === 503 && e.code === "api_unavailable")) throw e;
+    console.error(`steward ${what} unavailable`);
     return fallback;
   }
 }
@@ -46,9 +49,9 @@ export interface AuthConfig {
   inviteOnly: boolean;
 }
 
-/** Public sign-up policy; assumes open when the API is unreachable so the page still renders. */
-export function getAuthConfig(): Promise<AuthConfig> {
-  return withFallback("auth config", (api) => api.get<AuthConfig>("/auth/config"), { signupOpen: true, inviteOnly: false });
+/** Unknown policy must not be presented as permission to register. */
+export function getAuthConfig(): Promise<AuthConfig | null> {
+  return withFallback<AuthConfig | null>("auth config", (api) => api.get<AuthConfig>("/auth/config"), null);
 }
 
 export interface InvitationPreview {

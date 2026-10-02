@@ -235,7 +235,7 @@ show the create step skipped and the wait step passing on a deployment Vercel's 
 
 ## Production readiness tranche — 2026-10-02
 
-🚧 Branch [PR #55](https://github.com/ronavkarumsi04/steward/pull/55) (`codex/production-runtime-readiness`), based on current protected main `81f720f`.
+🚧 Runtime foundation [PR #55](https://github.com/ronavkarumsi04/steward/pull/55) merged as `5f4da7d`; [merge CI](https://github.com/ronavkarumsi04/steward/actions/runs/37009589552) passed all four jobs.
 This is not P3 completion and does not upgrade the historical P0/P1/P2 counts into a claim that the hosted
 company OS can execute work. Merge-commit CI and hosted execution are separate verification requirements.
 
@@ -252,8 +252,15 @@ company OS can execute work. Merge-commit CI and hosted execution are separate v
   can require execution readiness with `REQUIRE_EXECUTIONS=1`.
 
 Verification and remaining blockers are recorded in `docs/PRODUCTION_READINESS_2026-10-02.md`.
+The authenticated [production release](https://github.com/ronavkarumsi04/steward/actions/runs/37057280790)
+deployed `5f4da7d`, with six hosted checks passing, public signup closed, and execution readiness returning
+503 while Temporal is disabled. Hosted verification exposed server-rendered pages calling nonexistent
+`localhost:4000`; the `codex/embedded-server-transport` follow-up shares the embedded runtime with server
+pages and unsubscribe handlers, displays unavailable registration policy honestly, and boots its browser
+suite with the HTTP API address deliberately unreachable. See `docs/HOSTED_RELEASE_2026-10-02.md` for the
+release, defect and follow-up verification contract. This does not establish hosted agent execution.
 No new item is ✅ before the required check passes on a merge commit. Real hosted execution, Temporal Cloud,
-production browser sessions, delivered platform email, deployment provisioning, and backup restore remain
+production browser sessions, delivered platform email, and backup restore remain
 **UNVERIFIED** until exercised with the required service access.
 
 ## Standing rules

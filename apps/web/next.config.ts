@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
    * provider loads the engine itself, and only on a deployment that actually has one.
    */
   serverExternalPackages: ["pg", "pino", "@temporalio/client", "@temporalio/common", "@temporalio/worker", "playwright", "playwright-core"],
+  // Playwright resolves this metadata dynamically; the standalone tracer otherwise omits it and
+  // reports no browser even when the image contains Chromium.
+  outputFileTracingIncludes: { "/*": ["../../node_modules/.pnpm/playwright-core@*/node_modules/playwright-core/browsers.json"] },
   /**
    * Root-level legal URLs. Reviewers, app-directory listings, and Google's OAuth verification all
    * look for /privacy and /terms at the root rather than under a subdirectory, and a broken link in

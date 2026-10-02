@@ -25,6 +25,7 @@ const BUILD_CRITICAL = [
   "apps/web/next.config.ts",
   // The API base the web server calls from module scope.
   "apps/web/src/lib/server.ts",
+  "apps/web/src/lib/server-transport.ts",
   // Site-wide metadata (canonical URL, Open Graph) rendered into the static shell.
   "apps/web/src/app/layout.tsx",
 ];

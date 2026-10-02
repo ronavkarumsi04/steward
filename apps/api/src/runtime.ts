@@ -106,7 +106,9 @@ export async function createApiRuntime(options: RuntimeOptions = {}): Promise<Ap
       log.warn("Platform email delivery is unavailable: configure PLATFORM_EMAIL_PROVIDER=resend");
     }
 
-    const { app } = createApp({ core, auth: new AuthService(core.db), mailer, services, get workflows() { return connection.current; }, companionHub, env }, bus);
+    // Serverless/transaction-pooled runtimes deliberately do not LISTEN. Give their streams the
+    // polling path rather than waiting 25 seconds for notifications that cannot arrive.
+    const { app } = createApp({ core, auth: new AuthService(core.db), mailer, services, get workflows() { return connection.current; }, companionHub, env }, options.listen === false ? null : bus);
 
     return {
       app,

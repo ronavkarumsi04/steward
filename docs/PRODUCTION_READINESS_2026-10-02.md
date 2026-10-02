@@ -79,7 +79,9 @@ Full PR CI [37004808763](https://github.com/ronavkarumsi04/steward/actions/runs/
 `7756914`, including the required verification job and all three Docker builds. Final review then
 preserved the encryption layer's supported base64 key format and validated rotated keys before resources
 are created. The added regression test and all final local gates listed above passed again on that source.
-The final branch revision still requires its own PR/merge CI; an earlier green revision is not substituted.
+Final [PR CI](https://github.com/ronavkarumsi04/steward/actions/runs/37007882950) and
+[merge CI](https://github.com/ronavkarumsi04/steward/actions/runs/37009589552) passed all four jobs on the
+final source and merge `5f4da7d`; an earlier green revision was not substituted.
 Copilot's automatic review did not run because its quota was exhausted; no approving review was supplied,
 and the branch requires zero approving reviews while enforcing current checks and resolved conversations.
 
@@ -100,14 +102,20 @@ test now asserts exact direction from both endpoints, and the real event-stream 
 
 ## Production and access limits
 
-No hosted application code or production resources were changed during local implementation.
+No hosted application code or production resources were changed during the initial local implementation.
+After Vercel authorization was supplied, its connection became active, an encrypted GitHub Actions
+deployment secret was configured, and [release 37057280790](https://github.com/ronavkarumsi04/steward/actions/runs/37057280790)
+successfully deployed `5f4da7d`. Six exact-commit hosted checks passed; signup policy now reports closed,
+invitation-only, and `/ready` correctly returns structured 503 while execution is disabled. Subsequent
+runtime-log inspection exposed the separate server-rendered loopback defect, addressed by the follow-up
+described in `docs/HOSTED_RELEASE_2026-10-02.md`.
 Direct GitHub application access fails, but Composio GitHub access works. The direct Vercel connector
-lists no teams; Composio's Vercel authentication is pending. The managed workspace has no application
+lists no teams; Composio's Vercel connection now accesses the owning team/project. The managed workspace has no application
 credentials or outbound cloud identities configured. The direct Supabase connector does expose `steward-prod`;
 its project status, migration journal, role flags, table privileges and security/performance advisors were
 inspected read-only. No production Temporal/worker, browser host, email provider, model provider or backup
-store was exercised in this session. The hosted public auth configuration reports `signupOpen=true` and
-`inviteOnly=false`; `/ready` returns 404. The new execution-required hosted smoke correctly exits 1
+store was exercised in this session. Before release, the hosted public auth configuration reported `signupOpen=true` and
+`inviteOnly=false`; `/ready` returned 404. The initial execution-required hosted smoke correctly exited 1
 (6 UI checks passed, execution check failed) on that deployment.
 
 Production database evidence:
@@ -127,8 +135,9 @@ Production database evidence:
   needs a provider upgrade review and a measured backup/restore before maintenance. No upgrade was attempted.
 
 **UNVERIFIED:** Temporal Cloud API-key/mTLS authentication, hosted worker execution/reconciliation, real
-model evals, production controlled browser actions, Resend delivery, deployment creation/Git integration,
-deployment of the closed signup default, backup existence/retention/encryption/restore and measured RPO/RTO.
+model evals, production controlled browser actions, Resend delivery, Vercel Git integration,
+backup existence/retention/encryption/restore and measured RPO/RTO. Deployment creation and the closed
+signup default are now exercised; hosted execution-required smoke still exits 1 with structured 503.
 The backup policy states targets; it does not supply a measured restore record. A recent worker poller is
 not proof of capacity or browser/model readiness, and can remain visible for up to 90 seconds after a crash.
 
