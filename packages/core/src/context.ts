@@ -69,7 +69,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   const databasePoolMax = Number(env.DATABASE_POOL_MAX?.trim() || 5);
   if (!Number.isInteger(databasePoolMax) || databasePoolMax < 1 || databasePoolMax > 100) throw new Error("DATABASE_POOL_MAX must be an integer between 1 and 100");
   if (!/^postgres(?:ql)?:\/\//.test(databaseUrl)) throw new Error("DATABASE_URL must be a PostgreSQL URL");
-  if (!/^[a-f0-9]{64}$/i.test(masterKey)) throw new Error("STEWARD_MASTER_KEY must be 32 bytes of hex");
+  const previousMasterKeys = parseKeyMap(env.STEWARD_PREVIOUS_MASTER_KEYS);
+  try {
+    // Use the same decoder as encryption: existing hex and base64 keys must remain usable.
+    new EnvMasterKeyProvider(masterKey, previousMasterKeys);
+  } catch {
+    throw new Error("STEWARD_MASTER_KEY and STEWARD_PREVIOUS_MASTER_KEYS must contain 32-byte keys (hex or base64)");
+  }
   if (sessionSecret.length < 32) throw new Error("SESSION_SECRET must contain at least 32 characters");
   const url = (key: string, fallback: string) => {
     const value = env[key]?.trim() || fallback;
@@ -88,7 +94,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     databaseUrl,
     databasePoolMax,
     masterKey,
-    previousMasterKeys: parseKeyMap(env.STEWARD_PREVIOUS_MASTER_KEYS),
+    previousMasterKeys,
     sessionSecret,
     appUrl,
     apiUrl,

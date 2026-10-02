@@ -24,6 +24,15 @@ describe("loadConfig", () => {
     }
   });
 
+  it("preserves supported hex/base64 keys and validates rotated keys before opening resources", () => {
+    const encoded = Buffer.alloc(32, 7).toString("base64");
+    expect(loadConfig({ ...base, STEWARD_MASTER_KEY: encoded }).masterKey).toBe(encoded);
+    expect(loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: encoded }) }).previousMasterKeys).toEqual({ previous: encoded });
+    expect(() => loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: "secret" }) })).toThrow(/STEWARD_PREVIOUS_MASTER_KEYS/);
+    try { loadConfig({ ...base, STEWARD_PREVIOUS_MASTER_KEYS: JSON.stringify({ previous: "secret" }) }); }
+    catch (error) { expect((error as Error).message).not.toContain("secret"); }
+  });
+
   it("parses ALLOW_SIGNUP and NODE_ENV", () => {
     expect(loadConfig({ ...base }).allowSignup).toBe(true);
     expect(loadConfig({ ...base, ALLOW_SIGNUP: "false" }).allowSignup).toBe(false);

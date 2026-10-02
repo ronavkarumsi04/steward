@@ -241,12 +241,13 @@ company OS can execute work. Merge-commit CI and hosted execution are separate v
 
 - Temporal boot recovery, dynamic approval signalling, owned-connection cleanup and custom server-CA handling.
 - Live `/health` namespace probing plus strict `/ready` for database, namespace and recent workflow/activity pollers.
-- Production signup defaults closed; runtime pool limits and configuration validation take effect.
+- Production signup defaults closed; runtime pool limits and configuration validation take effect, preserving supported hex/base64 key encodings and validating rotated keys.
 - Platform email bodies/tokens removed from logs, console delivery refused in production, provider error
   bodies excluded from exceptions, and embedded startup responses no longer expose raw failures.
 - Baseline graph defect repaired: an incoming recorded relationship keeps its stored source/target direction.
 - Event streams flush before database reads and release subscriptions/timers on every exit.
 - Migration verification explicitly skips unavailable live checks outside CI, fails CI without Postgres, and closes failed probes.
+- Backup runbook corrected for Postgres Temporal persistence, artifact volumes and key versions; a local database-only restore drill passed all 70 row-count comparisons and 8 migration checks. Production restore remains unverified.
 - Boot verification checks refusal before worker startup and readiness after startup/restart; hosted checks
   can require execution readiness with `REQUIRE_EXECUTIONS=1`.
 

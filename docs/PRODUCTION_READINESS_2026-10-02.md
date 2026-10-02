@@ -7,7 +7,7 @@ hash-verified for main and deployed `9932427` to run the repository's actual hos
 
 ## Baseline evidence
 
-- Current main CI [36951578954](https://github.com/ronavkarumsi04/steward/actions/runs/36951578954):
+- Baseline main CI [36951578954](https://github.com/ronavkarumsi04/steward/actions/runs/36951578954):
   required verification and all three Docker image jobs succeeded.
 - Deploy workflow [36951578972](https://github.com/ronavkarumsi04/steward/actions/runs/36951578972):
   success, but the existing deployment evidence documents the token-less path; this is not proof that a new
@@ -35,14 +35,16 @@ hash-verified for main and deployed `9932427` to run the repository's actual hos
   and release timers/subscriptions on all exits. Stream failures emit a safe diagnostic and close for replay/retry.
 - `packages/workflows/src/client.ts`: readiness RPCs, explicit close, custom server CA respected without mTLS.
 - `packages/core/src/{context,mailer,graph}.ts`: strict environment validation, closed production signup default,
-  actual pool bounds, no bearer-link logging or provider-body exceptions, and stable recorded-edge direction.
+  actual pool bounds, compatible 32-byte hex/base64 key validation (including rotated keys),
+  no bearer-link logging or provider-body exceptions, and stable recorded-edge direction.
 - `packages/db/src/client.ts`: runtime pool maximum and bounded connection acquisition.
 - `packages/db/src/migrations.test.ts`: unreachable live checks explicitly skip outside CI and fail CI;
   close failed probe pools and never log a credential-bearing database URL.
 - `apps/worker/src/main.ts`: same Temporal-disabled boolean parsing as the API.
 - `apps/web/next.config.ts` and embedded API route: hosted `/ready` mapping and fixed, non-cacheable startup 503.
 - Boot/hosted scripts and hosting workflows: refuse readiness without workers; optional execution requirement.
-- `.env.example`, deployment notes and roadmap: defaults, contracts, limitations and verification status.
+- `.env.example`, deployment notes, backup runbook and roadmap: defaults, contracts, limitations,
+  actual Compose persistence/volume layout and a measured local database restore drill.
 
 Migrations: **none added**. Existing migration and tenancy invariants remain required checks.
 
@@ -50,11 +52,11 @@ Migrations: **none added**. Existing migration and tenancy invariants remain req
 
 Final local gates passed on the proposed source tree:
 
-- `pnpm lint`: 19/19 tasks; final repeat after all runtime edits, 16 cached.
+- `pnpm lint`: 19/19 tasks; final repeat after all runtime edits, 17 cached.
 - `pnpm build`: 19/19 tasks, including production Next.js build; boot independently rebuilt its runtime configuration.
-- `pnpm typecheck`: 35/35 tasks, 27 cached.
-- `pnpm test`: 35/35 tasks, 27 cached; 752 assertions across 59 test files reported passed by
-  Vitest, including restored cached suites. The changed API suite passed 87, core 198 and workflows 25.
+- `pnpm typecheck`: 35/35 tasks, 28 cached.
+- `pnpm test`: 35/35 tasks, 28 cached; 753 assertions across 59 test files reported passed by
+  Vitest, including restored cached suites. The changed API suite passed 87, core 199 and workflows 25.
 - `node --test scripts/*.test.mjs`: 17/17 assertions, including the three new hosted-readiness tests.
 - `pnpm verify:boot`: passed against live Postgres/Temporal and production API/worker/web builds;
   applied existing migrations, refused readiness before a worker, observed both task-queue pollers,
@@ -71,7 +73,21 @@ Its initial remote upload dropped the boot script's executable mode; a follow-up
 GitHub tree `1712d83d7bbb8e8edfa49d8323ba196e614157a9` matches the local tested tree exactly.
 The migration-verifier correction was then exercised separately: live database 8/8 passed; unavailable
 outside CI 3 static checks passed and 5 live checks explicitly skipped; unavailable in CI exited 1 with
-the failed connection hook. Database lint/typecheck passed. PR/merge CI is still pending as of this record.
+the failed connection hook. Database lint/typecheck passed.
+
+Full PR CI [37004808763](https://github.com/ronavkarumsi04/steward/actions/runs/37004808763) passed on
+`7756914`, including the required verification job and all three Docker builds. Final review then
+preserved the encryption layer's supported base64 key format and validated rotated keys before resources
+are created. The added regression test and all final local gates listed above passed again on that source.
+The final branch revision still requires its own PR/merge CI; an earlier green revision is not substituted.
+Copilot's automatic review did not run because its quota was exhausted; no approving review was supplied,
+and the branch requires zero approving reviews while enforcing current checks and resolved conversations.
+
+The corrected backup runbook reflects Compose's Postgres Temporal persistence and named artifact volume.
+A real local custom-format dump/restore matched all 70 table row counts, reapplied migrations, and passed
+all eight migration checks on a new scratch database. It took 6 seconds; the scratch database/dump were
+removed. The first attempt stopped at a package-manager mismatch before validation; a pinned-manager
+retry passed. This is a database-only local drill, not production backup coverage, key recovery or RPO/RTO.
 The new live recovery test passed both individually and in the full suite against real Temporal: boot failed to connect; a loopback relay
 subsequently made the endpoint reachable; the same API instance recovered after its retry cooldown and
 reported connected, while refusing execution readiness on its fresh workerless queue. Its configured
@@ -90,7 +106,9 @@ lists no teams; Composio's Vercel authentication is pending. The managed workspa
 credentials or outbound cloud identities configured. The direct Supabase connector does expose `steward-prod`;
 its project status, migration journal, role flags, table privileges and security/performance advisors were
 inspected read-only. No production Temporal/worker, browser host, email provider, model provider or backup
-store was exercised in this session.
+store was exercised in this session. The hosted public auth configuration reports `signupOpen=true` and
+`inviteOnly=false`; `/ready` returns 404. The new execution-required hosted smoke correctly exits 1
+(6 UI checks passed, execution check failed) on that deployment.
 
 Production database evidence:
 
@@ -110,7 +128,7 @@ Production database evidence:
 
 **UNVERIFIED:** Temporal Cloud API-key/mTLS authentication, hosted worker execution/reconciliation, real
 model evals, production controlled browser actions, Resend delivery, deployment creation/Git integration,
-production signup configuration, backup existence/retention/encryption/restore and measured RPO/RTO.
+deployment of the closed signup default, backup existence/retention/encryption/restore and measured RPO/RTO.
 The backup policy states targets; it does not supply a measured restore record. A recent worker poller is
 not proof of capacity or browser/model readiness, and can remain visible for up to 90 seconds after a crash.
 
