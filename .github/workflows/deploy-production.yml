@@ -54,7 +54,7 @@ jobs:
           node-version: 24
 
       # Only while the project has no Git connection: ask Vercel for a deployment of this exact commit.
-      - name: Create the deployment for this commit (DEPLOY_MODE=create)
+      - name: Create the deployment for this commit (DEPLOY_MODE=${{ vars.DEPLOY_MODE || 'create' }})
         if: vars.DEPLOY_MODE != 'verify'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
