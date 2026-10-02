@@ -177,7 +177,7 @@ describe("acting on a page", () => {
 
 describe("frames", () => {
   itBrowser("returns a real JPEG, and notes when a step changed nothing", async () => {
-    const { handle } = await openAt("/");
+    const { handle } = await openAt("/frames");
     const first = await handle.screenshot();
     expect(first.mimeType).toBe("image/jpeg");
     expect(first.width).toBe(1024);
@@ -187,11 +187,16 @@ describe("frames", () => {
     expect(first.digest).toMatch(/^[0-9a-f]{64}$/);
     expect((await handle.screenshot()).digest).toBe(first.digest);
 
-    const changed = await handle.act({ kind: "click", selector: "#submit-plan", button: "left" });
+    const changed = await handle.act({ kind: "click", selector: "#change-frame", button: "left" });
+    expect(changed.text).toContain("After change");
     expect(changed.frame?.digest).not.toBe(first.digest);
+    expect(changed.notes.join(" ")).not.toMatch(/did not change|identical/);
 
-    const repeat = await handle.act({ kind: "wait", ms: 10 });
-    expect(repeat.notes.join(" ")).toMatch(/did not change|identical/);
+    for (let step = 0; step < 3; step++) {
+      const repeat = await handle.act({ kind: "wait", ms: 10 });
+      expect(repeat.frame?.digest).toBe(changed.frame?.digest);
+      expect(repeat.notes.join(" ")).toMatch(/did not change|identical/);
+    }
     await provider.close(handle.id, "done");
   });
 });
