@@ -1,4 +1,4 @@
-import type { ApiRuntime } from "@steward/api/runtime";
+import { handleEmbeddedApi } from "@/lib/embedded-api";
 
 /**
  * Hosted deployments do not get a second Vercel project for `apps/api`; the image is one Next app.
@@ -17,46 +17,10 @@ export const maxDuration = 60;
  * The API mounts everything under `/v1` (plus `/health` at the root), so dropping the outer prefix is
  * all that is needed: `/api/v1/agents` and `/embedded-api/v1/agents` both become `/v1/agents`.
  */
-function apiPath(pathname: string): string {
-  for (const prefix of ["/embedded-api", "/api"]) {
-    if (pathname === prefix) return "/";
-    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
-  }
-  return pathname;
-}
-
-let pending: Promise<ApiRuntime> | null = null;
-
-/**
- * One runtime per serverless instance, reused across invocations. Migrations never run here: every
- * cold start would race the others, so they are applied out of band.
- */
-function getRuntime(): Promise<ApiRuntime> {
-  pending ??= import("@steward/api/runtime").then(({ createApiRuntime }) => createApiRuntime({ migrate: false, listen: false, env: process.env }));
-  pending.catch(() => {
-    pending = null;
-  });
-  return pending;
-}
-
-async function handle(request: Request): Promise<Response> {
-  try {
-    const runtime = await getRuntime();
-    const url = new URL(request.url);
-    url.pathname = apiPath(url.pathname);
-    return await runtime.app.fetch(new Request(url, request));
-  } catch (e) {
-    // Startup errors may contain database URLs or provider credentials. Keep details server-side too:
-    // only a fixed diagnostic belongs here; the dependency owner logs its safe failure category.
-    void e;
-    return Response.json({ error: { code: "api_unavailable", message: "The API is temporarily unavailable. Please retry." } }, { status: 503, headers: { "cache-control": "no-store", "retry-after": "5" } });
-  }
-}
-
-export const GET = handle;
-export const POST = handle;
-export const PUT = handle;
-export const PATCH = handle;
-export const DELETE = handle;
-export const HEAD = handle;
-export const OPTIONS = handle;
+export const GET = handleEmbeddedApi;
+export const POST = handleEmbeddedApi;
+export const PUT = handleEmbeddedApi;
+export const PATCH = handleEmbeddedApi;
+export const DELETE = handleEmbeddedApi;
+export const HEAD = handleEmbeddedApi;
+export const OPTIONS = handleEmbeddedApi;

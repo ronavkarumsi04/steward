@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/server";
+import { API_URL, serverFetch } from "@/lib/server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ type UnsubscribeOutcome =
   | { ok: false; reason: "unreachable" | "invalid" | "error" };
 
 async function unsubscribe(token: string): Promise<UnsubscribeOutcome> {
-  const res = await fetch(`${API_URL}/v1/unsubscribe`, {
+  const res = await serverFetch(`${API_URL}/v1/unsubscribe`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: process.env.APP_URL ?? "http://localhost:3000" },
     body: JSON.stringify({ token }),
