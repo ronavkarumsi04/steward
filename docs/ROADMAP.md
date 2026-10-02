@@ -214,6 +214,24 @@ that owns steward) and add it here with gh secret set VERCEL_TOKEN` — while `p
 calling production current, because the files that had changed by then (`docs/`, `.github/`, `scripts/`) are
 ones no build reads and production stayed on `9932427` without pretending otherwise. The token's half is the
 one branch a stub fetch cannot stand in for, and the next push after the secret exists is what exercises it.
+That script ran unchanged for the next merge (`Deploy to production` #2, the push of `6a2e5d9`, six seconds,
+`success`: the same warning, no deployment, and no wait step to run because the workflow did not have one
+yet), and the merge after it was the first run of the workflow that ends by asking production from outside
+(#3, the push of `e8f13ca`, eleven seconds, `success`): the create step warned in those same words, and the
+wait step passed on the first attempt in three seconds — `production is current for
+e8f13ca9f9190bb7a1da71f3bd31e7b68e9b498e (attempt 1)` — on the unread-file rule again, because that merge
+changed nothing a build reads either. `verify` has still never run for real; its guard was rehearsed instead
+(#4, ten seconds, `success` — the workflow dispatched by hand with `DEPLOY_MODE=verify` and `sha=9932427`, the
+commit production was already serving), where the create step appeared as *skipped* under a name that still
+said `(DEPLOY_MODE=create)` while the mode that decided it was `verify`, and the wait step passed on the first
+attempt with the check's own words, `ok   the deployment is running 9932427` and `production is current for
+9932427 (attempt 1)`. That step is now named from the repository variable itself, so a skipped step reads
+`(DEPLOY_MODE=verify)`. Nothing in the rehearsal touched Vercel's Git connection, so what it proves is the
+guard and the check, not the route. The project still reports no Git link — the API answer for project
+`steward` carries no `link`, and the one that lists teams with linked projects returns none — so
+`DEPLOY_MODE` was returned to `create`: three runs have gone down the mode's token-less branch, none down its
+deploying one, and `verify` is waiting on the connection. The first push to `main` after connecting should
+show the create step skipped and the wait step passing on a deployment Vercel's own integration made.
 
 ## Standing rules
 

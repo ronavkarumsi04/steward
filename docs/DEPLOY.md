@@ -299,7 +299,12 @@ already `apps/web` — the existing deployments prove it, since `apps/web/vercel
 other branches (in practice one per pull request, behind Vercel Authentication like every non-custom-domain
 URL) and a production build per push to `main`, still suppressed by `ignoreCommand` for commits nothing reads
 (§2.4). Once it is connected, set `DEPLOY_MODE=verify` (`gh variable set DEPLOY_MODE --body verify`) so that
-pushes are not built twice.
+pushes are not built twice. That flip is also the difference between one build and two: until it is made, a
+connected project would be built by its Git integration *and* asked for a deployment by the API route, which
+warns without a token but would create a second deployment with one. Nothing in this repository can see
+whether the connection exists, which is why the mode is set by hand — and the first push after the connection
+is what proves it, with a create step that comes back skipped and a wait step whose pass is either a
+deployment Vercel made or, for a push nothing reads, the same unread-file rule.
 
 **Creating the deployment** is what the workflow does while the project is unconnected, through
 `scripts/deploy-production.mjs`: `POST /v13/deployments` with a `gitSource` naming
@@ -329,7 +334,16 @@ picks up — no connection, no token, a build that failed — fails the run **in
 by the daily run the next morning. The daily run stays single-shot; only this one waits. Without a token the
 create step warns and names the command above, while the verdict still comes from that check: as of this
 writing production is `9932427` and every merge since changed only docs, workflows and scripts, so the verdict
-is a pass.
+is a pass — and the workflow's own runs are the record of it: #1 and #2 ran the create step alone (the
+token-less warning, and nothing deployed), #3 (the push of `e8f13ca`, eleven seconds) was the first with the
+wait step and passed on the first attempt three seconds in, `production is current for
+e8f13ca9f9190bb7a1da71f3bd31e7b68e9b498e (attempt 1)`, on the unread-file rule, and #4 rehearsed this route's
+verification by hand — dispatched with `DEPLOY_MODE=verify` and `sha=9932427`, the commit production already
+served — where the create step came back skipped and the wait step passed on the first attempt with the
+check's own words, `ok   the deployment is running 9932427` and `production is current for 9932427 (attempt
+1)`. That rehearsal involved no Vercel connection: it is the guard and the check it proves, not the route. The
+create step is named for the mode it was read from, so once the variable says `verify` a skipped create step
+is what a run log looks like.
 
 Runs are serialized by a `concurrency` group, so two merges landing together cannot finish in the other order
 and leave the assigned domain on the older commit. The workflow is deliberately not gated on CI: a flake in an
