@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { modelAttempts } from "@/lib/run-inspection";
 import { useLiveEvents } from "@/lib/use-events";
@@ -14,9 +14,16 @@ import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
 /** Run inspector: re-fetches whenever a correlated event arrives so it stays live without polling. */
-export function RunDetailView({ companyId, initial, agents }: { companyId: string; initial: RunDetail; agents: Agent[] }) {
+export function RunDetailView({ companyId, initial, agents, observedAt }: { companyId: string; initial: RunDetail; agents: Agent[]; observedAt: number }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
+  // The server's snapshot time is also the first client render's time. Reading Date.now() during
+  // hydration changed running verdicts and elapsed text before React could attach to the document.
+  const [snapshotAt, setSnapshotAt] = useState(observedAt);
+  const updateDetail = useCallback((next: RunDetail) => {
+    setDetail(next);
+    setSnapshotAt(Date.now());
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { events } = useLiveEvents(companyId, { max: 50 });
@@ -31,19 +38,21 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
     if (matchedSeq === 0 || TERMINAL.has(statusRef.current)) return;
     let cancelled = false;
     browserApi.get<RunDetail>(`/companies/${companyId}/runs/${initial.run.id}`).then((d) => {
-      if (!cancelled) setDetail(d);
-    }).catch(() => undefined);
+      if (!cancelled) { updateDetail(d); setError(null); }
+    }).catch((e) => {
+      if (!cancelled) setError(e instanceof ApiError ? e.message : "Run updates are unavailable. Reload to retry.");
+    });
     return () => {
       cancelled = true;
     };
-  }, [matchedSeq, companyId, initial.run.id]);
+  }, [matchedSeq, companyId, initial.run.id, updateDetail]);
 
   async function cancel() {
     setBusy(true);
     setError(null);
     try {
       await browserApi.post(`/companies/${companyId}/runs/${detail.run.id}/cancel`, { reason: "Cancelled from dashboard" });
-      setDetail(await browserApi.get<RunDetail>(`/companies/${companyId}/runs/${detail.run.id}`));
+      updateDetail(await browserApi.get<RunDetail>(`/companies/${companyId}/runs/${detail.run.id}`));
       router.refresh();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Cancel failed");
@@ -88,7 +97,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
-      <RunTimeline detail={detail} companyId={companyId} />
+      <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval" className="nb-left-yellow">
@@ -99,7 +108,7 @@ export function RunDetailView({ companyId, initial, agents }: { companyId: strin
                 companyId={companyId}
                 approval={a}
                 run={run}
-                onDecided={() => browserApi.get<RunDetail>(`/companies/${companyId}/runs/${run.id}`).then(setDetail)}
+                onDecided={() => browserApi.get<RunDetail>(`/companies/${companyId}/runs/${run.id}`).then(updateDetail).catch((e) => setError(e instanceof ApiError ? e.message : "Run updates are unavailable. Reload to retry."))}
               />
             ))}
           </div>

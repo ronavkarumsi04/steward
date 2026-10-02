@@ -88,3 +88,11 @@ themselves are the rule. A shorter arrival is a change to the rules, not a tunin
   pipeline strip at +400 ms and the capabilities grid at +800 ms, the ambient layer covers the hero at 18 s,
   the design lab's bar settles at `matrix(0.72, …)`, and neither the landing page nor the workspace overflows
   at 390 px.
+
+## Public showcase extension (2026-10-02)
+
+[ADR-0023](0023-public-showcase.md) introduces user-driven scroll choreography on the public homepage.
+The three scheduled landing entrances now introduce the eyebrow, headline and summary. Scroll position
+controls the product zoom, workflow chapters and horizontal studio track directly; its event-driven frame
+callback has no continuing loop or settling inertia. Timed transitions retain the house tokens. Mobile,
+short-screen, reduced-motion and no-JavaScript paths render the complete vertical story.

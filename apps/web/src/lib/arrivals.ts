@@ -28,7 +28,7 @@ function arrival(surface: string, role: PlanRole, plan: StaggerPlan): Arrival {
 }
 
 /**
- * The marketing page: the hero, the pipeline strip, the capabilities grid — three sections, read in that
+ * The marketing page: the eyebrow, headline and introduction — three hero groups, read in that
  * order. Wider steps than a workspace because there is nothing to do here yet; the whole page lands inside
  * the page band (1.2–1.8 s) rather than each section arriving on its own.
  */
