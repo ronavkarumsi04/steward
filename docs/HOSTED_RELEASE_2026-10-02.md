@@ -37,7 +37,7 @@ retain their HTTP transport; blank internal URLs no longer override the external
 returns a fixed non-cacheable 503 and can retry. Unknown registration policy displays an unavailable state
 with retry, and never an open form.
 
-Six regression cases cover cookie/query preservation without network fetches, startup sharing and routing,
+Seven regression cases cover cookie/query preservation without network fetches, startup sharing and routing,
 retry/redaction, standalone URL selection, unavailable registration policy and authorization errors.
 Production boot defaults to embedded mode and gives the web process an unreachable HTTP API address,
 so the real browser/tenant/company workflow suite must exercise the embedded server path.
@@ -45,6 +45,9 @@ The first stronger run passed 26 browser tests, failed two, and left one unrun: 
 omitted Playwright's dynamically loaded `browsers.json`, and the embedded stream waited 25 seconds for
 notifications despite LISTEN being disabled. Explicit metadata tracing and the existing two-second
 polling path address those defects without weakening the browser watcher.
+That repaired embedded run passed all 29 browser tests. Runtime logs also showed separate Next bundles
+allocating two API runtimes in one process, so the adapter now uses a process-global cache and a module-reload
+regression guards one pool/runtime across route and server-component bundles. Final checks apply to that revision.
 
 Before this follow-up is accepted: lint, typecheck, production build, unit/integration, boot/browser,
 protected PR/merge CI and Docker builds must pass. Hosted Chromium must render the invitation-only page

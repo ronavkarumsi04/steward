@@ -5,8 +5,9 @@ vi.mock("server-only", () => ({}));
 vi.mock("@steward/api/runtime", () => ({ createApiRuntime: factory }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [{ name: "steward_session", value: "test-session" }] }) }));
 
-beforeEach(() => { vi.resetModules(); factory.mockReset(); });
-afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+function clearRuntime() { delete (globalThis as typeof globalThis & { __stewardEmbeddedApiRuntime?: unknown }).__stewardEmbeddedApiRuntime; }
+beforeEach(() => { clearRuntime(); vi.resetModules(); factory.mockReset(); });
+afterEach(() => { clearRuntime(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("server API transport", () => {
   it("uses the embedded API with cookies and query intact even when the HTTP API is unreachable", async () => {
@@ -44,6 +45,16 @@ describe("server API transport", () => {
     expect(await failed.text()).not.toContain("credential-bearing");
     expect(await (await embeddedFetch("https://steward.example/health")).json()).toEqual({ ok: true });
     expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses the runtime across separate server-component and route module bundles", async () => {
+    factory.mockResolvedValue({ app: { fetch: () => Response.json({ ok: true }) } });
+    const serverBundle = await import("./embedded-api");
+    await serverBundle.embeddedFetch("https://steward.example/v1/auth/me");
+    vi.resetModules();
+    const routeBundle = await import("./embedded-api");
+    expect(await (await routeBundle.embeddedFetch("https://steward.example/health")).json()).toEqual({ ok: true });
+    expect(factory).toHaveBeenCalledTimes(1);
   });
 
   it("keeps standalone HTTP transport and ignores blank internal URLs", async () => {
