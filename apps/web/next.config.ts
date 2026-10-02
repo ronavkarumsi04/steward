@@ -55,7 +55,10 @@ const nextConfig: NextConfig = {
     const routes = [{ source: "/api/v1/:path*", destination }];
     // `/health` lives at the API root rather than under /v1: expose it on the hosted origin so an
     // uptime monitor has something to poll, and only when this deployment serves the API itself.
-    if (embeddedApi) routes.push({ source: "/health", destination: "/embedded-api/health" });
+    if (embeddedApi) {
+      routes.push({ source: "/health", destination: "/embedded-api/health" });
+      routes.push({ source: "/ready", destination: "/embedded-api/ready" });
+    }
     return routes;
   },
   async headers() {

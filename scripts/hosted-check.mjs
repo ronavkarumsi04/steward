@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process";
 
 const BASE = (process.env.BASE ?? "https://steward-eosin.vercel.app").replace(/\/$/, "");
 const EXPECT = process.env.EXPECT ?? "auto";
+const REQUIRE_EXECUTIONS = process.env.REQUIRE_EXECUTIONS === "1";
 
 let pass = 0;
 let fail = 0;
@@ -180,6 +181,16 @@ if (health.status !== 200 || health.json === null) {
     bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
   } else {
     bad(`the deployment is running ${reported} and this checkout is at ${short(expected)}; whether they differ in anything a build reads cannot be checked from here (git could not compare ${reported} with ${short(expected)})`);
+  }
+}
+
+if (REQUIRE_EXECUTIONS) {
+  step("agent execution readiness");
+  const ready = await get("/ready");
+  if (ready.status === 200 && ready.json?.ok === true && ready.json?.db === "ok" && ready.json?.temporal === "connected" && ready.json?.executions === "ready") {
+    ok("GET /ready -> namespace connected, workflow and activity workers recently polling");
+  } else {
+    bad(`GET /ready -> HTTP ${ready.status}; agent execution is UNVERIFIED (temporal: ${ready.json?.temporal}, executions: ${ready.json?.executions})`);
   }
 }
 

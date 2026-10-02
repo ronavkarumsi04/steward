@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
 import { parseBoolean } from "./context.js";
 import { ConsoleMailer, MailerError, ResendMailer, createMailer, mailerConfigFromEnv, renderEmail } from "./mailer.js";
@@ -16,6 +16,15 @@ describe("parseBoolean", () => {
 });
 
 describe("mailer configuration", () => {
+  it("never logs bearer links and refuses fake delivery in production", async () => {
+    const info = vi.fn();
+    const logger = { info } as unknown as pino.Logger;
+    const message = { to: "person@example.com", subject: "secret subject", text: "https://app.test/reset-password/one-time-secret", html: "secret HTML" };
+    await createMailer(logger, {}).send(message);
+    expect(JSON.stringify(info.mock.calls)).not.toContain("secret");
+    await expect(createMailer(logger, { NODE_ENV: "production" }).send(message)).rejects.toThrow(/delivery is unavailable/);
+    expect(info).toHaveBeenCalledTimes(1);
+  });
   it("defaults to the console provider and rejects unknown providers", () => {
     expect(mailerConfigFromEnv({})).toEqual({ provider: "console", from: "Steward <no-reply@localhost>" });
     expect(createMailer(silent, {})).toBeInstanceOf(ConsoleMailer);
@@ -43,6 +52,11 @@ describe("ResendMailer", () => {
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ from: "Steward <hi@example.com>", to: ["a@example.com"], subject: "Hi", text: "plain", html: "<p>plain</p>" });
     status = 422;
     await expect(m.send({ to: "a@example.com", subject: "Hi", text: "plain" })).rejects.toBeInstanceOf(MailerError);
+  });
+
+  it("does not copy a provider's echoed bearer links into errors", async () => {
+    const m = new ResendMailer({ apiKey: "secret", from: "hi@example.com", fetchImpl: (async () => new Response("https://app.test/reset-password/secret-token", { status: 422 })) as typeof fetch });
+    await expect(m.send({ to: "a@example.com", subject: "Hi", text: "secret-token" })).rejects.toThrow("Resend rejected the message (422)");
   });
 });
 

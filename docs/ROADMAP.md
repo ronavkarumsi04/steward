@@ -233,6 +233,27 @@ guard and the check, not the route. The project still reports no Git link — th
 deploying one, and `verify` is waiting on the connection. The first push to `main` after connecting should
 show the create step skipped and the wait step passing on a deployment Vercel's own integration made.
 
+## Production readiness tranche — 2026-10-02
+
+🚧 Branch `codex/production-runtime-readiness`, based on current protected main `81f720f`.
+This is not P3 completion and does not upgrade the historical P0/P1/P2 counts into a claim that the hosted
+company OS can execute work. Merge-commit CI and hosted execution are separate verification requirements.
+
+- Temporal boot recovery, dynamic approval signalling, owned-connection cleanup and custom server-CA handling.
+- Live `/health` namespace probing plus strict `/ready` for database, namespace and recent workflow/activity pollers.
+- Production signup defaults closed; runtime pool limits and configuration validation take effect.
+- Platform email bodies/tokens removed from logs, console delivery refused in production, provider error
+  bodies excluded from exceptions, and embedded startup responses no longer expose raw failures.
+- Baseline graph defect repaired: an incoming recorded relationship keeps its stored source/target direction.
+- Event streams flush before database reads and release subscriptions/timers on every exit.
+- Boot verification checks refusal before worker startup and readiness after startup/restart; hosted checks
+  can require execution readiness with `REQUIRE_EXECUTIONS=1`.
+
+Verification and remaining blockers are recorded in `docs/PRODUCTION_READINESS_2026-10-02.md`.
+No new item is ✅ before the required check passes on a merge commit. Real hosted execution, Temporal Cloud,
+production browser sessions, delivered platform email, deployment provisioning, and backup restore remain
+**UNVERIFIED** until exercised with the required service access.
+
 ## Standing rules
 
 Binding on all future work in this repo.

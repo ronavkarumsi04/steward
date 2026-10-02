@@ -159,7 +159,8 @@ async function register(name = "Founder") {
  */
 const temporalCalls: Array<{ op: string; args: unknown[] }> = [];
 function fakeTemporal(): WorkflowClient {
-  const double: Pick<WorkflowClient, "startRun" | "signalApproval" | "cancelRun" | "runStatus" | "upsertSchedule" | "deleteSchedule" | "triggerSchedule"> = {
+  const double: Pick<WorkflowClient, "readiness" | "startRun" | "signalApproval" | "cancelRun" | "runStatus" | "upsertSchedule" | "deleteSchedule" | "triggerSchedule"> = {
+    async readiness() { return { connected: true, workers: true }; },
     async startRun(input) {
       temporalCalls.push({ op: "startRun", args: [input] });
       return { workflowId: `agent-run-${input.runId}`, workflowRunId: "fake-run" };
@@ -1508,6 +1509,7 @@ describe("browser sessions", () => {
     const opened = await browser.open(scope, { url: "https://example.com", agentId, purpose: "live view" });
     const delivered = await reading;
 
+    expect(delivered.startsWith(": connected\n\n")).toBe(true);
     expect(delivered).toContain("event: ready");
     expect(delivered).toContain("browser.opened");
     expect(delivered).toContain(opened.session.id);
@@ -2286,6 +2288,23 @@ describe("memory 2.0 (ADR-0022)", () => {
 });
 
 describe("openapi + health", () => {
+  d("distinguishes UI health from execution readiness without leaking dependency errors", async () => {
+    const checks = async (workflows: WorkflowClient | null, env: NodeJS.ProcessEnv) => {
+      const instance = createApp({ core, auth: new AuthService(core.db), mailer, services, workflows, env }, null).app;
+      return { health: await instance.request("http://api.test/health"), ready: await instance.request("http://api.test/ready") };
+    };
+    const disabled = await checks(null, { ...ENV, TEMPORAL_DISABLED: "true" });
+    expect(disabled.health.status).toBe(200);
+    expect(disabled.ready.status).toBe(503);
+    expect(disabled.ready.headers.get("cache-control")).toBe("no-store");
+    expect(await disabled.ready.json()).toMatchObject({ ok: false, temporal: "disabled", executions: "unavailable" });
+    const unavailable = await checks(null, ENV);
+    expect(await unavailable.health.json()).toMatchObject({ temporal: "unavailable" });
+    const idle = fakeTemporal();
+    idle.readiness = async () => ({ connected: true, workers: false });
+    expect((await checks(idle, ENV)).ready.status).toBe(503);
+    expect((await checks(fakeTemporal(), ENV)).ready.status).toBe(200);
+  });
   d("serves a valid OpenAPI document covering every registered route", async () => {
     const res = await app.request("http://api.test/v1/openapi.json");
     expect(res.status).toBe(200);

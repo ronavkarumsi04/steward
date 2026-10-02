@@ -64,6 +64,7 @@ export async function temporalTlsMaterial(cfg: TemporalConfig): Promise<Temporal
   if (certPath || keyPath) {
     throw new Error("TEMPORAL_TLS_CERT_PATH and TEMPORAL_TLS_KEY_PATH must be set together; a certificate without its key would silently connect without mTLS");
   }
+  if (cfg.tls?.serverRootCACertPath) return { serverRootCACertificate: await readFile(cfg.tls.serverRootCACertPath) };
   return cfg.apiKey ? true : undefined;
 }
 
@@ -79,6 +80,33 @@ export class WorkflowClient {
 
   get raw() {
     return this.client;
+  }
+
+  async close(): Promise<void> {
+    await this.client.connection.close();
+  }
+
+  /** Live, namespace-scoped RPCs with a real gRPC deadline; no cached connection claim. */
+  async readiness(includeWorkers = false): Promise<{ connected: boolean; workers: boolean }> {
+    const now = Date.now();
+    try {
+      return await this.client.connection.withDeadline(now + 3_000, async () => {
+        const namespace = this.client.options.namespace;
+        await this.client.workflowService.describeNamespace({ namespace });
+        if (!includeWorkers) return { connected: true, workers: false };
+        const queues = await Promise.all([1, 2].map((taskQueueType) =>
+          this.client.workflowService.describeTaskQueue({ namespace, taskQueue: { name: this.taskQueue }, taskQueueType }),
+        ));
+        // A stopped worker can remain in Temporal's poller list. Require recent access on both queues.
+        const workers = queues.every((queue) => queue.pollers?.some((poller) => {
+          const accessed = Number(poller.lastAccessTime?.seconds ?? 0) * 1_000;
+          return accessed >= now - 90_000 && accessed <= now + 30_000;
+        }) === true);
+        return { connected: true, workers };
+      });
+    } catch {
+      return { connected: false, workers: false };
+    }
   }
 
   /**

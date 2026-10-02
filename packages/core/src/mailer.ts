@@ -20,12 +20,14 @@ export class MailerError extends Error {
   }
 }
 
-/** Logs the message instead of delivering it; the default in development so links are visible in the API log. */
+/** Development sink. Message bodies contain bearer tokens and must never enter logs. */
 export class ConsoleMailer implements Mailer {
   readonly provider = "console" as const;
-  constructor(private readonly log: pino.Logger) {}
+  constructor(private readonly log: pino.Logger, private readonly production = false) {}
   async send(message: MailMessage) {
-    this.log.info({ to: message.to, subject: message.subject, text: message.text }, "platform email (console provider)");
+    if (this.production) throw new MailerError("Platform email delivery is unavailable; configure Resend", 503);
+    this.log.info({ provider: this.provider, recipientCount: 1 }, "platform email not delivered (development sink)");
+    void message;
   }
 }
 
@@ -44,8 +46,9 @@ export class ResendMailer implements Mailer {
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new MailerError(`Resend rejected the message (${res.status}): ${body.slice(0, 300)}`, res.status);
+      // Provider errors can echo the submitted body, including one-time bearer links.
+      await res.body?.cancel();
+      throw new MailerError(`Resend rejected the message (${res.status})`, res.status);
     }
   }
 }
@@ -68,7 +71,7 @@ export function createMailer(log: pino.Logger, env: NodeJS.ProcessEnv = process.
     if (!apiKey) throw new Error("PLATFORM_EMAIL_PROVIDER=resend requires RESEND_API_KEY");
     return new ResendMailer({ apiKey, from: cfg.from });
   }
-  return new ConsoleMailer(log);
+  return new ConsoleMailer(log, env.NODE_ENV === "production");
 }
 
 function escapeHtml(s: string) {

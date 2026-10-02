@@ -200,7 +200,9 @@ describe("the knowledge graph (postgres)", () => {
     expect(mine.outgoing[0]).toMatchObject({ origin: "recorded", relation: "works_on", dangling: false });
     const theirs = await graph.neighborhood(scope, { kind: "project", id: project.id });
     expect(theirs.incoming).toHaveLength(1);
-    expect(theirs.incoming[0]!.sentence).toContain("Ada Lovelace");
+    expect(theirs.incoming[0]!.sentence).toBe("Ada Lovelace works on Payments.");
+    expect(theirs.incoming[0]!.from).toEqual(mine.outgoing[0]!.from);
+    expect(theirs.incoming[0]!.to).toEqual(mine.outgoing[0]!.to);
     expect(theirs.incoming[0]!.by).toBe("founder");
   });
 

@@ -411,31 +411,47 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
 function streamEvents(c: Ctx, scope: TenantScope, bus: EventBus | null, afterSeq: number, types?: string[]) {
   const ev = c.get("deps").services.events;
   return streamSSE(c, async (stream) => {
-    let cursor = Number.isFinite(afterSeq) ? afterSeq : await ev.latestSeq();
     let wake: (() => void) | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let open = true;
     const unsubscribe = bus?.subscribe((n) => {
       if (n.organizationId === scope.organizationId && (n.companyId === null || n.companyId === scope.companyId)) wake?.();
     });
-    let open = true;
     stream.onAbort(() => {
       open = false;
-      unsubscribe?.();
+      if (timer) clearTimeout(timer);
       wake?.();
     });
-    await stream.writeSSE({ event: "ready", data: JSON.stringify({ seq: cursor }) });
-    while (open) {
-      const batch = await ev.since(scope, cursor, 200, types);
-      for (const e of batch) {
-        cursor = e.seq;
-        await stream.writeSSE({ id: String(e.seq), data: JSON.stringify(e) });
+    try {
+      // Flush the HTTP handshake before database work. A proxy must not turn a cancelled, not-yet-
+      // flushed stream into an upstream reset/500 while the page is navigating between surfaces.
+      await stream.write(": connected\n\n");
+      let cursor = Number.isFinite(afterSeq) ? afterSeq : await ev.latestSeq();
+      if (!open) return;
+      await stream.writeSSE({ event: "ready", data: JSON.stringify({ seq: cursor }) });
+      while (open) {
+        const batch = await ev.since(scope, cursor, 200, types);
+        for (const e of batch) {
+          if (!open) break;
+          cursor = e.seq;
+          await stream.writeSSE({ id: String(e.seq), data: JSON.stringify(e) });
+        }
+        if (!open) break;
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+          timer = setTimeout(resolve, bus ? 25_000 : 2_000);
+        });
+        if (timer) clearTimeout(timer);
+        timer = null;
+        wake = null;
+        if (open) await stream.writeSSE({ event: "ping", data: String(Date.now()) });
       }
-      if (!open) break;
-      await new Promise<void>((resolve) => {
-        wake = resolve;
-        setTimeout(resolve, bus ? 25_000 : 2_000);
-      });
-      wake = null;
-      if (open) await stream.writeSSE({ event: "ping", data: String(Date.now()) });
+    } catch {
+      if (open) c.get("deps").core.log.warn({ requestId: c.get("requestId"), code: "event_stream_unavailable" }, "Event stream interrupted; client may reconnect from its cursor");
+    } finally {
+      open = false;
+      if (timer) clearTimeout(timer);
+      unsubscribe?.();
     }
   });
 }

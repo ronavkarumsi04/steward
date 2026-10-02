@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { NativeConnection, Runtime, Worker, DefaultLogger, type LogLevel } from "@temporalio/worker";
 import { AgentServiceFactory } from "@steward/agents";
 import { browserProviderFromEnv } from "@steward/browser";
-import { createCoreContext, internalServiceToken, loadConfig, type ApprovalSignal } from "@steward/core";
+import { createCoreContext, internalServiceToken, loadConfig, parseBoolean, type ApprovalSignal } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { LocalDockerSandboxProvider, type SandboxProvider } from "@steward/sandbox";
 import { WorkflowClient, connectTemporal, temporalConfigFromEnv, temporalTlsMaterial } from "@steward/workflows";
@@ -35,7 +35,7 @@ async function main() {
   // The worker is nothing without Temporal, so a deployment that disabled it should say so and stop rather
   // than retry a connection that will never succeed. The parsing itself is shared with the API and the
   // embedded runtime, so all three agree on what the environment means.
-  if ((process.env.TEMPORAL_DISABLED ?? "").trim() === "true") {
+  if (parseBoolean(process.env.TEMPORAL_DISABLED, false)) {
     log.warn("TEMPORAL_DISABLED=true: the worker has no task queue to serve; exiting");
     await core.pool.end();
     return;
