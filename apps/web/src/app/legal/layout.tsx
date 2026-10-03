@@ -60,7 +60,7 @@ export default async function LegalLayout({ children }: { children: ReactNode })
       </div>
 
       <footer className="hairline mx-auto max-w-[1200px] border-x-0 border-b-0 px-4 py-8 text-xs text-muted sm:px-6">
-        {cfg.operator}. Steward is open source under Apache-2.0. Governing law: {cfg.governingLaw}.
+        {cfg.operator}. Steward is proprietary software. All rights reserved. Governing law: {cfg.governingLaw}.
       </footer>
     </div>
   );

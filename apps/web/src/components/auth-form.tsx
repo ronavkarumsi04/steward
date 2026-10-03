@@ -63,7 +63,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
         </Link>
         <h1 className="mt-3 text-xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted">
-          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Welcome back. Your agents kept working." : "Self-hosted. Your keys, your data, your rules."}
+          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Welcome back to your company workspace." : "Your company, your tools, your control."}
         </p>
       </div>
       {mode === "register" && (

@@ -1,29 +1,8 @@
 import { Icon } from "@/components/icons";
 import s from "./showcase.module.css";
 
-export function BrandMark({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="32"
-      height="32"
-      viewBox="0 0 32 32"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M16 3 28 10v12l-12 7L4 22V10L16 3Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="m4 10 12 7 12-7M16 17v12M10 6.5l12 7v12"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
+import { StewardMark as BrandMark } from "@/components/brand";
+export { BrandMark };
 
 export function CompanyCanvas() {
   return (

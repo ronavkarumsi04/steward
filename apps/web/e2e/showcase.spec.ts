@@ -173,11 +173,13 @@ test("mobile has readable vertical chapters, accessible anchor navigation and no
     ).toBe(0);
     await page.locator('[data-chapter-link="3"]').click();
     await expect(page).toHaveURL(/#decide$/);
-    expect(
-      await page
-        .locator("#decide")
-        .evaluate((node) => node.getBoundingClientRect().top),
-    ).toBeLessThan(151);
+    await expect
+      .poll(() =>
+        page
+          .locator("#decide")
+          .evaluate((node) => node.getBoundingClientRect().top),
+      )
+      .toBeLessThan(151);
     await expect(
       page.getByRole("heading", { name: "You call the shots." }),
     ).toBeVisible();
@@ -254,10 +256,226 @@ test("short viewports stay vertical; compact desktop scenes fit below navigation
       .locator('[data-chapter-panel][data-active="true"]')
       .evaluate((node) => ({
         top: node.getBoundingClientRect().top,
-        bottom: node.lastElementChild!.getBoundingClientRect().bottom,
+        bottom: node
+          .querySelector("[class*=chapterCopy]")!
+          .getBoundingClientRect().bottom,
       }));
     expect(bounds.top).toBeGreaterThanOrEqual(76);
     expect(bounds.bottom).toBeLessThanOrEqual(768);
+    const object = await page
+      .locator("[data-folio-assembly]")
+      .evaluate((node) => {
+        const sheets = [...node.children].map((sheet) =>
+          sheet.getBoundingClientRect(),
+        );
+        return {
+          top: Math.min(...sheets.map((rect) => rect.top)),
+          bottom: Math.max(...sheets.map((rect) => rect.bottom)),
+        };
+      });
+    expect(object.top).toBeGreaterThan(bounds.bottom);
+    expect(object.bottom).toBeLessThanOrEqual(768);
+  }
+  await networkSettled(page);
+  expect(errors).toEqual([]);
+});
+
+test("the same folio moves continuously inside a chapter and carries its leaves through all four states", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const folio = page.locator("[data-folio-assembly]");
+  await folio.evaluate((node) => {
+    (window as unknown as { folio: Element }).folio = node;
+  });
+  const poses: string[] = [];
+  for (const fraction of [0.08, 0.12, 0.17, 0.3, 0.55, 0.8, 1]) {
+    await scrollProgress(page, "[data-story]", fraction);
+    await expect
+      .poll(() =>
+        page
+          .locator("[data-journey-object]")
+          .getAttribute("data-sc-verify-state"),
+      )
+      .not.toBeNull();
+    const previous = poses.at(-1);
+    if (previous)
+      await expect
+        .poll(() => transform(page, "[data-folio-assembly]"))
+        .not.toBe(previous);
+    poses.push(await transform(page, "[data-folio-assembly]"));
+    expect(
+      await folio.evaluate(
+        (node) => node === (window as unknown as { folio: Element }).folio,
+      ),
+    ).toBe(true);
+    await expect(page.locator("[data-journey-object]")).toBeVisible();
+    await expect(page.locator("[data-folio-face]")).toHaveCount(4);
+  }
+  expect(new Set(poses).size).toBe(poses.length);
+  expect(
+    await page
+      .locator('[data-folio-face="3"]')
+      .evaluate((node) => getComputedStyle(node).opacity),
+  ).toBe("1");
+  await networkSettled(page);
+  expect(errors).toEqual([]);
+});
+
+test("section navigation travels through intermediate scroll positions and preserves hash history", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    const samples: number[] = [];
+    (window as unknown as { travel: number[] }).travel = samples;
+    window.addEventListener("scroll", () => samples.push(Math.round(scrollY)), {
+      passive: true,
+    });
+  });
+  await page
+    .getByRole("navigation", { name: "Primary", exact: true })
+    .getByRole("link", { name: "The story" })
+    .click();
+  await expect(page).toHaveURL(/#story$/);
+  await expect
+    .poll(() =>
+      page
+        .locator("#story")
+        .evaluate((node) => Math.abs(node.getBoundingClientRect().top - 76)),
+    )
+    .toBeLessThan(2);
+  const samples = await page.evaluate(
+    () => (window as unknown as { travel: number[] }).travel,
+  );
+  expect(new Set(samples).size).toBeGreaterThan(4);
+  await page.locator('[data-chapter-link="2"]').click();
+  await expect(page.locator("#verify")).toHaveAttribute("data-active", "true");
+  await page.goBack();
+  await expect(page).toHaveURL(/#story$/);
+  await networkSettled(page);
+  expect(errors).toEqual([]);
+});
+
+test("page fades keep real destinations, settle after navigation and respect reduced motion and unsupported browsers", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.addInitScript(() => {
+    const original = document.startViewTransition?.bind(document);
+    (window as unknown as { fades: number }).fades = 0;
+    if (original)
+      document.startViewTransition = ((callback: () => Promise<void>) => {
+        (window as unknown as { fades: number }).fades++;
+        return original(callback);
+      }) as typeof document.startViewTransition;
+  });
+  await page.goto("/");
+  await page.getByRole("link", { name: "Terms", exact: true }).click();
+  await expect(page).toHaveURL(/\/legal\/terms$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Terms of Service",
+  );
+  expect(
+    await page.evaluate(() => (window as unknown as { fades: number }).fades),
+  ).toBe(1);
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-page-transition",
+    "idle",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("link", { name: "Privacy Policy", exact: true }).click();
+  await expect(page).toHaveURL(/\/legal\/privacy$/);
+  expect(
+    await page.evaluate(() => (window as unknown as { fades: number }).fades),
+  ).toBe(1);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.evaluate(() =>
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: undefined,
+    }),
+  );
+  await page
+    .getByRole("link", { name: "Terms of Service", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/legal\/terms$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Terms of Service",
+  );
+  await page.goBack();
+  await expect(page).toHaveURL(/\/legal\/privacy$/);
+  await page.evaluate(() =>
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: () => {
+        throw new Error("Snapshots refused in this document");
+      },
+    }),
+  );
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    "Big ideas.",
+  );
+  await networkSettled(page);
+  expect(errors).toEqual([]);
+});
+
+test("a delayed page stays navigable and switching motion off cancels its snapshot without cancelling the destination", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await page.goto("/legal/terms");
+  await page.route("**/legal/privacy*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  await page.getByRole("link", { name: "Privacy Policy", exact: true }).click();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-page-transition",
+    "idle",
+  );
+  await expect(page).toHaveURL(/\/legal\/privacy$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Privacy Policy",
+  );
+  await networkSettled(page);
+  expect(errors).toEqual([]);
+});
+
+test("the shared brand and downloadable logo assets survive production packaging", async ({
+  page,
+  request,
+}) => {
+  const errors = watchErrors(page);
+  await page.goto("/");
+  const path = await page
+    .locator('a[aria-label="Steward home"] svg path')
+    .getAttribute("d");
+  expect(path).toBeTruthy();
+  for (const asset of [
+    "steward-symbol.svg",
+    "steward-symbol-inverse.svg",
+    "steward-lockup.svg",
+  ]) {
+    const response = await request.get(`/brand/${asset}`);
+    expect(response.status(), asset).toBe(200);
+    expect(response.headers()["content-type"]).toContain("image/svg+xml");
+    expect(await response.text()).toContain(path!);
+  }
+  for (const asset of [
+    "/icon.svg",
+    "/apple-icon",
+    "/opengraph-image",
+    "/manifest.webmanifest",
+  ]) {
+    expect((await request.get(asset)).status(), asset).toBe(200);
   }
   await networkSettled(page);
   expect(errors).toEqual([]);

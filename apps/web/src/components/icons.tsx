@@ -1,3 +1,4 @@
+import { StewardMark } from "./brand";
 import type { SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
@@ -213,10 +214,7 @@ export const Icon = {
       <path d="M12 16.5V21" />
     </Base>
   ),
-  Logo: (p: IconProps) => (
-    <svg width={p.size ?? 20} height={p.size ?? 20} viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...p}>
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" />
-      <path d="M8 15.5c1 1 2.4 1.5 4 1.5 2.3 0 3.8-1.1 3.8-2.7 0-1.7-1.5-2.3-3.7-2.8-1.9-.4-3.1-.8-3.1-2 0-1.1 1.1-1.9 2.9-1.9 1.3 0 2.5.4 3.4 1.2" fill="none" stroke="var(--panel)" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+  Logo: ({ size = 18, ...props }: IconProps) => (
+    <StewardMark size={size} {...props} />
   ),
 };

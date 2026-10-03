@@ -1,0 +1,24 @@
+import type { SVGProps } from "react";
+
+/** Steward's folded S: a single connected path, shared by every product surface. */
+export const STEWARD_MARK_PATH =
+  "M29 3Q32 1 35 3L58 16V30Q58 33 55 31L25 14Q21 12 21 16V20Q21 22 24 24L55 42Q59 44 59 48V54Q59 56 56 58L35 70Q32 72 29 70L6 57Q3 55 3 51V39Q3 35 7 37L16 42Q19 44 19 47V49Q19 51 22 53L42 64Q46 66 47 62V58Q47 56 44 54L7 33Q3 31 3 27V20Q3 16 7 14Z";
+
+export function StewardMark({
+  size = 32,
+  ...props
+}: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 74"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path d={STEWARD_MARK_PATH} />
+    </svg>
+  );
+}

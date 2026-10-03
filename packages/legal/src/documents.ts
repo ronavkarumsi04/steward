@@ -41,8 +41,8 @@ const TOKENS: Array<[string, (cfg: LegalConfig) => string]> = [
   ["repositoryUrl", (c) => c.repositoryUrl],
   ["hostingRegion", (c) => c.hostingRegion],
   ["effectiveDate", (c) => c.effectiveDate],
-  ["legalEntityName", (c) => c.legalEntityName ?? "the Steward open-source project"],
-  ["legalEntityAddress", (c) => c.legalEntityAddress ?? "the address published in the repository profile"],
+  ["legalEntityName", (c) => c.legalEntityName ?? "the Steward service operator"],
+  ["legalEntityAddress", (c) => c.legalEntityAddress ?? "the operator address, which is not configured"],
 ];
 
 /** Replaces `{{token}}` with operator facts. Unknown tokens are left intact so a test can catch them. */

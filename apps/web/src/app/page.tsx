@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { getMeOptional, getAuthConfig } from "@/lib/server";
 import { Icon } from "@/components/icons";
 import { landingArrival } from "@/lib/arrivals";
+import { JourneyObject } from "@/components/showcase/journey-object";
 import { ScrollShowcase } from "@/components/showcase/scroll";
 import {
   ArrowGlyph,
@@ -116,6 +117,7 @@ export default async function Landing() {
             <span className={s.edition}>BUILT FOR WHAT’S NEXT / 001</span>
           </div>
           <h1
+            data-sc-copy
             id="hero-title"
             className={`${s.heroTitle} rise-in`}
             style={
@@ -134,7 +136,7 @@ export default async function Landing() {
               { "--enter-delay": `${ARRIVAL.delayMs(2)}ms` } as CSSProperties
             }
           >
-            <p>
+            <p data-sc-copy>
               One place to build and operate your company.
               <br />
               AI agents, connected tools, and you at the controls.
@@ -150,10 +152,10 @@ export default async function Landing() {
             </div>
           </div>
           <div className={s.heroMeta}>
-            <span>OPEN SOURCE. SELF-HOSTABLE.</span>
+            <span>BUILT BY RONAV KARUMSI.</span>
             <span>
               {open
-                ? "YOUR INFRASTRUCTURE. YOUR RULES."
+                ? "YOUR COMPANY. YOUR CONTROL."
                 : auth
                   ? "HOSTED ACCESS BY INVITATION."
                   : "HOSTED ACCESS STATUS UNAVAILABLE."}
@@ -163,9 +165,10 @@ export default async function Landing() {
         <section
           className={s.zoom}
           data-zoom
+          data-sc-act="pin"
           aria-label="A closer look at the company workspace"
         >
-          <div className={s.zoomSticky}>
+          <div className={s.zoomSticky} data-sc-stage>
             <div className={s.zoomBackdrop} aria-hidden="true">
               <span />
               <span />
@@ -182,9 +185,7 @@ export default async function Landing() {
             <div className={s.canvasTransform}>
               <CompanyCanvas />
             </div>
-            <span className={s.zoomHint}>
-              SCROLL TO LOOK CLOSER <span>↓</span>
-            </span>
+
             <span className={s.canvasDisclaimer}>
               Illustrative product preview · not a live company
             </span>
@@ -192,7 +193,7 @@ export default async function Landing() {
         </section>
         <section className={s.bridge}>
           <span className={s.eyebrow}>LESS FRAGMENTATION. MORE FORWARD.</span>
-          <h2>
+          <h2 data-sc-copy>
             Your company doesn’t
             <br />
             happen in <em>one tab.</em>
@@ -201,7 +202,7 @@ export default async function Landing() {
             <span className={s.bridgeSymbol} aria-hidden="true">
               ↳
             </span>
-            <p>
+            <p data-sc-copy>
               Give the work a shared home. Bring your agents, your context and
               your decisions into one connected system.
             </p>
@@ -218,12 +219,13 @@ export default async function Landing() {
           className={s.story}
           id="story"
           data-story
+          data-sc-act="pin"
           aria-label="From idea to authorized action"
         >
-          <div className={s.storySticky}>
+          <div className={s.storySticky} data-sc-stage>
             <div className={s.storyIntro}>
               <span className={s.eyebrow}>THE STEWARD WAY</span>
-              <h2>
+              <h2 data-sc-copy>
                 From “what if”
                 <br />
                 to <em>what’s next.</em>
@@ -246,13 +248,14 @@ export default async function Landing() {
               <div className={s.storyMeter} aria-hidden="true">
                 <span />
               </div>
-              <p className={s.storyDisclaimer}>
+              <p data-sc-copy className={s.storyDisclaimer}>
                 An illustrated journey through Steward’s tools.
                 <br />
                 Execution depends on your configured services.
               </p>
             </div>
             <div className={s.chapterStage}>
+              <JourneyObject />
               {CHAPTERS.map(({ id, title, copy, Scene, number }) => (
                 <article
                   className={s.chapter}
@@ -262,8 +265,8 @@ export default async function Landing() {
                 >
                   <div className={s.chapterCopy}>
                     <span>{number} / FOUR CHAPTERS</span>
-                    <h3>{title}</h3>
-                    <p>{copy}</p>
+                    <h3 data-sc-copy>{title}</h3>
+                    <p data-sc-copy>{copy}</p>
                   </div>
                   <Scene />
                 </article>
@@ -275,15 +278,16 @@ export default async function Landing() {
           className={s.studios}
           id="studios"
           data-rail
+          data-sc-act="pan"
           aria-labelledby="studios-title"
         >
-          <div className={s.railSticky}>
+          <div className={s.railSticky} data-sc-stage>
             <div className={s.studioHeading}>
               <div>
                 <span className={s.eyebrow}>
                   ONE SYSTEM. MANY WAYS FORWARD.
                 </span>
-                <h2 id="studios-title">
+                <h2 data-sc-copy id="studios-title">
                   Space for your
                   <br />
                   <em>whole company.</em>
@@ -308,7 +312,7 @@ export default async function Landing() {
               </div>
             </div>
             <div className={s.railViewport}>
-              <div className={s.studioTrack} data-track>
+              <div className={s.studioTrack} data-track data-sc-pan>
                 {STUDIOS.map((studio, index) => (
                   <article
                     className={s.studioCard}
@@ -321,8 +325,8 @@ export default async function Landing() {
                     </div>
                     <StudioArt kind={studio.kind} />
                     <div className={s.studioCardCopy}>
-                      <h3>{studio.name}</h3>
-                      <p>{studio.copy}</p>
+                      <h3 data-sc-copy>{studio.name}</h3>
+                      <p data-sc-copy>{studio.copy}</p>
                     </div>
                   </article>
                 ))}
@@ -340,12 +344,12 @@ export default async function Landing() {
         >
           <div className={s.controlTop}>
             <span className={s.eyebrow}>AUTONOMY NEEDS A FOUNDATION.</span>
-            <h2 id="control-title">
+            <h2 data-sc-copy id="control-title">
               Ambitious by nature.
               <br />
               <em>Accountable by design.</em>
             </h2>
-            <p>
+            <p data-sc-copy>
               Give your company room to move without losing sight of the work.
             </p>
           </div>
@@ -364,15 +368,15 @@ export default async function Landing() {
               [
                 Icon.Server,
                 "Your stack. Your choice.",
-                "Self-host with PostgreSQL, Redis and Temporal. Configure your model providers and keep credentials encrypted at rest.",
+                "Connect your model providers and integrations. Keep company permissions scoped and credentials encrypted at rest.",
               ],
             ].map(([Glyph, title, copy]) => {
               const G = Glyph as typeof Icon.Eye;
               return (
                 <article key={title as string}>
                   <G size={24} />
-                  <h3>{title as string}</h3>
-                  <p>{copy as string}</p>
+                  <h3 data-sc-copy>{title as string}</h3>
+                  <p data-sc-copy>{copy as string}</p>
                 </article>
               );
             })}
@@ -382,7 +386,7 @@ export default async function Landing() {
           <span className={s.eyebrow}>
             FOR THE THING YOU CAN’T STOP THINKING ABOUT.
           </span>
-          <h2>
+          <h2 data-sc-copy>
             Let’s give it
             <br />
             <em>some momentum.</em>
@@ -391,7 +395,7 @@ export default async function Landing() {
             </span>
           </h2>
           <div className={s.finalBottom}>
-            <p>
+            <p data-sc-copy>
               The idea is yours.
               <br />
               Make Steward your place to move it forward.
@@ -409,8 +413,7 @@ export default async function Landing() {
         </Link>
         <span>
           A COMPANY OS, BUILT WITH INTENT.
-          <br />
-          Apache-2.0 · Self-hostable
+          <br />© 2026 Ronav Karumsi. All rights reserved.
         </span>
         <nav aria-label="Footer">
           <a href="/api/v1/openapi.json">

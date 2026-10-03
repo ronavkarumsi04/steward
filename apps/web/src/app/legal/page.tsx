@@ -42,7 +42,7 @@ export default async function LegalHub() {
         {docs.map((doc) => (
           <div key={doc.slug} className="card p-4">
             <dt className="flex flex-wrap items-baseline justify-between gap-2">
-              <Link href={`/legal/${doc.slug}`} className="text-[15px] font-semibold text-fg hover:text-accent">
+              <Link href={`/legal/${doc.slug}`} className="text-[15px] font-semibold text-fg hover:underline">
                 {doc.title}
               </Link>
               <span className="text-xs text-muted">
@@ -56,7 +56,7 @@ export default async function LegalHub() {
 
       <p className="mt-8 text-sm leading-relaxed text-muted">
         Requests and questions go to <span className="font-medium text-fg-2">{legalContactChannel()}</span>. We do not have an incorporated legal entity;{" "}
-        <Link href="/legal/terms" className="font-medium text-accent hover:underline">
+        <Link href="/legal/terms" className="font-medium text-fg underline underline-offset-4">
           the Terms
         </Link>{" "}
         explain what that means for you.

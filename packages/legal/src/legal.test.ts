@@ -171,8 +171,9 @@ describe("subprocessor register", () => {
 });
 
 describe("legal contact", () => {
-  it("falls back to the repository channel instead of inventing a mailbox", () => {
-    expect(legalContact(cfg)).toContain("github.com");
+  it("discloses missing contact configuration instead of treating a private repository as a public channel", () => {
+    expect(legalContact(cfg)).toContain("not configured");
+    expect(legalContact(cfg)).not.toContain("github.com");
     const withEmail = legalConfigFromEnv({ LEGAL_CONTACT_EMAIL: "privacy@example.com" } as NodeJS.ProcessEnv);
     expect(legalContact(withEmail)).toBe("privacy@example.com");
   });
@@ -209,5 +210,35 @@ describe("legal contact", () => {
   it("does not crash on a malformed connection string", () => {
     const rows = subprocessorsFromEnv({ DATABASE_URL: "not a url" } as NodeJS.ProcessEnv);
     expect(rows.find((s) => s.id === "database")!.name).toBe("Operator-managed PostgreSQL");
+  });
+});
+
+
+describe("proprietary identity revision", () => {
+  it("requires fresh acceptance of prior public versions without erasing history", () => {
+    const history = REQUIRED_AGREEMENTS.map((document) => ({ document, version: "1.0.0", acceptedAt: new Date("2026-09-25") }));
+    expect(pendingAgreements(history).map((item) => item.document)).toEqual(REQUIRED_AGREEMENTS);
+    expect(pendingAgreements(history).every((item) => item.acceptedVersion === "1.0.0")).toBe(true);
+    expect(history.every((record) => record.version === "1.0.0")).toBe(true);
+    expect(REQUIRED_VERSIONS.terms).toBe("2.0.0");
+    expect(REQUIRED_VERSIONS.privacy).toBe("1.1.0");
+  });
+  it("reserves product source while preserving third-party grants and identifying the actual operator", () => {
+    const terms = JSON.stringify(resolveDocument(getDocument("terms")!, cfg));
+    const notices = JSON.stringify(resolveDocument(getDocument("third-party-notices")!, cfg));
+    expect(terms).toContain("proprietary, closed-source");
+    expect(terms).toContain("Ronav Karumsi");
+    expect(terms).not.toContain("maintainers");
+    expect(terms).not.toContain("Apache");
+    expect(notices).toContain("Third-party license grants and required notices remain intact");
+    expect(cfg.legalEntityName).toBeNull();
+    const support = JSON.stringify(resolveDocument(getDocument("support")!, cfg));
+    expect(support).toContain("not configured");
+    expect(support).not.toContain("github.com");
+    expect(support).not.toContain("Community-driven");
+    const privacy = JSON.stringify(resolveDocument(getDocument("privacy")!, cfg));
+    expect(privacy).toContain("separate deployment requires a written agreement");
+    const retention = JSON.stringify(resolveDocument(getDocument("retention")!, cfg));
+    expect(retention).toContain("production backup coverage and restoration remain unverified");
   });
 });
