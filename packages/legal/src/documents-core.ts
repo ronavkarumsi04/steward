@@ -200,7 +200,7 @@ const TERMS: LegalDocument = {
       id: "changes",
       heading: "19. Changes to the Service's policies",
       blocks: [
-        { kind: "p", text: "We may update these Terms, the Acceptable Use Policy, the Privacy Policy, and the other documents linked here. Each document carries a version and an effective date, and retain previous versions in the private repository history. Contact {{contact}} to request a previous version." },
+        { kind: "p", text: "We may update these Terms, the Acceptable Use Policy, the Privacy Policy, and the other documents linked here. Each document carries a version and an effective date, and retains previous versions in the private repository history. Contact {{contact}} to request a previous version." },
         { kind: "p", text: "For material changes we will give notice in the app or by email before the change takes effect and will ask you to accept the new version. Where the law requires consent, we will not apply the change to you without it. Continuing to use the Service after a non-material update means you accept the updated version. If you do not agree to a material change, you can stop using the Service and delete your account." },
         { kind: "p", text: "Acceptances are recorded with the document version, timestamp, and the IP address and browser used, so both you and we can see which version you agreed to." },
       ],
