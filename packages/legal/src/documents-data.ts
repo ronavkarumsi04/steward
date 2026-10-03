@@ -6,8 +6,8 @@ const INTEGRATIONS: LegalDocument = {
   slug: "integrations",
   title: "Integrations and Connected Accounts",
   summary: "What each connection lets {{serviceName}} read or do, what data flows where, and how to revoke it.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -90,8 +90,8 @@ const SUBPROCESSORS: LegalDocument = {
   slug: "subprocessors",
   title: "Subprocessors",
   summary: "The vendors {{serviceName}} itself uses to run the hosted service, and how changes are announced.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "business-customers",
   sections: [
@@ -112,9 +112,9 @@ const SUBPROCESSORS: LegalDocument = {
     },
     {
       id: "self-hosted",
-      heading: "3. If you self-host",
+      heading: "3. Separately authorized deployments",
       blocks: [
-        { kind: "p", text: "A self-hosted deployment has no subprocessors as far as we are concerned: you run the database, the workflow engine, and the application yourself. Anything you connect from your own deployment — a managed database, an object store, your own email provider — is your own vendor relationship, and you should publish your own subprocessor list." },
+        { kind: "p", text: "For a separate deployment authorized under a written agreement, vendor and subprocessor responsibilities depend on who operates the services and processes the data. Its operator must publish an accurate subprocessor list. This policy does not grant source access or a right to self-host." },
       ],
     },
   ],
@@ -124,8 +124,8 @@ const DPA: LegalDocument = {
   slug: "dpa",
   title: "Data Processing Addendum",
   summary: "The processor terms that apply when {{serviceName}} handles personal data on your behalf.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "business-customers",
   sections: [
@@ -174,7 +174,7 @@ const DPA: LegalDocument = {
       id: "self-hosted-dpa",
       heading: "4. Self-hosted deployments",
       blocks: [
-        { kind: "p", text: "If you self-host, we are not a processor for that deployment — there is no processing by us at all. You act as the operator and must enter your own agreements with your own vendors. This DPA does not apply, though the Retention Policy and Security page remain useful as documentation of the software's behaviour." },
+        { kind: "p", text: "For a separate deployment authorized under a written agreement, processor responsibilities depend on whether we process personal data for that deployment. They must be specified in that agreement rather than assumed from the deployment location. This DPA does not grant source access or a self-hosting right." },
       ],
     },
     {
@@ -191,8 +191,8 @@ const RETENTION: LegalDocument = {
   slug: "retention",
   title: "Data Retention and Deletion Policy",
   summary: "How long each category of data lives, and exactly what deletion does — including the two things it does not remove.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -254,7 +254,7 @@ const RETENTION: LegalDocument = {
       id: "backup",
       heading: "6. Backups and disaster recovery",
       blocks: [
-        { kind: "p", text: "Operators of the hosted Service take encrypted database backups on a rolling 30-day window and store the deployment's master key separately from the backups. Restoration is tested, not assumed. If you self-host, backups are entirely your responsibility — the deployment guide includes a backup and restore procedure to start from." },
+        { kind: "p", text: "The operator maintains a backup and restore runbook covering database records, artifacts and encryption keys. A local database restore drill has been exercised; production backup coverage and restoration remain unverified. Do not rely on a production recovery guarantee until the operator has confirmed the actual backup schedule, scope and restore results. Separately authorized deployment operators are responsible for their agreed backup arrangements." },
       ],
     },
   ],
@@ -264,8 +264,8 @@ const SECURITY: LegalDocument = {
   slug: "security",
   title: "Security",
   summary: "What {{serviceName}} actually does to protect your data, and what it does not do yet.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -305,7 +305,7 @@ const SECURITY: LegalDocument = {
           "No third-party penetration test has been completed, and there is no bug bounty.",
           "There is no single sign-on (SAML/OIDC) for organizations yet.",
         ]},
-        { kind: "p", text: "These limitations are tracked publicly in the repository's threat model so that a security review can start from an accurate picture rather than a marketing page." },
+        { kind: "p", text: "Detailed engineering limitations are tracked in the private repository threat model. This public Security page describes the current boundaries; contact {{contact}} to discuss an authorized security review." },
       ],
     },
     {
@@ -321,7 +321,7 @@ const SECURITY: LegalDocument = {
       heading: "5. If something goes wrong",
       blocks: [
         { kind: "p", text: "We maintain a documented incident-response process covering detection, severity, containment, credential and token revocation, evidence preservation, subprocessor notification, customer communication, and regulatory assessment. Where a personal-data breach affects your data, we notify you without undue delay after becoming aware, with the information you need to meet your own obligations, and we follow up with a written postmortem when the incident is closed." },
-        { kind: "p", text: "For self-hosted deployments, incident response is yours; the repository's incident-response runbook is written so you can adapt it, including the steps for revoking integration credentials and rotating the master key." },
+        { kind: "p", text: "For separately authorized deployments, incident-response responsibilities must be specified in the written agreement. The operator maintains a private runbook covering integration credential revocation and master-key rotation." },
       ],
     },
     {
@@ -344,8 +344,8 @@ const ACCESSIBILITY: LegalDocument = {
   slug: "accessibility",
   title: "Accessibility Statement",
   summary: "The accessibility target for {{serviceName}}, what has been implemented, and what has not been verified yet.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -389,7 +389,7 @@ const ACCESSIBILITY: LegalDocument = {
       heading: "4. Feedback and remediation",
       blocks: [
         { kind: "p", text: "If something is unusable with assistive technology, tell us: {{contact}}. Include the page, the assistive technology you use, and what happened. We treat accessibility defects as bugs, give them a priority at least as high as an equivalent functional bug, and we will tell you what we changed." },
-        { kind: "p", text: "If you self-host, the fixes land in the software through the normal open-source process, and you can also fix anything we have missed and send a pull request." },
+        { kind: "p", text: "For a separately authorized installation, contact the operator to report accessibility defects and obtain supported updates." },
       ],
     },
   ],
@@ -399,8 +399,8 @@ const API_TERMS: LegalDocument = {
   slug: "api-terms",
   title: "API and Webhook Terms",
   summary: "Rules for using the {{serviceName}} API and for receiving webhooks.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "business-customers",
   sections: [
@@ -456,8 +456,8 @@ const COPYRIGHT: LegalDocument = {
   slug: "copyright",
   title: "Copyright and IP Complaints",
   summary: "How to report content that infringes your rights, and what we do about repeat infringement.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -511,8 +511,8 @@ const THIRD_PARTY: LegalDocument = {
   slug: "third-party-notices",
   title: "Third-Party Notices",
   summary: "The open-source components shipped with {{serviceName}}, and the licenses they are provided under.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -520,8 +520,8 @@ const THIRD_PARTY: LegalDocument = {
       id: "project",
       heading: "1. Steward's own license",
       blocks: [
-        { kind: "p", text: "{{serviceName}} itself is licensed under the Apache License 2.0. That license governs the software and grants you the rights it describes — including patent rights — and requires that copyright and attribution notices be preserved. It does not grant rights in the {{serviceName}} name or logos." },
-        { kind: "callout", tone: "info", title: "Open-source license vs. hosted terms", text: "The Apache-2.0 license covers the code you run. It is not the agreement for the hosted service, which is what the Terms of Service is for. Self-hosting under Apache-2.0 gives you no rights to our hosted instance, and using the hosted instance gives you no extra rights in the code." },
+        { kind: "p", text: "{{serviceName}} itself is proprietary, closed-source software. Its original code, documentation, name and logos are reserved by their owner. Third-party components remain subject to their own licenses; their inclusion does not make the entire product open source." },
+        { kind: "callout", tone: "info", title: "Product ownership and third-party licenses", text: "Hosted access is governed by the Terms of Service. It does not grant a license to redistribute proprietary code. Third-party license grants and required notices remain intact, as do rights under a separately authorized prior distribution." },
       ],
     },
     {
@@ -551,8 +551,8 @@ const SUPPORT: LegalDocument = {
   slug: "support",
   title: "Support Policy",
   summary: "How to get help with {{serviceName}}, and what we do not promise.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -561,8 +561,7 @@ const SUPPORT: LegalDocument = {
       heading: "1. How to get help",
       blocks: [
         { kind: "table", head: ["Channel", "Use it for", "Response expectation"], rows: [
-          ["In-app feedback and the repository issue tracker", "Bugs, feature requests, documentation gaps", "Best effort, typically within a few business days"],
-          ["{{repositoryUrl}}", "Code-level questions and self-hosted help", "Community-driven; maintainers and other operators answer"],
+          ["{{contact}}", "Bugs, feature requests, documentation gaps and account support", "Best effort; no guaranteed response time unless separately agreed"],
           ["{{contact}}", "Security reports, privacy requests, legal notices, abuse reports", "Security acknowledged within three business days; others as the law requires"],
         ]},
       ],
@@ -571,7 +570,7 @@ const SUPPORT: LegalDocument = {
       id: "no-sla",
       heading: "2. No service-level commitment at launch",
       blocks: [
-        { kind: "callout", tone: "warn", title: "We do not promise uptime", text: "There is no SLA, no uptime percentage, no availability credit, and no contractual support response time for the hosted Service. It is operated as an open-source project on a best-effort basis. Do not build a business process that cannot tolerate an outage, and do not rely on the hosted instance for anything you cannot afford to lose. If you need guarantees, self-host on infrastructure you control." },
+        { kind: "callout", tone: "warn", title: "We do not promise uptime", text: "There is no SLA, no uptime percentage, no availability credit, and no contractual support response time for the hosted Service. It is operated on a best-effort basis. Do not build a business process that cannot tolerate an outage, and do not rely on the hosted instance for anything you cannot afford to lose. If your use requires guarantees, obtain an explicit written service agreement before relying on the Service for that use." },
         { kind: "p", text: "If a formal SLA is ever offered, it will be a separate written agreement with defined scope, exclusions, maintenance windows, severity levels, and remedies — and the infrastructure will have to be able to support it before it is advertised." },
       ],
     },
@@ -592,7 +591,7 @@ const SUPPORT: LegalDocument = {
       id: "maintenance",
       heading: "4. Maintenance and communication",
       blocks: [
-        { kind: "p", text: "For the hosted instance we aim to perform disruptive maintenance outside US business hours where we can, and we announce it in the app. Incidents affecting availability are noted in the repository, and security-relevant incidents are notified as described on the Security page and in the Data Processing Addendum." },
+        { kind: "p", text: "For the hosted instance we aim to perform disruptive maintenance outside US business hours where we can, and we announce it in the app. Availability incidents are tracked by the operator, and security-relevant incidents are notified as described on the Security page and in the Data Processing Addendum." },
       ],
     },
   ],

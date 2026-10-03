@@ -18,9 +18,9 @@ export interface LegalConfig {
   legalEntityName: string | null;
   /** Postal address used for legal notices and CAN-SPAM, when one exists. */
   legalEntityAddress: string | null;
-  /** Contact mailbox for privacy/legal requests. Null falls back to the repository channel. */
+  /** Contact mailbox for privacy/legal requests. Null is disclosed as missing configuration. */
   contactEmail: string | null;
-  /** Public contact channel that always exists for an open-source project. */
+  /** Source repository reference; it may be private and is never assumed to be a support channel. */
   repositoryUrl: string;
   /** Region where the operator's production data is hosted, as disclosed in the privacy policy. */
   hostingRegion: string;
@@ -58,8 +58,8 @@ export function legalConfigFromEnv(processEnv: NodeJS.ProcessEnv = process.env):
     // No incorporated entity exists today; the documents say exactly that rather than implying one.
     operator: e.entity
       ? `${e.entity}, which operates the hosted Steward service`
-      : "the Steward open-source project maintainers, who operate the hosted Steward service as a non-commercial open-source offering",
-    operatorName: e.entity ?? "the Steward open-source project maintainers",
+      : "Ronav Karumsi, who operates the hosted Steward service",
+    operatorName: e.entity ?? "Ronav Karumsi",
     legalEntityName: e.entity,
     legalEntityAddress: e.address,
     contactEmail: e.email,
@@ -70,13 +70,13 @@ export function legalConfigFromEnv(processEnv: NodeJS.ProcessEnv = process.env):
     minimumAge: 18,
     billingEnabled: e.billing,
     internationalTransfers: e.transfers,
-    effectiveDate: "2026-09-25",
+    effectiveDate: "2026-10-02",
   };
 }
 
 /** The mailbox/channel requests should use, rendered in documents. */
 export function legalContact(cfg: LegalConfig): string {
-  return cfg.contactEmail ?? `${cfg.repositoryUrl} (the contact channel published in the repository profile)`;
+  return cfg.contactEmail ?? "Contact details are not configured by the service operator (LEGAL_CONTACT_EMAIL).";
 }
 
 // ---------------------------------------------------------------------------

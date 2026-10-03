@@ -1,7 +1,7 @@
 .home {
   --paper: #f5f4ec;
   --ink: #182d28;
-  --muted: #5f6c63;
+  --muted: #556259;
   --mint: #d9edc8;
   --lime: #dcff9c;
   --rule: #ced2c7;
@@ -2187,5 +2187,276 @@
   .home :global(.rise-in) {
     animation: none;
     opacity: 1;
+  }
+}
+
+/* The same physical folio moves throughout the story. Its casing is never replaced. */
+.journeyObject {
+  display: none;
+}
+.folioAssembly {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: translate3d(
+      calc(var(--folio-x, 0) * 1px),
+      calc(var(--folio-y, 0) * 1px),
+      0
+    )
+    rotateX(calc(var(--folio-rx, 0) * 1deg))
+    rotateY(calc(var(--folio-ry, 0) * 1deg))
+    rotateZ(calc(var(--folio-rz, 0) * 1deg)) scale(var(--folio-scale, 1));
+}
+.folioGround {
+  position: absolute;
+  inset: 45% 8% 5%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #081b15a0, transparent 65%);
+  transform: scaleX(1.1);
+}
+.folioCase {
+  position: relative;
+  z-index: 3;
+  background: #f5f4ec;
+  color: #182d28;
+  border: 1px solid #aab79b;
+  border-radius: 12px;
+  box-shadow:
+    0 2px 0 #cad6b7,
+    0 5px 0 #667957,
+    0 28px 45px #081b154d;
+  overflow: hidden;
+}
+.folioChrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #f5f4ec;
+  border-bottom: 1px solid #bdc8af;
+  font-size: 10px;
+}
+.folioChrome > span:last-child {
+  margin-left: auto;
+  font-size: 6px;
+  letter-spacing: 0.08em;
+  color: #526748;
+}
+.folioDisplay {
+  position: relative;
+  height: 345px;
+  overflow: hidden;
+  background: #e9eedb;
+}
+.folioFace {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translate3d(0, calc((1 - var(--face, 0)) * 12px), 0);
+}
+.folioFace[data-folio-face="0"] {
+  --face: var(--folio-face-0, 1);
+}
+.folioFace[data-folio-face="1"] {
+  --face: var(--folio-face-1, 0);
+}
+.folioFace[data-folio-face="2"] {
+  --face: var(--folio-face-2, 0);
+}
+.folioFace[data-folio-face="3"] {
+  --face: var(--folio-face-3, 0);
+}
+.folioFace {
+  opacity: var(--face, 0);
+}
+.folioFace > .scene {
+  min-height: 345px;
+  border: none;
+  border-radius: 0;
+}
+.folioFace .sceneTop {
+  display: none;
+}
+.folioFace .sceneNote {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.folioFace .approvalSheet {
+  margin-top: 0;
+  padding-top: 18px;
+}
+.folioFace .approvalIcon {
+  height: 36px;
+  width: 36px;
+}
+.folioFace .approvalSheet h3 {
+  font-size: 40px;
+}
+.folioFace .approvalSheet > p {
+  margin-top: 12px;
+}
+.folioFace .approvalDetails {
+  margin-top: 16px;
+}
+.folioSpine {
+  padding: 12px 20px;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  background: #f5f4ec;
+  font-size: 8px;
+  letter-spacing: 0.02em;
+}
+.folioSpine i {
+  flex: 1;
+  height: 1px;
+  background: #c4cdbb;
+}
+.folioLeaf {
+  position: absolute;
+  inset: 0;
+  padding: 18px;
+  border: 1px solid #9aaf80;
+  border-radius: 12px;
+  background: #d2e5b9;
+  color: #243b2d;
+  box-shadow: 0 12px 28px #081b153d;
+  transform-origin: 50% 85%;
+}
+.folioLeaf > span {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 0.12em;
+}
+.folioLeaf i {
+  display: block;
+  height: 5px;
+  background: #91ac7a;
+  border-radius: 2px;
+  margin-top: 17px;
+  max-width: 65%;
+}
+.folioLeaf i:nth-child(3) {
+  max-width: 45%;
+}
+.folioSource {
+  transform: translate3d(
+      calc(var(--folio-spread, 0) * -42px),
+      calc(var(--folio-spread, 0) * -10px),
+      -24px
+    )
+    rotateZ(calc(var(--folio-spread, 0) * -8deg));
+}
+.folioEvidence {
+  background: #edf2dc;
+  transform: translate3d(
+      calc(var(--folio-spread, 0) * 44px),
+      calc(var(--folio-spread, 0) * -8px),
+      -16px
+    )
+    rotateZ(calc(var(--folio-spread, 0) * 7deg));
+}
+.folioDecision {
+  background: #d9edc8;
+  transform: translate3d(
+      calc(var(--folio-spread, 0) * 10px),
+      calc(var(--folio-spread, 0) * -26px),
+      -35px
+    )
+    rotateX(calc(var(--folio-spread, 0) * 8deg));
+}
+.folioDecision svg {
+  margin-top: 20px;
+}
+.folioCaption {
+  text-align: center;
+  padding-top: 32px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: #bac9af;
+}
+@media (min-width: 960px) and (min-height: 760px) and (prefers-reduced-motion: no-preference) {
+  .home[data-motion="true"] .chapterStage {
+    height: min(600px, calc(100vh - 120px));
+  }
+  .home[data-motion="true"] .journeyObject {
+    display: block;
+    position: absolute;
+    top: 240px;
+    left: 0;
+    right: 0;
+    perspective: 1400px;
+    max-width: 740px;
+    margin-inline: auto;
+  }
+  .home[data-motion="true"] .chapter > .scene {
+    display: none;
+  }
+  .home[data-motion="true"] .chapterCopy {
+    max-width: 560px;
+  }
+}
+@media (min-width: 960px) and (max-width: 1150px) and (min-height: 760px) and (prefers-reduced-motion: no-preference) {
+  .home[data-motion="true"] .journeyObject {
+    top: 225px;
+  }
+  .folioDisplay {
+    height: 315px;
+  }
+  .folioFace > .scene {
+    min-height: 315px;
+  }
+  .folioFace .promptBubble {
+    margin-top: 12px;
+    padding: 10px 14px;
+  }
+  .folioFace .planRow {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .folioFace .editorSplit,
+  .folioFace .verifyBody {
+    min-height: 245px;
+  }
+  .folioFace .approvalSheet h3 {
+    font-size: 32px;
+  }
+  .folioFace .approvalSheet > p {
+    font-size: 10px;
+  }
+  .folioFace .approvalGate {
+    margin-top: 12px;
+  }
+  .folioCaption {
+    padding-top: 22px;
+  }
+}
+
+.folioFace .sceneNote {
+  display: none;
+}
+.folioFace .promptBubble {
+  margin-top: 12px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.folioFace .planConnector {
+  height: 12px;
+}
+.folioFace .planSheet {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 0;
+}
+.folioFace .sheetTitle {
+  padding-bottom: 8px;
+}
+.folioFace .planRow {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+@media (min-width: 960px) and (max-width: 1150px) and (min-height: 760px) and (prefers-reduced-motion: no-preference) {
+  .folioCaption {
+    display: none;
   }
 }

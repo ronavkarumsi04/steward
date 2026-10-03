@@ -278,6 +278,12 @@ no-JavaScript spinner. See [ADR-0023](adr/0023-public-showcase.md) and
 [the verification record](HOMEPAGE_REDESIGN_2026-10-02.md). This changes the public showcase, not the verified
 execution status of the hosted company OS. No P3 item is completed by this design tranche.
 
+## Continuous product story and proprietary identity — 2026-10-02
+
+The owner clarified that Steward is closed source, and requested continuous object choreography rather than only chapter transitions. The new story keeps one folio casing and its attached source/evidence/decision layers throughout native scroll, preserving the previously approved zoom and horizontal rail. Section clicks travel smoothly; page navigation progressively fades. One shared folded-S logo covers product, legal/auth and app/social icons.
+
+Marketing, agent self-description, repository licence and legal disclosures now agree on proprietary ownership. Third-party notices remain unchanged. Versioned Terms (2.0.0) and operator/contact disclosures (1.1.0) use the existing reacceptance flow; a private repository is not advertised as a legal contact channel. See [ADR-0024](adr/0024-proprietary-identity.md) and [brand guidance](BRAND.md). See [the verification record](CONTINUOUS_STORY_2026-10-02.md). Release-specific CI/deployment evidence is recorded in the engineering report; this does not complete a P3 item or enable hosted execution.
+
 ## Standing rules
 
 Binding on all future work in this repo.

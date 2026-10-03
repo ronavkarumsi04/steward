@@ -1025,3 +1025,12 @@
     color: var(--accent-2);
   }
 }
+
+/* Snapshot fades are a progressive enhancement; the browser and Next keep navigation native. */
+::view-transition-old(root) { animation: route-fade-out var(--dur-entrance) var(--ease-house) both; }
+::view-transition-new(root) { animation: route-fade-in var(--dur-entrance) var(--ease-house) both; }
+@keyframes route-fade-out { to { opacity: 0; } }
+@keyframes route-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}

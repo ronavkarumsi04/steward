@@ -2,7 +2,7 @@
   "name": "@steward/companion",
   "version": "0.1.0",
   "description": "Steward Local Companion: runs the official Codex CLI on your machine with your own login so Steward agents can use your ChatGPT plan without your credentials ever leaving your device.",
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
   "type": "module",
   "bin": { "steward-companion": "./dist/cli.js" },
   "main": "./dist/index.js",

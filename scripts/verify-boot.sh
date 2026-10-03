@@ -107,6 +107,8 @@ step "start web (standalone build)"
 # same layout as infra/docker/web.Dockerfile: static assets live next to the standalone server
 rm -rf apps/web/.next/standalone/apps/web/.next/static
 cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+rm -rf apps/web/.next/standalone/apps/web/public
+cp -r apps/web/public apps/web/.next/standalone/apps/web/public
 if [ "$EMBEDDED_API" = "true" ]; then
   # Hosted SSR must work without an HTTP API process at its configured loopback address.
   API_INTERNAL_URL=http://127.0.0.1:1 API_URL=http://127.0.0.1:1 PORT=$WEB_PORT HOSTNAME=127.0.0.1 spawn node apps/web/.next/standalone/apps/web/server.js >"$LOGS/web.log" 2>&1

@@ -1,3 +1,4 @@
+import { StewardMark } from "@/components/brand";
 import { ImageResponse } from "next/og";
 
 export const alt =
@@ -28,9 +29,7 @@ export default function OpenGraphImage() {
           paddingBottom: 25,
         }}
       >
-        <span style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1 }}>
-          steward
-        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 32, fontWeight: 700, letterSpacing: -1 }}><StewardMark size={36} />steward</span>
         <span style={{ fontSize: 13, letterSpacing: 2 }}>
           THE COMPANY OPERATING SYSTEM
         </span>
@@ -69,7 +68,7 @@ export default function OpenGraphImage() {
             borderRadius: 30,
           }}
         >
-          AI-native. Self-hostable.
+          Your company. Your control.
         </span>
       </div>
     </div>,

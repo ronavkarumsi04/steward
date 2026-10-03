@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { clamp, progress, chapterAt } from "./scroll-model";
+import {
+  clamp,
+  progress,
+  chapterAt,
+  folioPose,
+  folioFaces,
+} from "./scroll-model";
 
 /** The document is the fallback. Only a capable desktop opts into pinned scenes. */
 export function ScrollShowcase({
@@ -22,6 +28,8 @@ export function ScrollShowcase({
     const story = element.querySelector<HTMLElement>("[data-story]");
     const rail = element.querySelector<HTMLElement>("[data-rail]");
     const track = element.querySelector<HTMLElement>("[data-track]");
+    const object = element.querySelector<HTMLElement>("[data-journey-object]");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const panels = Array.from(
       element.querySelectorAll<HTMLElement>("[data-chapter-panel]"),
     );
@@ -51,6 +59,20 @@ export function ScrollShowcase({
       if (storyRect) {
         const p = progress(storyRect.top, storyRect.height, height, 76);
         element.style.setProperty("--story-progress", String(p));
+        const pose = folioPose(p);
+        Object.entries(pose).forEach(([key, value]) =>
+          element.style.setProperty(`--folio-${key}`, String(value)),
+        );
+        folioFaces(p).forEach((value, index) =>
+          element.style.setProperty(`--folio-face-${index}`, String(value)),
+        );
+        if (object) {
+          if (storyRect.top < height && storyRect.bottom > 76)
+            object.dataset.scVerifyState = Object.values(pose)
+              .map((value) => value.toFixed(3))
+              .join(",");
+          else delete object.dataset.scVerifyState;
+        }
         const next = chapterAt(p, panels.length);
         if (next !== active) {
           active = next;
@@ -74,7 +96,7 @@ export function ScrollShowcase({
     const schedule = () => {
       if (media.matches && !frame) frame = requestAnimationFrame(paint);
     };
-    const locate = (hash: string) => {
+    const locate = (hash: string, behavior: ScrollBehavior = "instant") => {
       const link = [
         ...links,
         ...element.querySelectorAll<HTMLAnchorElement>("[data-rail-link]"),
@@ -92,13 +114,14 @@ export function ScrollShowcase({
           76 +
           clamp(index / Math.max(1, count - 1)) *
             Math.max(0, rect.height - window.innerHeight + 76),
-        behavior: "instant",
+        behavior,
       });
       schedule();
       return true;
     };
     const hashChanged = () => {
-      if (media.matches) locate(location.hash);
+      if (media.matches)
+        locate(location.hash, reduced.matches ? "instant" : "smooth");
     };
     const configure = () => {
       // Preserve the chapter being read when motion is switched off or the viewport becomes narrow.
@@ -130,14 +153,18 @@ export function ScrollShowcase({
           "--story-progress",
           "--rail-x",
           "--rail-progress",
+          ...["x", "y", "rx", "ry", "rz", "scale", "spread"].map(
+            (key) => `--folio-${key}`,
+          ),
+          ...[0, 1, 2, 3].map((index) => `--folio-face-${index}`),
         ].forEach((key) => element.style.removeProperty(key));
+        if (object) delete object.dataset.scVerifyState;
       } else paint();
       if (!media.matches && reading)
         reading.scrollIntoView({ block: "start", behavior: "instant" });
     };
     const navigate = (event: MouseEvent) => {
       if (
-        !media.matches ||
         event.button !== 0 ||
         event.metaKey ||
         event.ctrlKey ||
@@ -146,16 +173,29 @@ export function ScrollShowcase({
       )
         return;
       const link = (event.target as Element).closest<HTMLAnchorElement>(
-        "a[data-chapter-link], a[data-rail-link]",
+        'a[href^="#"]',
       );
-      if (!link || !element.contains(link)) return;
-      if (!locate(link.hash)) return;
+      if (
+        !link ||
+        !element.contains(link) ||
+        link.target ||
+        link.hasAttribute("download") ||
+        event.defaultPrevented
+      )
+        return;
+      const target = document.getElementById(
+        decodeURIComponent(link.hash.slice(1)),
+      );
+      if (!target) return;
+      const behavior = reduced.matches ? "instant" : "smooth";
+      if (!media.matches || !locate(link.hash, behavior))
+        target.scrollIntoView({ block: "start", behavior });
       event.preventDefault();
-      history.replaceState(null, "", link.hash);
+      history.pushState(null, "", link.hash);
       // Only explicit chapter links move the document; wheel/touch/keyboard remain native.
     };
     configure();
-    hashChanged();
+    if (media.matches) locate(location.hash);
     window.addEventListener("hashchange", hashChanged);
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);

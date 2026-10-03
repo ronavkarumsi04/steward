@@ -66,7 +66,7 @@ export default async function LegalDocumentPage({ params }: { params: Promise<{ 
           Questions or requests: <span className="font-medium text-fg-2">{legalContactChannel()}</span>. Operated by {cfg.operator}.
         </p>
         <p className="mt-2">
-          <Link href="/legal" className="font-medium text-accent hover:underline">
+          <Link href="/legal" className="font-medium text-fg underline underline-offset-4">
             All legal documents
           </Link>
         </p>

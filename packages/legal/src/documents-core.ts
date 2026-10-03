@@ -10,8 +10,8 @@ const TERMS: LegalDocument = {
   slug: "terms",
   title: "Terms of Service",
   summary: "The agreement between {{operator}} and you when you use hosted {{serviceName}}.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "2.0.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: true,
   audience: "everyone",
   sections: [
@@ -19,9 +19,9 @@ const TERMS: LegalDocument = {
       id: "agreement",
       heading: "1. Who these terms are between",
       blocks: [
-        { kind: "p", text: "{{serviceName}} is open-source software distributed under the Apache License 2.0. These Terms of Service (the \"Terms\") are between you and {{operator}} (\"we\", \"us\", \"our\") and govern your use of the hosted {{serviceName}} service at the address where you registered (the \"Service\")." },
-        { kind: "callout", tone: "info", title: "No corporate entity is claimed", text: "{{serviceName}} is currently operated as an open-source project without an incorporated legal entity. That is why these Terms name the project's maintainers as the contracting party. If a legal entity is later formed to operate the Service, these Terms will be updated as described in section 21 and the entity's details will appear here." },
-        { kind: "p", text: "The software itself is licensed to you under the Apache License 2.0, not under these Terms. If you install and run {{serviceName}} yourself, the open-source license governs the software, and you — not us — are the operator responsible for the deployment, the data in it, and any promises you make to your own users. These Terms apply only to the hosted instance we operate." },
+        { kind: "p", text: '{{serviceName}} is proprietary, closed-source software. These Terms of Service (the "Terms") are between you and {{operator}} ("we", "us", "our") and govern your use of the hosted {{serviceName}} service at the address where you registered (the "Service").' },
+        { kind: "callout", tone: "info", title: "No corporate entity is claimed", text: "These Terms name {{operatorName}} as the contracting party. We do not claim that an incorporated entity operates this Service unless one is explicitly identified in the operator details. If a legal entity is later formed to operate the Service, these Terms will be updated as described in section 21 and the entity's details will appear here." },
+        { kind: "p", text: "Access to the hosted Service does not grant access to, or a right to copy, modify or redistribute, its proprietary source code. Any separately authorized installation or source access is governed by a written agreement with the owner. Third-party components retain the rights granted by their own licenses." },
         { kind: "p", text: "By creating an account, clicking to accept these Terms, or using the Service, you agree to these Terms, the Acceptable Use Policy, and the Privacy Policy. If you do not agree, do not use the Service." },
       ],
     },
@@ -122,7 +122,7 @@ const TERMS: LegalDocument = {
       id: "ip",
       heading: "10. Intellectual property",
       blocks: [
-        { kind: "p", text: "The {{serviceName}} software is licensed under Apache-2.0, and that license governs your rights in the source code. These Terms do not restrict rights the open-source license grants you." },
+        { kind: "p", text: "The {{serviceName}} software and its original documentation are proprietary. All rights are reserved by their owner except those expressly granted in a separate written agreement. These Terms do not restrict rights granted by third-party component licenses or a separately authorized prior distribution." },
         { kind: "p", text: "We own the {{serviceName}} name, logos, and the hosted Service's own content and documentation. You may not use our marks in a way that suggests endorsement or affiliation without our permission. Third-party open-source components shipped with the Service are listed in the Third-Party Notices page, including their licenses and required attributions." },
         { kind: "p", text: "If you send us feedback or suggestions, you allow us to use them without restriction or compensation. Do not send us confidential information in feedback." },
       ],
@@ -131,7 +131,7 @@ const TERMS: LegalDocument = {
       id: "availability",
       heading: "11. Availability and changes to the Service",
       blocks: [
-        { kind: "p", text: "The Service is provided on a best-effort basis by an open-source project. We do not promise any uptime percentage, support response time, or service level at launch, and no service-level commitment exists unless we publish a separate written agreement. Planned and unplanned maintenance can interrupt the Service, and features may change or be removed as the project evolves." },
+        { kind: "p", text: "The Service is provided on a best-effort basis by its operator. We do not promise any uptime percentage, support response time, or service level at launch, and no service-level commitment exists unless we publish a separate written agreement. Planned and unplanned maintenance can interrupt the Service, and features may change or be removed as the project evolves." },
         { kind: "p", text: "We may modify, add, or discontinue features. If we discontinue the hosted Service entirely, we will give reasonable advance notice in the app or by email and a way to export Your Data first." },
       ],
     },
@@ -200,7 +200,7 @@ const TERMS: LegalDocument = {
       id: "changes",
       heading: "19. Changes to the Service's policies",
       blocks: [
-        { kind: "p", text: "We may update these Terms, the Acceptable Use Policy, the Privacy Policy, and the other documents linked here. Each document carries a version and an effective date, and we publish previous versions in the repository's git history." },
+        { kind: "p", text: "We may update these Terms, the Acceptable Use Policy, the Privacy Policy, and the other documents linked here. Each document carries a version and an effective date, and retains previous versions in the private repository history. Contact {{contact}} to request a previous version." },
         { kind: "p", text: "For material changes we will give notice in the app or by email before the change takes effect and will ask you to accept the new version. Where the law requires consent, we will not apply the change to you without it. Continuing to use the Service after a non-material update means you accept the updated version. If you do not agree to a material change, you can stop using the Service and delete your account." },
         { kind: "p", text: "Acceptances are recorded with the document version, timestamp, and the IP address and browser used, so both you and we can see which version you agreed to." },
       ],
@@ -234,8 +234,8 @@ const PRIVACY: LegalDocument = {
   slug: "privacy",
   title: "Privacy Policy",
   summary: "What {{serviceName}} collects, why, who it goes to, how long we keep it, and how to exercise your rights.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: true,
   audience: "everyone",
   sections: [
@@ -379,7 +379,7 @@ const PRIVACY: LegalDocument = {
       heading: "11. How we protect it",
       blocks: [
         { kind: "p", text: "Traffic is encrypted in transit, credentials and OAuth tokens are encrypted at rest with the deployment's master key, passwords are stored as hashes, sessions use httpOnly cookies with SameSite protection and CSRF checks on state-changing requests, and the API applies rate limits and audit logging. You can require approval for externally visible actions and cap spend with budgets." },
-        { kind: "p", text: "Current limitations are published, not hidden: the threat model in the repository documents what is not yet implemented. Read the Security page for the honest current state, including what we do not yet have. No system is perfectly secure, and you should keep your own independent backups of anything you cannot afford to lose." },
+        { kind: "p", text: "Read the Security page for current limitations, including what is not yet implemented. Detailed engineering records are maintained in the private repository. No system is perfectly secure, and you should keep your own independent backups of anything you cannot afford to lose." },
       ],
     },
     {
@@ -394,14 +394,14 @@ const PRIVACY: LegalDocument = {
       heading: "13. International transfers",
       blocks: [
         { kind: "p", text: "The Service is hosted in {{hostingRegion}}, and your data may be processed in other countries where our subprocessors operate, including the United States. Where personal data protected by GDPR or UK GDPR is transferred out of the EEA or the UK, we rely on the European Commission's Standard Contractual Clauses and the UK Addendum, supplemented by transfer impact assessments." },
-        { kind: "p", text: "Business customers can execute the Data Processing Addendum, which incorporates the Standard Contractual Clauses by reference and lists the current subprocessors. If you have residency requirements, you can also self-host in your own region, in which case no transfer to us occurs at all." },
+        { kind: "p", text: "Business customers can execute the Data Processing Addendum, which incorporates the Standard Contractual Clauses by reference and lists the current subprocessors. If you have residency requirements, contact {{contact}} to discuss deployment and transfer arrangements. A separate deployment requires a written agreement; these terms do not grant source access or a self-hosting right." },
       ],
     },
     {
       id: "changes",
       heading: "14. Changes to this policy",
       blocks: [
-        { kind: "p", text: "We version this policy. Material changes are announced in the app or by email before they take effect, and where the law requires your consent we ask for it. The version and effective date appear at the top of the page, and previous versions remain available in the repository's history so you can compare them." },
+        { kind: "p", text: "We version this policy. Material changes are announced in the app or by email before they take effect, and where the law requires your consent we ask for it. The version and effective date appear at the top of the page, and previous versions are retained in the private repository history. Contact {{contact}} to request a previous version." },
       ],
     },
     {
@@ -419,8 +419,8 @@ const ACCEPTABLE_USE: LegalDocument = {
   slug: "acceptable-use",
   title: "Acceptable Use Policy",
   summary: "What you may and may not do with {{serviceName}} — especially with agents that can act outside your account.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: true,
   audience: "everyone",
   sections: [
@@ -521,8 +521,8 @@ const AI_TERMS: LegalDocument = {
   slug: "ai-terms",
   title: "AI and Autonomous Agent Terms",
   summary: "How {{serviceName}}'s agents are supposed to be used, what they can get wrong, and where responsibility sits.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -616,8 +616,8 @@ const COOKIES: LegalDocument = {
   slug: "cookies",
   title: "Cookie Notice",
   summary: "The one cookie {{serviceName}} sets, the two browser preferences it stores, and what we do not use.",
-  version: "1.0.0",
-  effectiveDate: "2026-09-25",
+  version: "1.1.0",
+  effectiveDate: "2026-10-02",
   requiresAcceptance: false,
   audience: "everyone",
   sections: [
@@ -663,9 +663,9 @@ const COOKIES: LegalDocument = {
     },
     {
       id: "api",
-      heading: "5. API and self-hosted use",
+      heading: "5. API and separately authorized deployments",
       blocks: [
-        { kind: "p", text: "If you call the API with a bearer token instead of a browser session, no cookie is involved. If you self-host {{serviceName}}, your deployment sets the same session cookie for its own users, and any additional cookies or analytics you introduce are your responsibility." },
+        { kind: "p", text: "If you call the API with a bearer token instead of a browser session, no cookie is involved. For a separately authorized deployment under a written agreement, its operator is responsible for session cookies and any additional cookies or analytics they introduce." },
       ],
     },
   ],

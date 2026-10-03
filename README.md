@@ -1,6 +1,6 @@
 # Steward
 
-Steward is an open-source, self-hostable operating system for AI-run companies. A founder creates (or connects) a business, plugs in their own AI providers and integrations, sets an autonomy level, and lets persistent agents plan and execute business and engineering work in the background — with every run, model call, tool call, approval and dollar recorded so the whole thing can be inspected later.
+Steward is a proprietary, closed-source operating system for AI-run companies. A founder creates (or connects) a business, plugs in their own AI providers and integrations, sets an autonomy level, and lets persistent agents plan and execute business and engineering work in the background — with every run, model call, tool call, approval and dollar recorded so the whole thing can be inspected later.
 
 It is an independent implementation. It does not use, copy, or depend on any proprietary autonomous-company product.
 
@@ -120,4 +120,4 @@ Steward is pre-1.0. The core loop (auth → company → agents → durable runs 
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE) and [ADR-0012](docs/adr/0012-license.md). The "Steward" name is not covered by the code license.
+Proprietary software. Copyright © 2026 Ronav Karumsi. All rights reserved. See [LICENSE](LICENSE) and [ADR-0024](docs/adr/0024-proprietary-identity.md). Third-party components retain their own licences and notices.

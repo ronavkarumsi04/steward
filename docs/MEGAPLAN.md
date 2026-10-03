@@ -1,6 +1,6 @@
 # Steward MegaPlan
 
-Steward is an open-source, self-hostable autonomous company operating system. A founder creates or connects
+Steward is a proprietary, closed-source autonomous company operating system. A founder creates or connects
 a business, chooses AI providers, grants explicit permissions, and persistent agents plan and execute
 business and software work under policy, budget, and approval controls, with full observability.
 
@@ -16,7 +16,7 @@ business and software work under policy, budget, and approval controls, with ful
   fallback chains, full usage/cost ledger.
 - **Safety**: autonomy levels 0–4, per-dimension policies, risk classification separate from confidence,
   durable approvals, budgets, outbound safety, idempotency keys.
-- **Open source**: Apache-2.0, Docker Compose boot path, documented threat model.
+- **Controlled distribution**: proprietary source, Docker Compose operator boot path, documented threat model.
 
 ## 2. Product requirements
 
@@ -257,9 +257,9 @@ activity → approval pauses/resumes → scheduled run executes → worker resta
 tests pass → typecheck/lint/test/build/E2E green → docs complete. Anti-fake checklist satisfied
 (no mocked integrations presented as working, no in-memory durable state).
 
-## 24. Open-source strategy & extensibility
+## 24. Proprietary platform & extensibility
 
-Apache-2.0. Plugin points: `ProviderAdapter`, `ToolDefinition`, `IntegrationConnector`,
+Proprietary software; access and distribution require owner authorization. Plugin points: `ProviderAdapter`, `ToolDefinition`, `IntegrationConnector`,
 `SandboxProvider`, `DeploymentProvider`, `WorkflowEngine`. Public REST API via OpenAPI + outbound webhooks.
 Migration strategy: Drizzle migrations, additive changes, versioned company profiles.
 
