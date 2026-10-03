@@ -3,9 +3,9 @@
 Generated 2026-09-26 from the dependency graph installed in this repository.
 **508 third-party packages** are present in the installed closure. Direct dependencies: 34 across 4 applications.
 
-Steward itself is licensed under the Apache License 2.0 (see LICENSE). The components below are
+Steward itself is proprietary, closed-source software. The components below are
 provided under their own licenses; their copyright notices and license texts remain in effect and must be
-preserved when redistributing this software. Where a component is used as a build-time or development
+preserved when redistributing this software. Third-party license grants remain intact. Where a component is used as a build-time or development
 dependency only, it does not ship in the runtime image.
 
 Regenerate with:
