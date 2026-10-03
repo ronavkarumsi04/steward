@@ -129,6 +129,14 @@ Any piece can be swapped for a managed service by changing the URL in `.env` and
 - **Temporal**: [Temporal Cloud](https://temporal.io/cloud). Set `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and either `TEMPORAL_API_KEY` or the `TEMPORAL_TLS_*` mTLS paths (see `.env.example`).
 - **API + worker**: Fly.io machines or a Kubernetes cluster using `infra/docker/{api,worker}.Dockerfile`. Keep `API_INTERNAL_URL` on the private network.
 
+For a worker alongside the existing embedded Vercel API, follow [Always-on worker deployment](WORKER_DEPLOYMENT.md).
+The worker has private `/health` and `/ready` endpoints (port 4340), validates deployment configuration,
+drains on termination and recovers recorded decisions whose approval signal was lost. Production workers
+default to migrations off and sandbox disabled unless explicitly configured. The worker image runs as UID
+1000; an existing Docker-sandbox deployment needs explicit socket permissions on an isolated execution host.
+The full legacy Compose profile mounts Docker on the worker: remove that mount before production use on
+the application host. The worker-only manifest deliberately has no socket and keeps browser/sandbox off.
+
 ---
 
 ## 2. Web on Vercel
@@ -185,7 +193,7 @@ for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `stew
 canonical domain is what `APP_URL` names and what a user should be given.
 
 Three things this mode does not have, said out loud rather than implied: email is the console
-(`RESEND_API_KEY` unset), so invitation and password-reset links land in the function log instead of an inbox;
+(`RESEND_API_KEY` unset), so production delivery is unavailable; no invitation/reset link is logged;
 Temporal is absent, so a call that would start a run answers `503` with the reason rather than pretending to
 start one; and there is no browser, so `BROWSER_PROVIDER=none` is set and a browsing run is refused with the
 package's own sentence. That last one was learned the hard way — a serverless bundle carries `playwright-core`

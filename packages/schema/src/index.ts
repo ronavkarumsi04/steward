@@ -350,6 +350,7 @@ export const EventType = z.enum([
   "approval.resolved",
   "approval.expired",
   "approval.signal_failed",
+  "approval.signal_retried",
   "budget.threshold",
   "budget.exhausted",
   "memory.written",

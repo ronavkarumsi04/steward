@@ -8,8 +8,8 @@
  * on a finished run staying finished.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { createDb, type Db } from "@steward/db";
+import { eq, sql } from "drizzle-orm";
+import { approvals as approvalRows, createDb, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
 import pg from "pg";
 import { AuthService } from "./auth.js";
@@ -17,6 +17,7 @@ import { CompanyService } from "./companies.js";
 import { ApprovalService } from "./approvals.js";
 import { ReconcileService } from "./reconcile.js";
 import { AgentService, RunService, TaskService } from "./work.js";
+import { EventService } from "./events.js";
 
 const url = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 let available = false;
@@ -25,15 +26,15 @@ let pool: pg.Pool;
 const uniq = () => Math.random().toString(36).slice(2, 10);
 
 beforeAll(async () => {
+  const probe = new pg.Pool({ connectionString: url, connectionTimeoutMillis: 1500 });
   try {
-    const probe = new pg.Pool({ connectionString: url, connectionTimeoutMillis: 1500 });
     await probe.query("select 1");
-    await probe.end();
     available = true;
-  } catch {
+  } catch (error) {
     available = false;
+    if (process.env.CI) throw error;
     return;
-  }
+  } finally { await probe.end(); }
   ({ db, pool } = createDb(url));
 });
 afterAll(async () => {
@@ -41,11 +42,8 @@ afterAll(async () => {
 });
 
 const d = (name: string, fn: () => Promise<void>) =>
-  it(name, async () => {
-    if (!available) {
-      console.warn(`skipped (no database at ${url}): ${name}`);
-      return;
-    }
+  it(name, async (context) => {
+    if (!available) return context.skip();
     await fn();
   });
 
@@ -84,6 +82,54 @@ describe("run state machine", () => {
 });
 
 describe("reconciliation", () => {
+  d("recovers a persisted human decision after signal loss and stops after the run resumes", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const id = crypto.randomUUID();
+    const run = await runs.create(scope, { id, workflowId: `run-${id}`, agentId, trigger: { kind: "user", instruction: "Approval recovery" } });
+    await runs.setStatus(scope, run.id, "waiting_approval");
+    const approvals = new ApprovalService(db, { notify: async () => { throw new Error("Bearer secret-fixture"); } });
+    const approval = await approvals.request(scope, { action: "email.send", reason: "Review", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 3600, runId: id, workflowId: `run-${id}` });
+    expect((await approvals.resolve(scope, approval.id, { status: "approved", note: "reviewed", editedPayload: { subject: "Approved subject" } }))?.signalDelivered).toBe(false);
+    const events = new EventService(db);
+    const failed = await events.since(scope, 0, 200, ["approval.signal_failed"]);
+    expect(JSON.stringify(failed)).not.toContain("secret-fixture");
+    const delivered: { workflowId: string; approvalId: string; decision: unknown }[] = [];
+    const service = new ReconcileService(db, null, undefined, { notify: async (workflowId, approvalId, decision) => { delivered.push({ workflowId, approvalId, decision }); } });
+    expect((await service.sweep({ limit: 10_000 })).approvalSignalsDelivered).toBeGreaterThanOrEqual(1);
+    expect(delivered).toContainEqual({ workflowId: `run-${id}`, approvalId: approval.id, decision: { status: "approved", note: "reviewed", editedPayload: { subject: "Approved subject" } } });
+    expect((await events.since(scope, 0, 200, ["approval.signal_retried"])).map((e) => e.payload)).toContainEqual({ approvalId: approval.id, status: "approved", workflowId: `run-${id}` });
+    // A failed retry leaves the original human decision intact; later sweeps may safely redeliver.
+    const failing = new ReconcileService(db, null, undefined, { notify: async () => { throw new Error("transport unavailable"); } });
+    expect((await failing.sweep({ limit: 10_000 })).approvalSignalsFailed).toBeGreaterThanOrEqual(1);
+    expect((await approvals.get(scope, approval.id))?.status).toBe("approved");
+    await runs.setStatus(scope, id, "executing");
+    delivered.length = 0;
+    await service.sweep({ limit: 10_000 });
+    expect(delivered.some((item) => item.approvalId === approval.id)).toBe(false);
+    await runs.setStatus(scope, id, "cancelled");
+  });
+
+  d("refuses cross-tenant workflow metadata and decisions past their approval window", async () => {
+    const a = await tenant(); const b = await tenant();
+    const runs = new RunService(db);
+    const id = crypto.randomUUID();
+    await runs.create(b.scope, { id, workflowId: `run-${id}`, agentId: b.agentId, trigger: { kind: "user", instruction: "Isolated approval" } });
+    await runs.setStatus(b.scope, id, "waiting_approval");
+    const approvals = new ApprovalService(db);
+    const request = { action: "email.send", reason: "Review", payload: {}, risk: "HIGH" as const, dimension: "email_send" as const, affectedSystem: "resend", alternatives: [], expiresInSeconds: 3600, runId: id, workflowId: `run-${id}` };
+    const crossed = await approvals.request(a.scope, request);
+    await approvals.resolve(a.scope, crossed.id, { status: "denied" });
+    const expired = await approvals.request(b.scope, { ...request, expiresInMs: -1 });
+    expect(await approvals.resolve(b.scope, expired.id, { status: "approved" })).toBeNull();
+    // A legacy/inconsistent late resolution must also be refused by recovery.
+    await db.update(approvalRows).set({ status: "approved", resolvedBy: b.userId, resolvedAt: new Date() }).where(eq(approvalRows.id, expired.id));
+    const delivered: string[] = [];
+    await new ReconcileService(db, null, undefined, { notify: async (_workflow, approvalId) => { delivered.push(approvalId); } }).sweep({ limit: 10_000 });
+    expect(delivered).not.toContain(crossed.id); expect(delivered).not.toContain(expired.id);
+    await runs.setStatus(b.scope, id, "cancelled");
+  });
+
   d("starts a run whose launch was lost, instead of leaving it queued forever", async () => {
     const { scope, agentId } = await tenant();
     const runs = new RunService(db);

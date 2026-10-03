@@ -42,6 +42,15 @@ POST /companies/:id/conversations/:cid/messages   (or task start / schedule fire
 
 Workflows are deterministic; all IO lives in activities with retry policies. A worker crash mid-activity results in the activity being retried on another worker (see `pnpm verify:boot`).
 
+The worker's private `/health` reports process liveness; `/ready` requires its RUNNING state plus live
+database/namespace checks. Shutdown disables readiness before draining and closes probes before their
+connections. Reconciliation also redelivers committed human approval decisions after signal loss, matching
+organization/company/run/workflow identifiers and refusing late/expired resolutions. A repeated signal is
+idempotent in the workflow's decision map; acceptance is recorded as `approval.signal_retried`, not run
+success. The SDK's affected JavaScript RPC auto-retry interceptor is disabled; native reconnect, activity
+retry and persisted launch reconciliation remain. See [ADR-0026](adr/0026-worker-production-readiness.md)
+and [the worker runbook](WORKER_DEPLOYMENT.md).
+
 ## AI gateway
 
 `packages/ai` has a catalog of provider types with auth kinds and model metadata, adapters (`openai-compatible`, `anthropic`, `gemini`, `bedrock`, `cohere`, `ollama`, `codex-companion`) implementing a common `ChatModel` interface (streaming, tools, structured output, usage), a router that resolves an agent's routing policy (`primary`, `fallbacks`, capability requirements) to a healthy credential+model, and usage accounting with cost estimation.

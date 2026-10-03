@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { agentRuns, approvals, emitEvent, tasks, type Db } from "@steward/db";
 import type { RunStatus } from "@steward/schema";
+import type { ApprovalSignal } from "./approvals.js";
 
 /** Reconciliation acts as the deployment itself, not as any one tenant's user or agent. */
 type Scope = { organizationId: string; companyId: string };
@@ -31,6 +32,8 @@ export interface ReconcileReport {
   runsMarkedStale: number;
   approvalsExpired: number;
   tasksReleased: number;
+  approvalSignalsDelivered: number;
+  approvalSignalsFailed: number;
 }
 
 const DEFAULTS = {
@@ -54,18 +57,52 @@ export class ReconcileService {
     private readonly db: Db,
     private readonly launcher: RunLauncher | null,
     private readonly now: () => Date = () => new Date(),
+    private readonly approvalSignal?: ApprovalSignal,
   ) {}
 
   async sweep(opts: { queuedGraceMs?: number; staleAfterMs?: number; giveUpAfterMs?: number; limit?: number } = {}): Promise<ReconcileReport> {
     const cfg = { ...DEFAULTS, ...opts };
     const at = this.now();
-    const report: ReconcileReport = { startsRetried: 0, runsFailedWithoutWorkflow: 0, runsMarkedStale: 0, approvalsExpired: 0, tasksReleased: 0 };
+    const report: ReconcileReport = { startsRetried: 0, runsFailedWithoutWorkflow: 0, runsMarkedStale: 0, approvalsExpired: 0, tasksReleased: 0, approvalSignalsDelivered: 0, approvalSignalsFailed: 0 };
 
     report.startsRetried = await this.retryLostLaunches(new Date(at.getTime() - cfg.queuedGraceMs), cfg.limit);
     report.runsFailedWithoutWorkflow = await this.failUnstartableRuns(new Date(at.getTime() - cfg.giveUpAfterMs), cfg.limit);
     report.runsMarkedStale = await this.markStaleRuns(new Date(at.getTime() - cfg.staleAfterMs), cfg.limit);
     report.approvalsExpired = await this.expireOrphanApprovals(cfg.limit);
+    const signals = await this.retryResolvedApprovals(cfg.limit);
+    report.approvalSignalsDelivered = signals.delivered;
+    report.approvalSignalsFailed = signals.failed;
     report.tasksReleased = await this.releaseWaitingTasks(cfg.limit);
+    return report;
+  }
+
+  /** A committed human decision survives a lost signal. Re-delivery is idempotent in the workflow's map. */
+  private async retryResolvedApprovals(limit: number): Promise<{ delivered: number; failed: number }> {
+    if (!this.approvalSignal) return { delivered: 0, failed: 0 };
+    const rows = await this.db.select({ approval: approvals }).from(approvals).innerJoin(agentRuns, and(
+      eq(agentRuns.id, approvals.runId), eq(agentRuns.organizationId, approvals.organizationId),
+      eq(agentRuns.companyId, approvals.companyId), eq(agentRuns.workflowId, approvals.workflowId),
+    )).where(and(inArray(agentRuns.status, WAITING), inArray(approvals.status, ["approved", "denied"])))
+      .orderBy(approvals.resolvedAt, approvals.id).limit(limit);
+    const report = { delivered: 0, failed: 0 };
+    for (const { approval } of rows) {
+      // Do not signal an unrelated/old workflow even if inconsistent metadata made it into the database.
+      if (approval.workflowId !== `run-${approval.runId}` || !approval.resolvedBy || !approval.resolvedAt || approval.resolvedAt > approval.expiresAt) continue;
+      const resolution = approval.resolution as { note?: string; editedPayload?: Record<string, unknown> | null } | null;
+      try {
+        await this.approvalSignal.notify(approval.workflowId, approval.id, {
+          status: approval.status as "approved" | "denied", note: resolution?.note,
+          editedPayload: resolution?.editedPayload ?? undefined,
+        });
+        report.delivered += 1;
+      } catch { report.failed += 1; continue; }
+      // Accepted by Temporal is not the same as resumed or completed. Record only the accepted signal.
+      await emitEvent(this.db, { organizationId: approval.organizationId, companyId: approval.companyId,
+        type: "approval.signal_retried", actor: RECONCILER,
+        payload: { approvalId: approval.id, status: approval.status, workflowId: approval.workflowId },
+        correlation: { runId: approval.runId! },
+      });
+    }
     return report;
   }
 

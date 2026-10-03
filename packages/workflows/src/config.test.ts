@@ -38,6 +38,21 @@ describe("temporal configuration", () => {
     expect(await temporalTlsMaterial({ address: "a:7233", namespace: "default", taskQueue: "q", tls: null, apiKey: "k" })).toBe(true);
   });
 
+  it("supports explicit server TLS without requiring a dummy API key", async () => {
+    const cfg = temporalConfigFromEnv({ TEMPORAL_TLS: " true " });
+    expect(await temporalTlsMaterial(cfg)).toBe(true);
+    expect(await temporalTlsMaterial(temporalConfigFromEnv({ TEMPORAL_TLS: "false" }))).toBeUndefined();
+  });
+
+  it("rejects a TLS downgrade or malformed settings before making connections", async () => {
+    for (const key of ["TEMPORAL_API_KEY", "TEMPORAL_TLS_CA_PATH", "TEMPORAL_TLS_CERT_PATH"]) {
+      expect(() => temporalConfigFromEnv({ TEMPORAL_TLS: "false", [key]: "secret-value" })).toThrow(/conflicts/);
+    }
+    expect(() => temporalConfigFromEnv({ TEMPORAL_TLS: "typo" })).toThrow(/must be a boolean/);
+    expect(() => temporalConfigFromEnv({ TEMPORAL_TLS_KEY_PATH: "key" })).toThrow(/together/);
+    await expect(temporalTlsMaterial({ address: "a:7233", namespace: "default", taskQueue: "q", tls: false, apiKey: "secret" })).rejects.toThrow(/require TLS/);
+  });
+
   it("honours a custom server CA even without a client certificate pair", async () => {
     const dir = await mkdtemp(join(tmpdir(), "steward-ca-"));
     try {

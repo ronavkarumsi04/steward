@@ -292,8 +292,9 @@ export function ApprovalCard({
       )}
       {state.signalDelivered === false && (
         <p role="note" className="nb-panel-flat nb-left-red mt-3 px-3 py-2 text-xs leading-relaxed text-fg-2">
-          <span className="font-semibold">Recorded, but the run’s workflow did not take the decision.</span> The run will not continue on
-          its own — open it, stop it, and start the work again if you still want it. The failed hand-off is in the activity feed.
+          <span className="font-semibold">Decision saved; delivery to the workflow is unconfirmed.</span> A running worker retries
+          delivery for a waiting run at startup and every five minutes. Open the run to check its state before starting replacement
+          work. The failed hand-off is in the activity feed; execution resumes only when the workflow receives the decision.
         </p>
       )}
       {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}

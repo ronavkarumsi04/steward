@@ -7,7 +7,7 @@ export interface TemporalConfig {
   namespace: string;
   taskQueue: string;
   /** mTLS for Temporal Cloud / hardened deployments. */
-  tls?: { clientCertPath?: string; clientKeyPath?: string; serverRootCACertPath?: string } | null;
+  tls?: boolean | { clientCertPath?: string; clientKeyPath?: string; serverRootCACertPath?: string } | null;
   apiKey?: string;
 }
 
@@ -28,12 +28,18 @@ export function temporalConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Tem
   const certPath = envValue(env, "TEMPORAL_TLS_CERT_PATH");
   const keyPath = envValue(env, "TEMPORAL_TLS_KEY_PATH");
   const caPath = envValue(env, "TEMPORAL_TLS_CA_PATH");
+  const tlsFlag = envValue(env, "TEMPORAL_TLS")?.toLowerCase();
+  if (tlsFlag && !["true", "false", "1", "0", "yes", "no", "on", "off"].includes(tlsFlag)) throw new Error("TEMPORAL_TLS must be a boolean");
+  const useTls = tlsFlag ? ["true", "1", "yes", "on"].includes(tlsFlag) : undefined;
+  const apiKey = envValue(env, "TEMPORAL_API_KEY");
+  if (useTls === false && (certPath || keyPath || caPath || apiKey)) throw new Error("TEMPORAL_TLS=false conflicts with Temporal credentials or certificates");
+  if (!!certPath !== !!keyPath) throw new Error("TEMPORAL_TLS_CERT_PATH and TEMPORAL_TLS_KEY_PATH must be set together");
   return {
     address: envValue(env, "TEMPORAL_ADDRESS") ?? "localhost:7233",
     namespace: envValue(env, "TEMPORAL_NAMESPACE") ?? "default",
     taskQueue: envValue(env, "TEMPORAL_TASK_QUEUE") ?? TASK_QUEUE_DEFAULT,
-    tls: certPath || keyPath || caPath ? { clientCertPath: certPath, clientKeyPath: keyPath, serverRootCACertPath: caPath } : null,
-    apiKey: envValue(env, "TEMPORAL_API_KEY"),
+    tls: certPath || keyPath || caPath ? { clientCertPath: certPath, clientKeyPath: keyPath, serverRootCACertPath: caPath } : useTls ?? null,
+    apiKey,
   };
 }
 
@@ -53,30 +59,38 @@ export interface TemporalTlsMaterial {
  * silent downgrade: connecting without the certificate the operator asked for is worse than not connecting.
  */
 export async function temporalTlsMaterial(cfg: TemporalConfig): Promise<TemporalTlsMaterial | boolean | undefined> {
-  const certPath = cfg.tls?.clientCertPath;
-  const keyPath = cfg.tls?.clientKeyPath;
+  if (cfg.tls === false && cfg.apiKey) throw new Error("Temporal API keys require TLS");
+  const files = typeof cfg.tls === "object" ? cfg.tls : null;
+  const certPath = files?.clientCertPath;
+  const keyPath = files?.clientKeyPath;
   if (certPath && keyPath) {
     return {
       clientCertPair: { crt: await readFile(certPath), key: await readFile(keyPath) },
-      ...(cfg.tls?.serverRootCACertPath ? { serverRootCACertificate: await readFile(cfg.tls.serverRootCACertPath) } : {}),
+      ...(files?.serverRootCACertPath ? { serverRootCACertificate: await readFile(files.serverRootCACertPath) } : {}),
     };
   }
   if (certPath || keyPath) {
     throw new Error("TEMPORAL_TLS_CERT_PATH and TEMPORAL_TLS_KEY_PATH must be set together; a certificate without its key would silently connect without mTLS");
   }
-  if (cfg.tls?.serverRootCACertPath) return { serverRootCACertificate: await readFile(cfg.tls.serverRootCACertPath) };
-  return cfg.apiKey ? true : undefined;
+  if (files?.serverRootCACertPath) return { serverRootCACertificate: await readFile(files.serverRootCACertPath) };
+  return cfg.apiKey || cfg.tls === true ? true : undefined;
 }
 
 export async function connectTemporal(cfg: TemporalConfig, timeoutMs = temporalConnectTimeoutMs()): Promise<Client> {
   const tls = await temporalTlsMaterial(cfg);
-  const connection = await Connection.connect({ address: cfg.address, tls, apiKey: cfg.apiKey, connectTimeout: `${timeoutMs}ms` });
+  // SDK 1.23's retry interceptor leaves uncancellable timers behind after a channel closes. Native worker
+  // reconnects and durable activity/run recovery remain enabled; RPC errors must reach their governed caller.
+  const connection = await Connection.connect({ address: cfg.address, tls, apiKey: cfg.apiKey, connectTimeout: `${timeoutMs}ms`, interceptors: [] });
   return new Client({ connection, namespace: cfg.namespace });
 }
 
 /** Thin, typed facade so the API never imports workflow internals. */
 export class WorkflowClient {
   constructor(private readonly client: Client, private readonly taskQueue: string) {}
+
+  private rpc<T>(call: () => Promise<T>): Promise<T> {
+    return this.client.connection.withDeadline(Date.now() + 10_000, call);
+  }
 
   get raw() {
     return this.client;
@@ -120,18 +134,18 @@ export class WorkflowClient {
   async startRun(input: AgentRunInput): Promise<{ workflowId: string; workflowRunId: string }> {
     const workflowId = runWorkflowId(input.runId);
     try {
-      const handle = await this.client.workflow.start("agentRunWorkflow", {
+      const handle = await this.rpc(() => this.client.workflow.start("agentRunWorkflow", {
         workflowId,
         taskQueue: this.taskQueue,
         args: [input],
         workflowExecutionTimeout: "14 days",
         memo: { organizationId: input.scope.organizationId, companyId: input.scope.companyId },
         searchAttributes: {},
-      });
+      }));
       return { workflowId: handle.workflowId, workflowRunId: handle.firstExecutionRunId };
     } catch (e) {
       if (e instanceof WorkflowExecutionAlreadyStartedError) {
-        const existing = await this.client.workflow.getHandle(workflowId).describe();
+        const existing = await this.rpc(() => this.client.workflow.getHandle(workflowId).describe());
         return { workflowId, workflowRunId: existing.runId };
       }
       throw e;
@@ -140,7 +154,7 @@ export class WorkflowClient {
 
   async signalApproval(workflowId: string, decision: ApprovalDecisionSignal): Promise<boolean> {
     try {
-      await this.client.workflow.getHandle(workflowId).signal(APPROVAL_SIGNAL, decision);
+      await this.rpc(() => this.client.workflow.getHandle(workflowId).signal(APPROVAL_SIGNAL, decision));
       return true;
     } catch (e) {
       if (e instanceof WorkflowNotFoundError) return false;
@@ -150,7 +164,7 @@ export class WorkflowClient {
 
   async cancelRun(runId: string, reason?: string): Promise<boolean> {
     try {
-      await this.client.workflow.getHandle(runWorkflowId(runId)).signal(CANCEL_SIGNAL, { reason });
+      await this.rpc(() => this.client.workflow.getHandle(runWorkflowId(runId)).signal(CANCEL_SIGNAL, { reason }));
       return true;
     } catch (e) {
       if (e instanceof WorkflowNotFoundError) return false;
@@ -160,7 +174,7 @@ export class WorkflowClient {
 
   async runStatus(runId: string): Promise<{ phase: string; iterations: number; waitingApprovalId: string | null } | null> {
     try {
-      return await this.client.workflow.getHandle(runWorkflowId(runId)).query(STATUS_QUERY);
+      return await this.rpc(() => this.client.workflow.getHandle(runWorkflowId(runId)).query(STATUS_QUERY));
     } catch (e) {
       if (e instanceof WorkflowNotFoundError) return null;
       throw e;

@@ -4,7 +4,11 @@
     "build": { "dependsOn": ["^build"], "env": ["NODE_ENV", "API_URL", "API_INTERNAL_URL", "NEXT_PUBLIC_API_URL", "EMBEDDED_API", "APP_URL", "PUBLIC_API_URL", "VERCEL", "VERCEL_PROJECT_PRODUCTION_URL"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "lint": {},
-    "test": { "dependsOn": ["^build"] },
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["CI", "DATABASE_URL", "TEMPORAL_ADDRESS", "TEMPORAL_NAMESPACE", "TEMPORAL_TEST_SERVER_PATH"],
+      "passThroughEnv": ["NODE_USE_ENV_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"]
+    },
     "dev": { "cache": false, "persistent": true }
   }
 }

@@ -145,7 +145,7 @@ describe("core services (postgres)", () => {
     expect(undelivered?.status).toBe("approved");
     expect(undelivered?.signalDelivered).toBe(false);
     const failedEvent = (await events.since(scope, before)).find((e) => e.type === "approval.signal_failed");
-    expect(failedEvent?.payload).toMatchObject({ approvalId: stranded.id, workflowId: "wf-2", error: "temporal unavailable" });
+    expect(failedEvent?.payload).toMatchObject({ approvalId: stranded.id, workflowId: "wf-2", error: "workflow signal unavailable; the recorded decision can be recovered by the worker" });
     // A request with no workflow is recorded, and says so rather than claiming the run was resumed.
     const detached = await approvals.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "z@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 60 });
     expect((await approvals.resolve(scope, detached.id, { status: "denied" }))?.signalDelivered).toBeNull();

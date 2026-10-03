@@ -1,0 +1,36 @@
+# Worker-only deployment against an existing authenticated Temporal endpoint and the production database.
+# WORKER_ENV_FILE=/secure/steward-worker.env docker compose -f infra/worker.compose.yml up -d --build
+# Secrets belong in that restricted host file, never in this manifest or `docker compose config` output.
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/worker.Dockerfile
+      args:
+        GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-unknown}
+    env_file:
+      - ${WORKER_ENV_FILE:?Set WORKER_ENV_FILE to the restricted production worker environment file}
+    environment:
+      NODE_ENV: production
+      RUN_MIGRATIONS_ON_START: "false"
+      TEMPORAL_DISABLED: "false"
+      WORKER_HEALTH_HOST: 0.0.0.0
+      WORKER_HEALTH_PORT: "4340"
+      # Enable these only in a separate reviewed deployment with isolated execution and enforced egress.
+      SANDBOX_PROVIDER: none
+      BROWSER_PROVIDER: none
+    ports:
+      - "127.0.0.1:4340:4340"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
