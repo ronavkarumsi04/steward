@@ -105,6 +105,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (tools.length) body.tools = tools;
     if (req.reasoning) {
       const budget = { low: 2_000, medium: 8_000, high: 24_000 }[req.reasoning.effort];
+      if (req.metadata?.steward_overclock === "required" && (req.temperature !== undefined || Number(body.max_tokens) < budget + 4_000)) throw new ProviderError("unsupported", "Thinking would override Overclock sampling or output-token limits; use provider-default sampling with enough tokens or disable thinking", this.type, false);
       body.thinking = { type: "enabled", budget_tokens: budget };
       body.max_tokens = Math.max(Number(body.max_tokens), budget + 4_000);
       delete body.temperature;

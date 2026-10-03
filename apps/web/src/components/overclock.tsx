@@ -190,7 +190,8 @@ export function AgentOverclock({
         <p className="mt-2 text-sm text-muted">
           Provider support varies. Unsupported parameters produce a visible
           provider error; they are never reported as applied. Choose one
-          sampling method per phase.
+          sampling method per phase. Codex Companion uses CLI-managed sampling
+          and output limits; route this agent to another provider for Overclock.
         </p>
       </div>
       <fieldset disabled={!isAdmin || busy} className="space-y-5">

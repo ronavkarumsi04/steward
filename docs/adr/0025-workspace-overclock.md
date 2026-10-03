@@ -12,7 +12,7 @@ Store the opt-in switch in existing company settings and each agent's validated 
 
 Overclock supports per-phase temperature, top P or provider defaults, output-token limits, memory result/character limits, conversation limits, tool transcript limits and bounded, founder-managed skill instructions. Only one sampler is transmitted. Skills enter context as operating instructions subordinate to policy, safety, budget and approvals; they are not executable plugins. Validation preview explicitly reports `executionTested: false`.
 
-The context step records effective settings and revision before planning. Resume reuses that context; turning the switch off affects newly built contexts and retains saved configuration. Existing runs and legacy context records remain readable. Model adapters transmit top P using the provider's field. Known incompatible reasoning/companion requests fail explicitly rather than silently dropping top P. Provider defaults remain available.
+The context step records effective settings and revision before planning. Resume reuses that context; turning the switch off affects newly built contexts and retains saved configuration. Existing runs and legacy context records remain readable. Model adapters transmit top P using the provider's field. Known incompatible reasoning requests and Companion Overclock tuning fail explicitly rather than silently dropping top P. Provider defaults remain available.
 
 The existing agent prompt, tool allowlist, routing policy, iteration limit and run budget remain the source of truth for their controls. Routing input now uses the shared runtime schema at both create/update boundaries. Overclock does not grant tools or waive approvals, tenant boundaries or budgets.
 

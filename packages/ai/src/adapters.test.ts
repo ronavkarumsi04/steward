@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CodexCompanionAdapter } from "./adapters/codex-companion.js";
 import { AnthropicAdapter, toAnthropicMessages } from "./adapters/anthropic.js";
 import { OpenAICompatibleAdapter, toOpenAIMessages } from "./adapters/openai-compatible.js";
 import { sanitizeSchema, toGeminiContents } from "./adapters/gemini.js";
@@ -115,7 +116,18 @@ describe("Overclock top-p transport", () => {
     expect(bodies[0]!.top_p).toBe(0.7);
     await expect(adapter.chat({ ...req, temperature: 0.3 })).rejects.toMatchObject({ code: "unsupported" });
     await expect(adapter.chat({ ...req, reasoning: { effort: "low" } })).rejects.toMatchObject({ code: "unsupported" });
+    await expect(adapter.chat({ model: "claude-test", messages: [], temperature: 0.2, maxTokens: 8000, reasoning: { effort: "low" }, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
+    await expect(adapter.chat({ model: "claude-test", messages: [], maxTokens: 512, reasoning: { effort: "low" }, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
     expect(bodies).toHaveLength(1);
+  });
+  it("Companion refuses required Overclock tuning before dispatch and preserves legacy defaults", async () => {
+    const request = vi.fn(async () => ({ text: "ok" }));
+    const adapter = new CodexCompanionAdapter({ config: { deviceId: "test-device" } }, { request });
+    const req = { model: "codex", messages: [], temperature: 0.2, maxTokens: 1500 };
+    await expect(adapter.chat({ ...req, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
+    expect(request).not.toHaveBeenCalled();
+    expect((await adapter.chat(req)).text).toBe("ok");
+    expect(request).toHaveBeenCalledOnce();
   });
   it("OpenAI reasoning models report unsupported custom top-p before making a request", async () => {
     const f = vi.fn(); vi.stubGlobal("fetch", f);

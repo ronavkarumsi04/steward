@@ -186,6 +186,7 @@ export class AgentRuntime {
             { role: "user", content: `${ctx.userPrompt}\n\nBefore acting, produce a short plan as JSON matching the schema. Keep it to the fewest steps that achieve the objective.` },
           ],
           responseFormat: { type: "json_schema", name: "plan", schema: PLAN_SCHEMA as unknown as Record<string, unknown> },
+          ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.planning) : { temperature: 0.2, maxTokens: 1500 }),
         },
         { policy: ctx.routingPolicy, purpose: "planning", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
@@ -313,7 +314,7 @@ export class AgentRuntime {
     let toolCalls: ToolCall[] = [];
     try {
       const res = await this.s.gateway.chat(
-        { messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }) },
+        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
       text = res.text;
@@ -452,6 +453,7 @@ export class AgentRuntime {
             { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool activity:\n${toolSummary || "(none)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
+          ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.review) : { temperature: 0, maxTokens: 800 }),
         },
         { policy: { ...ctx.routingPolicy, requirements: { ...ctx.routingPolicy.requirements, preference: "cost" } }, purpose: "verification", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },

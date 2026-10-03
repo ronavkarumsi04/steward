@@ -17,10 +17,10 @@ No migrations or runtime dependencies added. Existing company/agent JSON, run-st
 
 ## Verification
 
-Local lint/typecheck/test orchestration passed **73/73 tasks**. The aggregate suite contains **785 passing
+Local lint/typecheck/test orchestration passed **73/73 tasks**. The aggregate suite contains **786 passing
 tests across 63 files**, with no skips; unchanged tasks were cached (58 cached on the atomic-auth run,
 70 on the final web follow-up). Deploy/hosted-verifier script tests passed **17/17**, with no skips.
-Added ten schema cases, three provider-wire cases, four API integration cases (including invitation
+Added ten schema cases, four provider-wire cases, four API integration cases (including invitation
 rollback) and two browser cases. Final signed-out/public and authenticated light/dark/mobile axe sweeps
 covered **42 page/state combinations**, with zero violations, horizontal overflow or page errors.
 Final `verify:boot` passed production builds, existing migrations, database/API/Temporal health,
