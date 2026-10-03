@@ -65,7 +65,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
       <Card title="Invitations" className="nb-left-purple">
         <form onSubmit={invite} className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_auto]">
           <input name="email" type="email" className="input" placeholder="colleague@example.com" required disabled={!isAdmin} />
-          <select name="role" className="input" defaultValue="member" disabled={!isAdmin}>{ROLES.filter((r) => r !== "owner" || isOwner).map((r) => <option key={r}>{r}</option>)}</select>
+          <select name="role" aria-label="Invitation role" className="input" defaultValue="member" disabled={!isAdmin}>{ROLES.filter((r) => r !== "owner" || isOwner).map((r) => <option key={r}>{r}</option>)}</select>
           <button className="btn btn-primary" disabled={!isAdmin}>Invite</button>
         </form>
         {invited && (

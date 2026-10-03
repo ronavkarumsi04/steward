@@ -9,12 +9,12 @@ import { Icon } from "./icons";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="card nb-left-blue rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
+    <div className="access-card rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
       <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
+        <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
-        <h1 className="mt-3 text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-muted">{subtitle}</p>
       </div>
       {children}
@@ -25,7 +25,7 @@ function Shell({ title, subtitle, children }: { title: string; subtitle: string;
 export function ForgotPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [requestedFor, setRequestedFor] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,7 +34,7 @@ export function ForgotPasswordForm() {
     const email = String(new FormData(e.currentTarget).get("email"));
     try {
       await browserApi.post("/auth/password/forgot", { email });
-      setSentTo(email);
+      setRequestedFor(email);
     } catch (err) {
       setError(err instanceof ApiError ? friendly(err) : "Something went wrong");
     } finally {
@@ -42,11 +42,11 @@ export function ForgotPasswordForm() {
     }
   }
 
-  if (sentTo) {
+  if (requestedFor) {
     return (
-      <Shell title="Check your email" subtitle="If an account exists for that address, a reset link is on its way.">
+      <Shell title="Request received" subtitle="This response does not confirm an account or email delivery.">
         <p role="status" className="nb-panel-flat nb-left-green px-3 py-2 text-center text-sm text-fg-2">
-          Sent to <span className="font-medium text-fg">{sentTo}</span>. The link expires in 30 minutes.
+          If <span className="font-medium text-fg">{requestedFor}</span> has an account and email delivery is available, you’ll receive a one-time reset link valid for 30 minutes. Check spam, or ask your admin for help.
         </p>
         <Link href="/login" className="btn btn-ghost h-11 w-full text-[15px]">Back to sign in</Link>
       </Shell>
@@ -54,7 +54,7 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <Shell title="Reset your password" subtitle="Enter your email and we'll send you a one-time link.">
+    <Shell title="Reset your password" subtitle="Enter the address you used when creating your account.">
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label className="label" htmlFor="email">Email</label>
@@ -63,7 +63,7 @@ export function ForgotPasswordForm() {
         {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
         <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy}>
           {busy && <span className="spinner" aria-hidden="true" />}
-          Send reset link
+          Request reset link
         </button>
         <p className="text-center text-sm text-muted">
           Remembered it? <Link className="font-medium text-accent hover:underline" href="/login">Sign in</Link>

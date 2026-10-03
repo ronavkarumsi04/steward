@@ -1,3 +1,4 @@
+import { AuthFrame } from "@/components/auth-frame";
 import { ResetPasswordForm } from "@/components/password-reset";
 
 export const metadata = { title: "Choose a new password", robots: { index: false, follow: false } };
@@ -5,8 +6,8 @@ export const metadata = { title: "Choose a new password", robots: { index: false
 export default async function ResetPasswordPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
+    <AuthFrame>
       <ResetPasswordForm token={token} />
-    </main>
+    </AuthFrame>
   );
 }

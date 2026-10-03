@@ -33,7 +33,7 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin }: { o
 
   return (
     <Card title="Model routing" className="nb-left-purple">
-      <p className="mb-3 text-sm text-muted">Which model each stage of the agent loop uses. “Auto” picks the best healthy model for the stage&rsquo;s requirements and fails over when a provider errors or is rate-limited. Add providers under <Link className="text-accent" href={`/app/org/${orgId}/providers`}>organization → AI providers</Link>.</p>
+      <p className="mb-3 text-sm text-muted">Which model each stage of the agent loop uses. “Auto” picks the best healthy model for the stage&rsquo;s requirements and fails over when a provider errors or is rate-limited. Add providers under <Link className="text-accent underline underline-offset-4" href={`/app/org/${orgId}/providers`}>organization → AI providers</Link>.</p>
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
       <div className="space-y-2">
         {ROUTING_PURPOSES.map((purpose) => {

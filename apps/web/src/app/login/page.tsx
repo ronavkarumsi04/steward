@@ -1,3 +1,4 @@
+import { AuthFrame } from "@/components/auth-frame";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth-form";
@@ -9,10 +10,10 @@ export default async function LoginPage() {
   const me = await getMeOptional();
   if (me.user) redirect("/app");
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
+    <AuthFrame>
       <Suspense>
         <AuthForm mode="login" />
       </Suspense>
-    </main>
+    </AuthFrame>
   );
 }

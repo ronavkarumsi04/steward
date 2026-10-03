@@ -13,7 +13,7 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
       <div className="mb-2 flex items-center justify-between text-xs text-muted">
         <span className="tnum">{events.length} events</span>
         <span
-          className="inline-flex items-center gap-1.5 border-2 border-fg bg-paper px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-fg"
+          className="inline-flex items-center gap-1.5 border border-fg bg-paper px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-fg"
           data-testid="live-status"
           data-connected={connected}
           role="status"

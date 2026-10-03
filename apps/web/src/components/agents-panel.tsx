@@ -1,9 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent } from "@/lib/types";
+import { AgentOverclock } from "./overclock";
+import Link from "next/link";
+import { RoutingPolicy } from "@steward/schema";
 import { Card, Empty, StatusPill, Ago } from "./ui";
 
 export interface Schedule {
@@ -18,10 +21,20 @@ export interface Schedule {
   temporalScheduleId: string | null;
 }
 
-export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]> }) {
+export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, overclockEnabled = false, isAdmin = false }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]>; overclockEnabled?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { setHydrated(true); }, []);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const editingId = editing?.id;
+  useEffect(() => {
+    if (!editingId) return;
+    const heading = document.getElementById("agent-editor-title");
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [editingId]);
 
   async function toggle(a: Agent) {
     try {
@@ -39,6 +52,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
     const budget = String(fd.get("budget") ?? "").trim();
     try {
       await browserApi.patch(`/companies/${companyId}/agents/${editing.id}`, {
+        ...(overclockEnabled ? { routingPolicy: RoutingPolicy.parse(JSON.parse(String(fd.get("routing") || "{}"))) } : {}),
         name: String(fd.get("name")),
         description: String(fd.get("description")),
         systemPrompt: String(fd.get("systemPrompt")),
@@ -88,6 +102,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
   return (
     <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">{overclockEnabled ? "Overclock is on. Open an agent to tune its runtime." : "Enable Overclock for sampling, context and skill development."}</p><Link className="btn" href={`/app/c/${companyId}/settings`}>Workspace settings ↗</Link></div>
       <Card title="Agents" className="nb-left-purple">
         <ul className="divide-y divide-line">
           {agents.map((a) => (
@@ -99,8 +114,8 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
                 <p className="text-xs text-muted">max {a.maxIterations} iterations{a.budgetUsdPerRun ? ` · $${Number(a.budgetUsdPerRun).toFixed(2)} per run` : ""}</p>
               </div>
               <div className="flex gap-1">
-                <button className="btn" onClick={() => setEditing(a)}>Edit</button>
-                <button className="btn" onClick={() => toggle(a)}>{a.enabled ? "Disable" : "Enable"}</button>
+                <button className="btn" disabled={!isAdmin || !hydrated} onClick={() => { setEditing(a); setError(null); }}>Edit</button>
+                <button className="btn" disabled={!isAdmin || !hydrated} onClick={() => toggle(a)}>{a.enabled ? "Disable" : "Enable"}</button>
               </div>
             </li>
           ))}
@@ -108,24 +123,26 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists }:
       </Card>
 
       {editing && (
-        <form onSubmit={save} className="card nb-left-blue space-y-3">
-          <h3 className="font-semibold">Edit {editing.name}</h3>
+        <form key={editing.id} onSubmit={save} className="card nb-left-blue space-y-3">
+          <h3 id="agent-editor-title" tabIndex={-1} className="scroll-mt-24 font-semibold">Edit {editing.name}</h3>
           <div className="grid gap-3 md:grid-cols-2">
-            <div><label className="label">Name</label><input name="name" className="input" defaultValue={editing.name} required /></div>
-            <div><label className="label">Max iterations</label><input name="maxIterations" type="number" min={1} max={200} className="input" defaultValue={editing.maxIterations} /></div>
-            <div className="md:col-span-2"><label className="label">Description</label><input name="description" className="input" defaultValue={editing.description} /></div>
-            <div><label className="label">Budget per run (USD, blank = company budget only)</label><input name="budget" className="input" defaultValue={editing.budgetUsdPerRun ?? ""} placeholder="e.g. 2.50" /></div>
+            <div><label className="block"><span className="label">Name</span><input name="name" className="input" defaultValue={editing.name} required /></label></div>
+            <div><label className="block"><span className="label">Max iterations</span><input name="maxIterations" type="number" min={1} max={200} className="input" defaultValue={editing.maxIterations} /></label></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">Description</span><input name="description" className="input" defaultValue={editing.description} /></label></div>
+            <div><label className="block"><span className="label">Budget per run (USD, blank = company budget only)</span><input name="budget" className="input" defaultValue={editing.budgetUsdPerRun ?? ""} placeholder="e.g. 2.50" /></label></div>
             <div className="md:col-span-2">
-              <label className="label">Tool allowlist (one per line; wildcards like <span className="mono">web.*</span>)</label>
-              <textarea name="tools" className="input mono min-h-24" defaultValue={editing.toolAllowlist.join("\n")} />
+              <label className="block"><span className="label">Tool allowlist (one per line; wildcards like <span className="mono">web.*</span>)</span>
+              <textarea name="tools" className="input mono min-h-24" defaultValue={editing.toolAllowlist.join("\n")} /></label>
               <p className="mt-1 text-xs text-muted">Default for {editing.kind}: {(defaultAllowlists[editing.kind] ?? []).join(", ") || "—"}</p>
             </div>
-            <div className="md:col-span-2"><label className="label">Additional system prompt</label><textarea name="systemPrompt" className="input min-h-32" defaultValue={editing.systemPrompt} placeholder="Extra standing instructions for this agent. The runtime's safety and tool-use instructions always take precedence." /></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">Additional system prompt</span><textarea name="systemPrompt" className="input min-h-32" defaultValue={editing.systemPrompt} placeholder="Extra standing instructions for this agent. The runtime's safety and tool-use instructions always take precedence." /></label></div>
           </div>
+          {overclockEnabled && <label className="block text-xs text-muted">Agent routing policy (JSON)<textarea name="routing" aria-label="Agent routing policy" className="input mono mt-1 min-h-36" defaultValue={JSON.stringify(editing.routingPolicy, null, 2)} /><span className="hint">Explicit provider/model, ordered fallback chain and capability requirements. Credentials remain in Providers.</span></label>}
           <div className="flex justify-end gap-2"><button type="button" className="btn" onClick={() => setEditing(null)}>Cancel</button><button className="btn btn-primary">Save</button></div>
         </form>
       )}
 
+      {editing && overclockEnabled && <AgentOverclock key={editing.id} companyId={companyId} agent={editing} isAdmin={isAdmin} />}
       <Card title="Schedules" className="nb-left-orange">
         <p className="mb-3 text-sm text-muted">Cron schedules are registered with Temporal and fire durable runs even when nobody is logged in. Quiet hours and the outbound pause still apply.</p>
         <form onSubmit={addSchedule} className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">

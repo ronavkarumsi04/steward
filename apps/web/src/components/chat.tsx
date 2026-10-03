@@ -33,7 +33,7 @@ export function ConversationList({ companyId, conversations, activeId }: { compa
         <ul className="space-y-0.5 overflow-auto text-sm">
           {conversations.map((c) => (
             <li key={c.id}>
-              <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate border-2 px-3 py-2 ${c.id === activeId ? "border-line bg-panel-2 text-fg" : "border-transparent text-muted hover:border-line hover:bg-panel-2 hover:text-fg"}`}>
+              <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate border px-3 py-2 ${c.id === activeId ? "border-line bg-panel-2 text-fg" : "border-transparent text-muted hover:border-line hover:bg-panel-2 hover:text-fg"}`}>
                 {c.title || "New conversation"}
                 <span className="block text-xs text-muted"><Ago iso={c.updatedAt} /></span>
               </Link>
@@ -119,7 +119,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
         {messages.length === 0 && <Empty>Say hello. Ask for a plan, a research brief, or tell the agent what to build.</Empty>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-role={m.role}>
-            <div className={`max-w-[80%] border-2 border-line px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "nb-accent-purple" : m.role === "assistant" ? "bg-panel-2" : "text-muted"}`}>
+            <div className={`max-w-[80%] border border-line px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "nb-accent-purple" : m.role === "assistant" ? "bg-panel-2" : "text-muted"}`}>
               {m.content}
               <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-accent-fg/70" : "text-muted"}`}>
                 <Ago iso={m.createdAt} />

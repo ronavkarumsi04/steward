@@ -14,7 +14,8 @@ export default async function LegalHub() {
 
   return (
     <div>
-      <h1 className="text-3xl font-semibold tracking-tight">Legal documents</h1>
+      <p className="eyebrow">Clarity, by design</p>
+      <h1 className="mt-4 text-5xl font-medium tracking-tight sm:text-6xl">The terms of<br /><span className="font-serif italic">working together.</span></h1>
       <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-fg-2">
         Everything that governs the hosted {cfg.serviceName} service, in one place. Each document is versioned and dated, so you can always tell which version you agreed to.
       </p>

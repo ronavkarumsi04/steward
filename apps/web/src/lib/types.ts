@@ -61,6 +61,7 @@ export interface Agent {
   enabled: boolean;
   toolAllowlist: string[];
   routingPolicy: Record<string, unknown>;
+  config?: Record<string, unknown>;
   maxIterations: number;
   budgetUsdPerRun: string | null;
 }

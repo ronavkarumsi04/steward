@@ -80,6 +80,7 @@ export class CohereAdapter implements ProviderAdapter {
 
   private body(req: ChatRequest, stream: boolean): Record<string, unknown> {
     const body: Record<string, unknown> = { model: req.model, messages: toCohere(req.messages), stream };
+    if (req.topP !== undefined) body.p = req.topP;
     if (req.temperature !== undefined) body.temperature = req.temperature;
     if (req.maxTokens) body.max_tokens = req.maxTokens;
     if (req.stop?.length) body.stop_sequences = req.stop;

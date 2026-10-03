@@ -47,7 +47,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
     try {
       await browserApi.post(`/auth/${mode}`, payload);
       const next = params.get("next");
-      router.replace(next && next.startsWith("/") ? next : "/app");
+      router.replace(next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/app");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? friendly(err) : "Something went wrong");
@@ -56,12 +56,12 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
   }
 
   return (
-    <form onSubmit={onSubmit} className="card nb-left-purple rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
+    <form onSubmit={onSubmit} className="access-card rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
       <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
+        <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
-        <h1 className="mt-3 text-xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted">
           {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Welcome back to your company workspace." : "Your company, your tools, your control."}
         </p>
@@ -136,6 +136,8 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
 
 export function friendly(err: ApiError): string {
   switch (err.code) {
+    case "email_unavailable":
+      return "Password-reset email is unavailable right now. No email was sent. Ask your organization admin for help.";
     case "signup_closed":
       return "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.";
     case "invalid_invitation":
@@ -145,7 +147,7 @@ export function friendly(err: ApiError): string {
     case "expired":
       return "This link is invalid or has expired. Request a new one.";
     case "invalid_credentials":
-      return "Email or password is incorrect.";
+      return "We couldn’t sign you in with those details. Check your password. If you haven’t created an account, use your invitation link or visit registration.";
     case "email_taken":
       return "An account with that email already exists.";
     case "weak_password":

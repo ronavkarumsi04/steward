@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, OrganizationService, PrivacyService, renderEmail } from "@steward/core";
+import { AuthError, AuthService, OrganizationService, PrivacyService, renderEmail } from "@steward/core";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS, acceptanceStatement, pendingAgreements } from "@steward/legal";
 import { Role } from "@steward/schema";
 import { HttpError, orgScope, requireUser, type ApiDeps, type AppEnv, param } from "../context.js";
@@ -73,16 +73,26 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
       if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
       if (!invitation && !(await signupOpen(deps))) throw new AuthError("signup_closed", "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.");
 
-      const { user, organization } = await auth.register({ ...body, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
-      const joined = body.inviteToken ? await orgs.acceptInvitation(user.id, body.inviteToken) : null;
+      // Account, legal acceptance, membership and invite consumption commit together. The public
+      // preview above is advisory; acceptance rechecks expiration/consumption inside this transaction.
+      const { user, organization, joined } = await deps.core.db.transaction(async (tx) => {
+        const account = await new AuthService(tx).register({ ...body, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
+        const joined = body.inviteToken ? await new OrganizationService(tx).acceptInvitation(account.user.id, body.inviteToken) : null;
+        return { ...account, joined };
+      });
       const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
       setSessionCookie(c, token);
       return c.json({ user, organization, joined, session: { expiresAt: session.expiresAt }, token }, 201);
     },
   );
 
-  defineRoute(app, reg, { method: "post", path: "/auth/password/forgot", tag: "auth", summary: "Email a password-reset link (always 202 to avoid account enumeration)", auth: "public", body: z.object({ email: z.email() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/auth/password/forgot", tag: "auth", summary: "Request a password-reset link (uniform response; 503 when production email is disabled)", auth: "public", body: z.object({ email: z.email() }) }, async (c, { body }) => {
     const deps = c.get("deps");
+    // Instance-wide availability is public; check it before looking up an address.
+    // Returning the same 503 for every email avoids account enumeration and false delivery claims.
+    if (deps.core.config.env === "production" && deps.mailer.provider === "console") {
+      throw new HttpError(503, "email_unavailable", "Password-reset email is unavailable. Contact your organization admin.");
+    }
     const user = await deps.auth.findUserByEmail(body.email);
     if (user) {
       const token = await deps.auth.issueEmailToken(user.id, "reset_password", RESET_TOKEN_TTL_MS);

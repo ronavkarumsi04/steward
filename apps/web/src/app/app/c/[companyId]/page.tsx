@@ -186,7 +186,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
                     <li key={a.id}>
                       <Link
                         href={`${base}/approvals#${a.id}`}
-                        className="nb-panel-flat nb-accent-yellow block border-2 px-3 py-2.5 transition-colors duration-150 hover:nb-accent-orange"
+                        className="nb-panel-flat nb-accent-yellow block border px-3 py-2.5 transition-colors duration-150 hover:nb-accent-orange"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium">{a.action}</span>
@@ -208,7 +208,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
                 <ul className="-mx-2 text-sm">
                   {runs.runs.map((r) => (
                     <li key={r.id}>
-                      <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border-2 px-2 py-2 transition-colors duration-150 hover:nb-accent-purple">
+                      <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border px-2 py-2 transition-colors duration-150 hover:nb-accent-purple">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium">{r.intent || agentName(agents, r.agentId)}</span>
                           <StatusPill status={r.status} />

@@ -60,21 +60,21 @@ export default async function AccountPage() {
           <caption className="sr-only">Agreement acceptance history</caption>
           <thead>
             <tr>
-              <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Document</th>
-              <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Version</th>
-              <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Accepted</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Document</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Version</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Accepted</th>
             </tr>
           </thead>
           <tbody>
             {agreements.history.map((row) => (
               <tr key={row.id}>
-                <td className="border-2 border-line px-3 py-2">
+                <td className="border border-line px-3 py-2">
                   <Link href={`/legal/${row.document}`} className="font-medium text-accent hover:underline">
                     {titles.get(row.document) ?? row.document}
                   </Link>
                 </td>
-                <td className="border-2 border-line px-3 py-2 font-mono text-xs">{row.version}</td>
-                <td className="border-2 border-line px-3 py-2 text-muted">{new Date(row.acceptedAt).toLocaleString()}</td>
+                <td className="border border-line px-3 py-2 font-mono text-xs">{row.version}</td>
+                <td className="border border-line px-3 py-2 text-muted">{new Date(row.acceptedAt).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>

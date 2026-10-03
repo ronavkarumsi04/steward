@@ -164,6 +164,7 @@ export class GeminiAdapter implements ProviderAdapter {
   private body(req: ChatRequest): Record<string, unknown> {
     const { systemInstruction, contents } = toGeminiContents(req.messages);
     const generationConfig: Record<string, unknown> = {};
+    if (req.topP !== undefined) generationConfig.topP = req.topP;
     if (req.temperature !== undefined) generationConfig.temperature = req.temperature;
     if (req.maxTokens) generationConfig.maxOutputTokens = req.maxTokens;
     if (req.stop?.length) generationConfig.stopSequences = req.stop;

@@ -165,6 +165,10 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
       stream,
     };
     if (stream) body.stream_options = { include_usage: true };
+    if (req.topP !== undefined) {
+      if (/^(?:o[1-4](?:-|$)|gpt-5)/.test(req.model) && ["openai", "azure_openai"].includes(this.type)) throw new ProviderError("unsupported", "This reasoning model does not support custom top-p; use provider-default sampling", this.type, false);
+      body.top_p = req.topP;
+    }
     if (req.temperature !== undefined) body.temperature = req.temperature;
     if (req.maxTokens) body.max_completion_tokens = req.maxTokens;
     if (req.stop?.length) body.stop = req.stop;

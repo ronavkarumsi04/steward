@@ -5,11 +5,11 @@
  */
 import { createHmac } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AuthService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AuthService, OrganizationService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -326,6 +326,26 @@ describe("tenancy + RBAC", () => {
     expect((await b.api.json("PATCH", `/companies/${co.body.company.id}`, { name: "pwned" })).status).toBe(404);
     expect((await b.api.json("GET", `/orgs/${a.orgId}/companies`)).status).toBe(404);
     expect((await b.api.json("GET", `/orgs/${a.orgId}/providers`)).status).toBe(404);
+  });
+
+  d("revoking an invitation after preview rolls back the invited account and acceptance", async () => {
+    const owner = await register();
+    const email = `revoked-${uniq()}@example.com`;
+    const inv = await owner.api.json<{ invitation: { id: string }; acceptUrl: string }>("POST", `/orgs/${owner.orgId}/invitations`, { email, role: "member" });
+    const original = AuthService.prototype.hashPassword;
+    const revoke = vi.spyOn(AuthService.prototype, "hashPassword").mockImplementationOnce(async function (this: AuthService, password) {
+      const hash = await original.call(this, password);
+      await new OrganizationService(core.db).revokeInvitation(owner.orgId, inv.body.invitation.id);
+      return hash;
+    });
+    try {
+      const result = await client().json<{ error: { code: string } }>("POST", "/auth/register", {
+        email, password: "long-enough-password", name: "Invited founder", inviteToken: inv.body.acceptUrl.split("/").at(-1), accepted: CLICKWRAP,
+      });
+      expect(result.status).toBe(400);
+      expect(result.body.error.code).toBe("invalid_invitation");
+      expect(await new AuthService(core.db).findUserByEmail(email)).toBeNull();
+    } finally { revoke.mockRestore(); }
   });
 
   d("invited viewer can read but not mutate; role change unlocks it", async () => {
@@ -2319,5 +2339,83 @@ describe("openapi + health", () => {
     // deployment fills in; what a real deployment answers is what `scripts/hosted-check.sh` compares
     // against the repository.
     expect(await health.json()).toMatchObject({ ok: true, db: "ok", commit: "unknown" });
+  });
+});
+
+describe("Overclock configuration and runtime", () => {
+  d("requires admin, isolates tenants, preserves unrelated settings and rejects stale revisions", async () => {
+    const owner = await register("OverclockOwner");
+    const outsider = await register("OverclockOther");
+    const co = await owner.api.json<{ company: { id: string } }>("POST", `/orgs/${owner.orgId}/companies`, { name: "Overclock isolation" });
+    const base = `/companies/${co.body.company.id}`;
+    const list = await owner.api.json<{ agents: Array<{ id: string }> }>("GET", `${base}/agents`);
+    const agentId = list.body.agents[0]!.id;
+    const path = `${base}/agents/${agentId}/overclock`;
+    expect((await owner.api.json("PUT", path, { revision: 0, config: {} })).status).toBe(409);
+    expect((await outsider.api.json("PUT", `${base}/overclock`, { enabled: true })).status).toBe(404);
+    await owner.api.json("PATCH", base, { settings: { preserved: "yes" } });
+    const toggle = await owner.api.json<{ company: { settings: Record<string, unknown> } }>("PUT", `${base}/overclock`, { enabled: true });
+    expect(toggle.body.company.settings).toEqual({ preserved: "yes", overclockEnabled: true });
+    const invite = await owner.api.json<{ acceptUrl: string }>("POST", `/orgs/${owner.orgId}/invitations`, { email: outsider.email, role: "member" });
+    expect(invite.status).toBe(201);
+    expect((await outsider.api.json("POST", "/invitations/accept", { token: invite.body.acceptUrl.split("/").at(-1) })).status).toBe(200);
+    expect((await outsider.api.json("PUT", `${base}/overclock`, { enabled: true })).status).toBe(403);
+    expect((await outsider.api.json("PUT", path, { revision: 0, config: {} })).status).toBe(403);
+    expect((await owner.api.json("PUT", path, { revision: 0, config: { acting: { topP: 2 } } })).status).toBe(422);
+    const saved = await owner.api.json<{ agent: { config: { overclockRevision: number } } }>("PUT", path, { revision: 0, config: { skills: [{ id: "citation", name: "Citations", instructions: "Cite original evidence." }] } });
+    expect(saved.status).toBe(200); expect(saved.body.agent.config.overclockRevision).toBe(1);
+    expect((await owner.api.json("PUT", path, { revision: 0, config: {} })).status).toBe(409);
+    const audit = await core.pool.query("select metadata from audit_log where target=$1 and action='agent.overclock.update'", [agentId]);
+    expect(audit.rows).toHaveLength(1); expect(audit.rows[0].metadata.revision).toBe(1);
+    expect((await owner.api.json("PUT", `${base}/overclock`, { enabled: false })).status).toBe(200);
+    expect((await owner.api.json("PUT", path, { revision: 1, config: {} })).status).toBe(409);
+  });
+
+  d("snapshots skills and tuning in durable context, sends top-p on the wire and restores defaults for new runs", async () => {
+    const owner = await register("OverclockRuntime");
+    await owner.api.json("POST", `/orgs/${owner.orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });
+    const co = await owner.api.json<{ company: { id: string } }>("POST", `/orgs/${owner.orgId}/companies`, { name: "Overclock runtime" });
+    const companyId = co.body.company.id; const base = `/companies/${companyId}`;
+    const list = await owner.api.json<{ agents: Array<{ id: string }> }>("GET", `${base}/agents`);
+    const agentId = list.body.agents[0]!.id;
+    await owner.api.json("PUT", `${base}/overclock`, { enabled: true });
+    const config = { planning: { sampler: "top_p", topP: 0.67, maxTokens: 512 }, acting: { sampler: "provider_default", maxTokens: 700 }, memoryLimit: 0, skills: [{ id: "sources", name: "Sources", instructions: "Record source evidence before publishing." }] };
+    expect((await owner.api.json("PUT", `${base}/agents/${agentId}/overclock`, { revision: 0, config })).status).toBe(200);
+    const scope: TenantScope = { organizationId: owner.orgId, companyId, actor: { type: "system", component: "overclock-test" } };
+    const rt = new AgentRuntime(services.forScope(scope), buildToolRegistry());
+    const run = await services.runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Write positioning and record a decision." } });
+    const ctx = await rt.buildContext(run.id);
+    expect(ctx.systemPrompt).toContain("Record source evidence before publishing.");
+    expect(ctx.overclockRevision).toBe(1);
+    // Save a replacement after context creation; resuming must retain the original revision.
+    await owner.api.json("PUT", `${base}/agents/${agentId}/overclock`, { revision: 1, config: {} });
+    expect(await rt.buildContext(run.id)).toEqual(ctx);
+    const before = stub.requests.length;
+    await rt.plan(run.id, ctx);
+    const requests = stub.requests.slice(before).filter((r) => r.path.includes("chat/completions"));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.body.top_p).toBe(0.67);
+    expect(requests[0]!.body.temperature).toBeUndefined();
+    expect(requests[0]!.body.max_completion_tokens).toBe(512);
+    await owner.api.json("PUT", `${base}/overclock`, { enabled: false });
+    const next = await services.runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Review goals." } });
+    const standard = await rt.buildContext(next.id);
+    expect(standard.overclockEnabled).toBe(false);
+    expect(standard.overclock?.planning.temperature).toBe(0.2);
+    expect(standard.systemPrompt).not.toContain("Record source evidence before publishing.");
+  });
+
+  d("production without platform email fails identically before account lookup", async () => {
+    const owner = await register("EmailAvailability");
+    const prod = createCoreContext(loadConfig({ ...ENV, NODE_ENV: "production" }), "auth-email-test");
+    try {
+      const noEmail = createApp({ core: prod, auth: new AuthService(prod.db), mailer, services, workflows: null, env: ENV }, null).app;
+      const request = (email: string) => noEmail.request("http://api.test/v1/auth/password/forgot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      const existing = await request(owner.email); const missing = await request(`missing-${uniq()}@example.com`);
+      expect(existing.status).toBe(503); expect(missing.status).toBe(503);
+      const a = await existing.json() as { error: { code: string; message: string } };
+      const b = await missing.json() as { error: { code: string; message: string } };
+      expect({ code: a.error.code, message: a.error.message }).toEqual({ code: b.error.code, message: b.error.message });
+    } finally { await prod.pool.end(); }
   });
 });

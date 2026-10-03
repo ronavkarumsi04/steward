@@ -59,19 +59,19 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
               <caption className="sr-only">Opt-out and suppression records</caption>
               <thead>
                 <tr>
-                  <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Address</th>
-                  <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Channel</th>
-                  <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Reason</th>
-                  <th scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">Added</th>
+                  <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Address</th>
+                  <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Channel</th>
+                  <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Reason</th>
+                  <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Added</th>
                 </tr>
               </thead>
               <tbody>
                 {suppressions.suppressions.map((s) => (
                   <tr key={s.id}>
-                    <td className="border-2 border-line px-3 py-2 font-mono text-xs">{s.address}</td>
-                    <td className="border-2 border-line px-3 py-2">{s.channel}</td>
-                    <td className="border-2 border-line px-3 py-2 text-muted">{s.reason}</td>
-                    <td className="border-2 border-line px-3 py-2 text-muted">{new Date(s.createdAt).toLocaleDateString()}</td>
+                    <td className="border border-line px-3 py-2 font-mono text-xs">{s.address}</td>
+                    <td className="border border-line px-3 py-2">{s.channel}</td>
+                    <td className="border border-line px-3 py-2 text-muted">{s.reason}</td>
+                    <td className="border border-line px-3 py-2 text-muted">{new Date(s.createdAt).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

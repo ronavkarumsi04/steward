@@ -89,6 +89,10 @@ export class AnthropicAdapter implements ProviderAdapter {
     const { system, messages } = toAnthropicMessages(req.messages);
     const body: Record<string, unknown> = { model: req.model, messages, max_tokens: req.maxTokens ?? 8_192, stream };
     if (system) body.system = system;
+    if (req.topP !== undefined) {
+      if (req.reasoning || req.temperature !== undefined) throw new ProviderError("unsupported", "Custom top-p cannot be combined with thinking or temperature", this.type, false);
+      body.top_p = req.topP;
+    }
     if (req.temperature !== undefined) body.temperature = req.temperature;
     if (req.stop?.length) body.stop_sequences = req.stop;
     const tools = (req.tools ?? []).map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));

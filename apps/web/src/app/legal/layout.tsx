@@ -11,8 +11,8 @@ export default async function LegalLayout({ children }: { children: ReactNode })
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
-        <div className="mx-auto flex h-13 max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
+      <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-bg shadow-e1">
+        <div className="mx-auto flex h-13 max-w-[1360px] items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 font-black tracking-tight">
             <Icon.Logo size={22} />
             Steward
@@ -29,23 +29,23 @@ export default async function LegalLayout({ children }: { children: ReactNode })
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1200px] gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[240px_1fr] lg:py-12">
-        <nav aria-label="Document list" className="lg:sticky lg:top-20 lg:self-start">
+      <div className="mx-auto grid max-w-[1360px] gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[240px_1fr] lg:py-12">
+        <nav aria-label="Document list" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
           <p className="label mb-2">Everyone</p>
-          <ul className="space-y-1">
+          <ul className="flex gap-2 overflow-x-auto pb-2 lg:block lg:space-y-1 lg:overflow-visible">
             {everyone.map((doc) => (
               <li key={doc.slug}>
-                <Link href={`/legal/${doc.slug}`} className="block rounded-sm px-2 py-1 text-sm font-medium text-fg-2 hover:bg-panel-2 hover:text-fg">
+                <Link href={`/legal/${doc.slug}`} className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm lg:whitespace-normal font-medium text-fg-2 hover:bg-panel-2 hover:text-fg">
                   {doc.title}
                 </Link>
               </li>
             ))}
           </ul>
           <p className="label mb-2 mt-5">Business customers</p>
-          <ul className="space-y-1">
+          <ul className="flex gap-2 overflow-x-auto pb-2 lg:block lg:space-y-1 lg:overflow-visible">
             {business.map((doc) => (
               <li key={doc.slug}>
-                <Link href={`/legal/${doc.slug}`} className="block rounded-sm px-2 py-1 text-sm font-medium text-fg-2 hover:bg-panel-2 hover:text-fg">
+                <Link href={`/legal/${doc.slug}`} className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm lg:whitespace-normal font-medium text-fg-2 hover:bg-panel-2 hover:text-fg">
                   {doc.title}
                 </Link>
               </li>

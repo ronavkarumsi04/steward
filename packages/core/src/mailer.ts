@@ -81,16 +81,16 @@ function escapeHtml(s: string) {
 /** Minimal, client-safe HTML wrapper shared by all platform emails. */
 export function renderEmail(opts: { title: string; intro: string; actionLabel: string; actionUrl: string; footer: string }): Pick<MailMessage, "text" | "html"> {
   const text = `${opts.title}\n\n${opts.intro}\n\n${opts.actionLabel}: ${opts.actionUrl}\n\n${opts.footer}\n`;
-  const html = `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1d1d1f">
+  const html = `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f5f4ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#182d28">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fff;border-radius:16px;padding:32px;border:1px solid #e5e5ea">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fff;border-radius:16px;padding:32px;border:1px solid #ced2c7">
 <tr><td>
-<p style="margin:0 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#6e6e73">Steward</p>
+<p style="margin:0 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#556259">Steward</p>
 <h1 style="margin:0 0 16px;font-size:22px;font-weight:600;letter-spacing:-.01em">${escapeHtml(opts.title)}</h1>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#3a3a3c">${escapeHtml(opts.intro)}</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#35483e">${escapeHtml(opts.intro)}</p>
 <p style="margin:0 0 24px"><a href="${escapeHtml(opts.actionUrl)}" style="display:inline-block;background:#0071e3;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:12px">${escapeHtml(opts.actionLabel)}</a></p>
-<p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#6e6e73">Or paste this link into your browser:<br><a href="${escapeHtml(opts.actionUrl)}" style="color:#0071e3;word-break:break-all">${escapeHtml(opts.actionUrl)}</a></p>
-<p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#6e6e73">${escapeHtml(opts.footer)}</p>
+<p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#556259">Or paste this link into your browser:<br><a href="${escapeHtml(opts.actionUrl)}" style="color:#0071e3;word-break:break-all">${escapeHtml(opts.actionUrl)}</a></p>
+<p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#556259">${escapeHtml(opts.footer)}</p>
 </td></tr></table></td></tr></table></body></html>`;
   return { text, html };
 }

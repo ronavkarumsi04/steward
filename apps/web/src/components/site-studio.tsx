@@ -515,7 +515,7 @@ export function SiteStudio({ companyId, initial }: { companyId: string; initial:
                     title={`Preview of /${pageSlug === HOME_SLUG ? "" : pageSlug}`}
                     srcDoc={preview.html}
                     sandbox=""
-                    className="h-[26rem] w-full border-2 border-line bg-white"
+                    className="h-[26rem] w-full border border-line bg-white"
                   />
                   <p className="mt-1 text-xs text-faint">
                     {preview.source === "version" ? "Rendered from the stored version." : "Rendered from the saved draft."} The page carries no script and no inline handlers, which is why it can be shown here safely.

@@ -1,13 +1,13 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { generateToken, hashToken } from "@steward/crypto";
-import { auditLog, invitations, memberships, organizations, users, type Db } from "@steward/db";
+import { auditLog, invitations, memberships, organizations, users, type DbOrTx } from "@steward/db";
 import type { Role } from "@steward/schema";
 import { AuthError, roleAtLeast } from "./auth.js";
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export class OrganizationService {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: DbOrTx) {}
 
   async get(organizationId: string) {
     const [o] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
