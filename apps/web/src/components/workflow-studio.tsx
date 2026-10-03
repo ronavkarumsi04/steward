@@ -209,7 +209,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                           setError(null);
                         }}
                         aria-current={workflow.id === draft?.id}
-                        className={`w-full border-2 p-3 text-left transition-colors ${workflow.id === draft?.id ? "border-ink bg-panel" : "border-transparent hover:border-line"}`}
+                        className={`w-full border p-3 text-left transition-colors ${workflow.id === draft?.id ? "border-ink bg-panel" : "border-transparent hover:border-line"}`}
                       >
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{workflow.name}</span>
@@ -413,7 +413,7 @@ function NodeCard({
   const detail = node.kind === "trigger" ? triggerLabel(node) : node.kind === "agent" ? (agents.find((agent) => agent.id === node.agentId)?.name ?? "no agent chosen") : node.kind === "filter" ? "narrowing" : `${node.maxRunsPerHour}/hour`;
 
   return (
-    <article className="border-2 border-line bg-panel p-3" aria-label={`${label}: ${detail}`}>
+    <article className="border border-line bg-panel p-3" aria-label={`${label}: ${detail}`}>
       <header className="mb-3 flex flex-wrap items-center gap-2">
         <span className="mono text-xs uppercase tracking-widest text-muted">{label}</span>
         <span className="text-sm">{detail}</span>
@@ -558,7 +558,7 @@ function TriggerFields({
       ) : (
         <fieldset disabled={!canManage}>
           <legend className="label">{node.source === "signal" ? "Signal kinds" : "Recorded events"}</legend>
-          <div className="max-h-48 overflow-y-auto border-2 border-line p-2" data-testid="trigger-kinds">
+          <div className="max-h-48 overflow-y-auto border border-line p-2" data-testid="trigger-kinds">
             {kinds.map((kind) => (
               <label key={kind} className="flex items-center gap-2 py-0.5 text-sm">
                 <input

@@ -168,7 +168,7 @@ export default async function DesignPage() {
             <li key={token} className="card-inset flex items-center gap-2 p-2">
               <span
                 aria-hidden="true"
-                className="h-7 w-7 shrink-0 rounded-[var(--radius-xs)] border-2 border-fg"
+                className="h-7 w-7 shrink-0 rounded-[var(--radius-xs)] border border-fg"
                 style={{ background: `var(--${token})` } as CSSProperties}
               />
               <span className="min-w-0">

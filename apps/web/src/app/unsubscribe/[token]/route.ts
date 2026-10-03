@@ -32,12 +32,12 @@ async function unsubscribe(token: string): Promise<UnsubscribeOutcome> {
 function page(heading: string, body: string, tone: "ok" | "warn") {
   const accent = tone === "ok" ? "#0a7d29" : "#b4232a";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading} — Steward</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1d1d1f;padding:24px">
-<main style="max-width:520px;background:#fff;border:2px solid #1d1d1f;border-radius:14px;padding:32px;box-shadow:4px 4px 0 0 #111">
-<p style="margin:0 0 12px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#6e6e73">Steward</p>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f4ec;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#182d28;padding:24px">
+<main style="max-width:520px;background:#fff;border:1px solid #182d28;border-radius:14px;padding:32px;box-shadow:0 12px 40px #182d2814">
+<p style="margin:0 0 12px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#556259">Steward</p>
 <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;border-left:6px solid ${accent};padding-left:12px">${heading}</h1>
-<p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#3a3a3c">${body}</p>
-<p style="margin:0;font-size:13px;line-height:1.55;color:#6e6e73">You can also revoke access to the sender's connected accounts, or ask a human to remove you by replying to any message from them.</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#35483e">${body}</p>
+<p style="margin:0;font-size:13px;line-height:1.55;color:#556259">You can also revoke access to the sender's connected accounts, or ask a human to remove you by replying to any message from them.</p>
 </main></body></html>`;
 }
 

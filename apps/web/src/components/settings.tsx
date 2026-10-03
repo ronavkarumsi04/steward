@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
+import { OverclockToggle } from "./overclock";
 import { Card, Empty, StatusPill, usd } from "./ui";
 
 const DIMENSIONS: Array<{ id: PolicyDimension; label: string }> = [
@@ -126,6 +127,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     <div className="space-y-5">
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
+      <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
       <Card title="Controls" className="nb-left-red">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
@@ -153,8 +155,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       <form onSubmit={saveCompany} className="card nb-left-blue space-y-3">
         <h2 className="font-semibold">Autonomy &amp; schedule</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="label">Company name</label><input name="name" className="input" defaultValue={company.name} required /></div>
-          <div><label className="label">Timezone (IANA)</label><input name="timezone" className="input" defaultValue={company.timezone} placeholder="UTC" /></div>
+          <div><label className="block"><span className="label">Company name</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
+          <div><label className="block"><span className="label">Timezone (IANA)</span><input name="timezone" className="input" defaultValue={company.timezone} placeholder="UTC" /></label></div>
           <div className="md:col-span-2">
             <label className="label">Autonomy level</label>
             <div className="grid gap-2 md:grid-cols-5">
@@ -167,8 +169,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             </div>
             <p className="mt-1 text-xs text-muted">Critical-risk actions always require approval regardless of level. Policies below can be stricter per dimension.</p>
           </div>
-          <div><label className="label">Quiet hours start (HH:MM, local)</label><input name="quietStart" className="input" defaultValue={company.quietHours?.start ?? ""} placeholder="22:00" pattern="\d{2}:\d{2}" /></div>
-          <div><label className="label">Quiet hours end</label><input name="quietEnd" className="input" defaultValue={company.quietHours?.end ?? ""} placeholder="07:00" pattern="\d{2}:\d{2}" /></div>
+          <div><label className="block"><span className="label">Quiet hours start (HH:MM, local)</span><input name="quietStart" className="input" defaultValue={company.quietHours?.start ?? ""} placeholder="22:00" pattern="\d{2}:\d{2}" /></label></div>
+          <div><label className="block"><span className="label">Quiet hours end</span><input name="quietEnd" className="input" defaultValue={company.quietHours?.end ?? ""} placeholder="07:00" pattern="\d{2}:\d{2}" /></label></div>
         </div>
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>Save</button></div>
       </form>
@@ -177,18 +179,18 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <h2 className="font-semibold">Company profile</h2>
         <p className="text-sm text-muted">This is what every agent reads first. Keep it accurate; agents update it too as they learn.</p>
         <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="label">Name</label><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></div>
-          <div><label className="label">Tagline</label><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></div>
-          <div className="md:col-span-2"><label className="label">Description</label><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></div>
-          <div><label className="label">Website</label><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></div>
-          <div><label className="label">Stage</label><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s}>{s}</option>)}</select></div>
-          <div><label className="label">Business model</label><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></div>
-          <div><label className="label">Value proposition</label><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></div>
-          <div><label className="label">Target customers (one per line)</label><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></div>
-          <div><label className="label">Channels (one per line)</label><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></div>
-          <div><label className="label">Constraints — things agents must never do</label><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></div>
-          <div><label className="label">Tech stack</label><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></div>
-          <div className="md:col-span-2"><label className="label">Brand voice</label><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></div>
+          <div><label className="block"><span className="label">Name</span><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></label></div>
+          <div><label className="block"><span className="label">Tagline</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">Description</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Website</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
+          <div><label className="block"><span className="label">Stage</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s}>{s}</option>)}</select></label></div>
+          <div><label className="block"><span className="label">Business model</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Value proposition</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Target customers (one per line)</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Channels (one per line)</span><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Constraints — things agents must never do</span><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Tech stack</span><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">Brand voice</span><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></label></div>
         </div>
         <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
       </form>

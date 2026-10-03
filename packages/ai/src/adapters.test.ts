@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CodexCompanionAdapter } from "./adapters/codex-companion.js";
 import { AnthropicAdapter, toAnthropicMessages } from "./adapters/anthropic.js";
 import { OpenAICompatibleAdapter, toOpenAIMessages } from "./adapters/openai-compatible.js";
 import { sanitizeSchema, toGeminiContents } from "./adapters/gemini.js";
@@ -85,5 +86,53 @@ describe("adapters over mocked fetch", () => {
     const a = new AnthropicAdapter({ apiKey: "k" });
     const r = await a.chat({ model: "claude", messages: [{ role: "user", content: "x" }], responseFormat: { type: "json_schema", name: "S", schema: { type: "object" } } });
     expect(JSON.parse(r.text)).toEqual({ ok: true });
+  });
+});
+
+describe("Overclock top-p transport", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("preserves the zero-temperature and top-p wire values for OpenAI-compatible backends", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }], usage: {} }));
+    }));
+    const adapter = new OpenAICompatibleAdapter({ apiKey: "k", baseUrl: "https://provider.test/v1" }, "openai_compatible");
+    await adapter.chat({ model: "custom", messages: [{ role: "user", content: "hi" }], topP: 0.63, maxTokens: 512 });
+    await adapter.chat({ model: "custom", messages: [{ role: "user", content: "hi" }], temperature: 0 });
+    expect(bodies[0]).toMatchObject({ top_p: 0.63, max_completion_tokens: 512 });
+    expect(bodies[0]!.temperature).toBeUndefined();
+    expect(bodies[1]!.temperature).toBe(0);
+  });
+  it("Anthropic maps top-p and rejects incompatible sampling instead of dropping it", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ id: "x", content: [{ type: "text", text: "ok" }], usage: {} }));
+    }));
+    const adapter = new AnthropicAdapter({ apiKey: "k" });
+    const req = { model: "claude-test", messages: [{ role: "user" as const, content: "hi" }], topP: 0.7 };
+    await adapter.chat(req);
+    expect(bodies[0]!.top_p).toBe(0.7);
+    await expect(adapter.chat({ ...req, temperature: 0.3 })).rejects.toMatchObject({ code: "unsupported" });
+    await expect(adapter.chat({ ...req, reasoning: { effort: "low" } })).rejects.toMatchObject({ code: "unsupported" });
+    await expect(adapter.chat({ model: "claude-test", messages: [], temperature: 0.2, maxTokens: 8000, reasoning: { effort: "low" }, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
+    await expect(adapter.chat({ model: "claude-test", messages: [], maxTokens: 512, reasoning: { effort: "low" }, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
+    expect(bodies).toHaveLength(1);
+  });
+  it("Companion refuses required Overclock tuning before dispatch and preserves legacy defaults", async () => {
+    const request = vi.fn(async () => ({ text: "ok" }));
+    const adapter = new CodexCompanionAdapter({ config: { deviceId: "test-device" } }, { request });
+    const req = { model: "codex", messages: [], temperature: 0.2, maxTokens: 1500 };
+    await expect(adapter.chat({ ...req, metadata: { steward_overclock: "required" } })).rejects.toMatchObject({ code: "unsupported" });
+    expect(request).not.toHaveBeenCalled();
+    expect((await adapter.chat(req)).text).toBe("ok");
+    expect(request).toHaveBeenCalledOnce();
+  });
+  it("OpenAI reasoning models report unsupported custom top-p before making a request", async () => {
+    const f = vi.fn(); vi.stubGlobal("fetch", f);
+    const adapter = new OpenAICompatibleAdapter({ apiKey: "k" }, "openai");
+    await expect(adapter.chat({ model: "o3", messages: [], topP: 0.5 })).rejects.toMatchObject({ code: "unsupported" });
+    expect(f).not.toHaveBeenCalled();
   });
 });

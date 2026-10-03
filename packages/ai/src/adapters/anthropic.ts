@@ -89,6 +89,10 @@ export class AnthropicAdapter implements ProviderAdapter {
     const { system, messages } = toAnthropicMessages(req.messages);
     const body: Record<string, unknown> = { model: req.model, messages, max_tokens: req.maxTokens ?? 8_192, stream };
     if (system) body.system = system;
+    if (req.topP !== undefined) {
+      if (req.reasoning || req.temperature !== undefined) throw new ProviderError("unsupported", "Custom top-p cannot be combined with thinking or temperature", this.type, false);
+      body.top_p = req.topP;
+    }
     if (req.temperature !== undefined) body.temperature = req.temperature;
     if (req.stop?.length) body.stop_sequences = req.stop;
     const tools = (req.tools ?? []).map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
@@ -101,6 +105,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (tools.length) body.tools = tools;
     if (req.reasoning) {
       const budget = { low: 2_000, medium: 8_000, high: 24_000 }[req.reasoning.effort];
+      if (req.metadata?.steward_overclock === "required" && (req.temperature !== undefined || Number(body.max_tokens) < budget + 4_000)) throw new ProviderError("unsupported", "Thinking would override Overclock sampling or output-token limits; use provider-default sampling with enough tokens or disable thinking", this.type, false);
       body.thinking = { type: "enabled", budget_tokens: budget };
       body.max_tokens = Math.max(Number(body.max_tokens), budget + 4_000);
       delete body.temperature;

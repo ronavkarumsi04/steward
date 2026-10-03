@@ -54,7 +54,7 @@ export function AttentionQueue({ items, arriveAfterMs = 0 }: { items: AttentionI
               <li key={item.id} className={tone.wrap}>
                 <Link
                   href={item.href}
-                  className="nb-panel-flat block border-2 px-3 py-2.5 transition-colors duration-150 hover:nb-accent-blue"
+                  className="nb-panel-flat block border px-3 py-2.5 transition-colors duration-150 hover:nb-accent-blue"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill tone={tone.pill}>{tone.label}</Pill>

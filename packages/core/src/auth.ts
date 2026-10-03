@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { generateToken, hashToken } from "@steward/crypto";
-import { agreements, emailVerifications, memberships, oauthIdentities, organizations, sessions, users, type Db } from "@steward/db";
+import { agreements, emailVerifications, memberships, oauthIdentities, organizations, sessions, users, type Db, type DbOrTx } from "@steward/db";
 import type { Role } from "@steward/schema";
 
 export class AuthError extends Error {
@@ -56,7 +56,7 @@ export function slugify(input: string): string {
 }
 
 export class AuthService {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: DbOrTx) {}
 
   async hashPassword(pw: string) {
     if (pw.length < 10) throw new AuthError("weak_password", "Password must be at least 10 characters");

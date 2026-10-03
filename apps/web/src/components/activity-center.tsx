@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { browserApi, ApiError } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Project, StewardEvent } from "@/lib/types";
@@ -68,7 +68,7 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Metric label="Loaded events" value={events.length.toLocaleString()} hint="Live + paged history" />
         <Metric label="Needs attention" value={attention.length.toLocaleString()} hint="Approvals, failures, budget and provider issues" tone={attention.length ? "warn" : undefined} />
-        <Metric label="Latest sequence" value={events[0] ? `#${events[0].seq}` : "—"} hint={events[0] ? `Updated ${agoText(events[0].createdAt)}` : "No activity yet"} />
+        <Metric label="Latest sequence" value={events[0] ? `#${events[0].seq}` : "—"} hint={events[0] ? <>Updated <Ago iso={events[0].createdAt} /></> : "No activity yet"} />
       </div>
 
       <Card className="mb-5 p-4 nb-left-purple">
@@ -131,17 +131,6 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   return <div className="nb-panel-flat min-w-0 p-3"><div className="mb-1 font-semibold text-muted">{label}</div><Json value={value} /></div>;
 }
 
-function Metric({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "warn" }) {
+function Metric({ label, value, hint, tone }: { label: string; value: string; hint: ReactNode; tone?: "warn" }) {
   return <div className={`nb-panel-flat ${tone === "warn" ? "nb-left-red" : "nb-left-purple"}`}><div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div><div className="tnum mt-1 text-xl font-semibold">{value}</div><div className="mt-0.5 text-xs text-muted">{hint}</div></div>;
-}
-
-function agoText(iso: string) {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "just now";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
 }

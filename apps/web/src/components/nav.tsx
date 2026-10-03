@@ -32,17 +32,17 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-[var(--z-nav)] border-b-2 border-fg bg-bg shadow-[0_3px_0_0_#111]">
-      <div className="mx-auto flex h-13 max-w-[1440px] items-center justify-between gap-3 px-3 sm:px-5">
+    <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-bg shadow-e1">
+      <div className="mx-auto flex min-h-16 max-w-[1440px] flex-wrap items-center py-2 justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Link
             href="/app"
-            className="flex shrink-0 items-center gap-2 rounded-sm font-black tracking-tight"
+            className="flex shrink-0 items-center gap-2 rounded-sm font-semibold tracking-tight"
           >
-            <span className="grid size-9 place-items-center border-2 border-fg bg-fg text-bg shadow-[3px_3px_0_0_#111]">
+            <span className="grid size-9 place-items-center text-fg">
               <Icon.Logo size={21} />
             </span>
-            <span className="text-lg font-black">Steward</span>
+            <span className="text-lg font-semibold">Steward</span>
           </Link>
           {org && (
             <>
@@ -55,7 +55,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         </div>
 
         {org && (
-          <nav aria-label="Organization" className="segmented">
+          <nav aria-label="Organization" className="segmented order-3 w-full overflow-x-auto sm:order-none sm:w-auto">
             {ORG_LINKS.map(([slug, label, Glyph]) => {
               const href = `/app/org/${org.organizationId}/${slug}`;
               const active = path.startsWith(href);
@@ -78,7 +78,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
             <span className="sr-only sm:hidden">Account and privacy</span>
           </Link>
           <ThemeToggle />
-          <button className="btn btn-sm border-2 border-fg shadow-[3px_3px_0_0_#111]" onClick={logout} disabled={busy}>
+          <button className="btn btn-sm border border-fg shadow-e1" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
             Sign out
           </button>

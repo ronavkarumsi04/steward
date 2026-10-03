@@ -111,7 +111,7 @@ export class AgentService {
   constructor(private readonly db: Db) {}
 
   list(scope: TenantScope) {
-    return this.db.select().from(agents).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId })).orderBy(agents.createdAt);
+    return this.db.select().from(agents).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId })).orderBy(agents.createdAt, agents.id);
   }
   async get(scope: TenantScope, id: string) {
     const [a] = await this.db.select().from(agents).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }, eq(agents.id, id))).limit(1);

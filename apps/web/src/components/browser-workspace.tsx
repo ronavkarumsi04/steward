@@ -223,7 +223,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
                   alt={`Frame ${shown.seq} of ${shortUrl(shown.url)} — after: ${shown.action}`}
                   width={shown.width}
                   height={shown.height}
-                  className="w-full rounded-[var(--radius-sm)] border-2 border-line bg-panel"
+                  className="w-full rounded-[var(--radius-sm)] border border-line bg-panel"
                   data-testid="browser-frame"
                 />
                 <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -254,7 +254,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
             )}
 
             {session && endingNote(session) && (
-              <p className="mt-3 rounded-[var(--radius-sm)] border-2 border-line bg-panel px-3 py-2 text-xs text-fg-2" data-testid="browser-ending">
+              <p className="mt-3 rounded-[var(--radius-sm)] border border-line bg-panel px-3 py-2 text-xs text-fg-2" data-testid="browser-ending">
                 {endingNote(session)}
               </p>
             )}
@@ -272,7 +272,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
                         type="button"
                         onClick={() => setChosen(active ? null : row.frame.id)}
                         aria-pressed={active}
-                        className={`flex w-full items-start gap-3 rounded-[var(--radius-sm)] border-2 px-2.5 py-2 text-left transition-colors duration-150 ${
+                        className={`flex w-full items-start gap-3 rounded-[var(--radius-sm)] border px-2.5 py-2 text-left transition-colors duration-150 ${
                           active ? "border-fg bg-panel" : "border-line bg-transparent hover:border-line-strong"
                         }`}
                       >
@@ -359,7 +359,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
             </form>
 
             {started && (
-              <div className="mt-4 rounded-[var(--radius-sm)] border-2 border-line bg-panel p-3" data-testid="browser-run">
+              <div className="mt-4 rounded-[var(--radius-sm)] border border-line bg-panel p-3" data-testid="browser-run">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted">
                   {started.status === "started" ? "Run started" : started.status === "queued" ? "Run recorded" : "Run recorded, workflow not started"}
                 </p>
@@ -381,7 +381,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
                       type="button"
                       onClick={() => void openSession(row.id)}
                       aria-current={row.id === session?.id ? "true" : undefined}
-                      className={`w-full rounded-[var(--radius-sm)] border-2 px-2.5 py-2 text-left transition-colors duration-150 ${
+                      className={`w-full rounded-[var(--radius-sm)] border px-2.5 py-2 text-left transition-colors duration-150 ${
                         row.id === session?.id ? "border-fg bg-panel" : "border-line bg-transparent hover:border-line-strong"
                       }`}
                     >

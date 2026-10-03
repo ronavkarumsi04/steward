@@ -18,6 +18,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { captureFrame } from "./frame-capture.js";
 import { existsSync } from "node:fs";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { BROWSER_LIMITS, describeAction, isCredentialField, type BrowserAction } from "./actions.js";
@@ -334,7 +335,8 @@ class PlaywrightHandle implements BrowserHandle {
   }
 
   private async capture(page: Page, noteWhenUnchanged: boolean): Promise<Frame> {
-    const bytes = await page.screenshot({ type: "jpeg", quality: BROWSER_LIMITS.frameQuality, fullPage: false, animations: "disabled" });
+    const { bytes, retries } = await captureFrame(page);
+    if (retries) this.pending.push(`Frame capture recovered after ${retries} transient Chromium ${retries === 1 ? "retry" : "retries"}; no browser action was repeated.`);
     const digest = createHash("sha256").update(bytes).digest("hex");
     const size = page.viewportSize() ?? { width: this.spec.width, height: this.spec.height };
     if (noteWhenUnchanged && digest === this.lastFrameDigest) this.pending.push("The page did not change: this frame is identical to the previous one.");

@@ -96,7 +96,7 @@ export function ThemeToggle() {
 
   const icon = choice === "light" ? "☀" : choice === "dark" ? "☾" : "◐";
   return (
-    <button type="button" className="btn btn-sm border-2 border-fg shadow-[3px_3px_0_0_#111]" onClick={cycle} title={`Theme: ${choice} (click to change)`} aria-label={`Theme: ${choice}. Click to switch.`}>
+    <button type="button" className="btn btn-sm border border-fg shadow-e1" onClick={cycle} title={`Theme: ${choice} (click to change)`} aria-label={`Theme: ${choice}. Click to switch.`}>
       <span aria-hidden="true">{icon}</span>
       <span className="hidden sm:inline capitalize">{choice}</span>
     </button>

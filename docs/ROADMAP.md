@@ -284,6 +284,22 @@ The owner clarified that Steward is closed source, and requested continuous obje
 
 Marketing, agent self-description, repository licence and legal disclosures now agree on proprietary ownership. Third-party notices remain unchanged. Versioned Terms (2.0.0) and operator/contact disclosures (1.1.0) use the existing reacceptance flow; a private repository is not advertised as a legal contact channel. See [ADR-0024](adr/0024-proprietary-identity.md) and [brand guidance](BRAND.md). See [the verification record](CONTINUOUS_STORY_2026-10-02.md). Release-specific CI/deployment evidence is recorded in the engineering report; this does not complete a P3 item or enable hosted execution.
 
+## Workspace identity and Overclock — 2026-10-03
+
+The shared paper/forest identity now covers auth, invitation/password flows, legal, authenticated workspace
+tokens/navigation/forms/editors, error states and platform email/unsubscribe output. The approved public
+continuous folio, horizontal rail and zoom remain. Login guidance preserves account privacy; unavailable
+production email is reported before account lookup. Invited registration rolls back account and legal
+records if membership cannot be accepted.
+
+Overclock is a persisted admin-controlled workspace opt-in. Agent settings drive real per-phase sampling,
+output and context limits and bounded skill instructions. Configuration revisions are audited, stale writes
+are refused and run contexts remain stable after edits. Validation preview is explicitly not an execution
+test. Existing routing, tool, policy, approval and budget controls remain authoritative. No migrations,
+runtime dependencies or P3 checkbox completion are added. See [ADR-0025](adr/0025-workspace-overclock.md)
+and [the verification record](WORKSPACE_IDENTITY_OVERCLOCK_2026-10-03.md). Release checks and hosted
+execution are separate requirements; owner provisioning still needs production database authorization.
+
 ## Standing rules
 
 Binding on all future work in this repo.

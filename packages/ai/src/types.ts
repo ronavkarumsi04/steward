@@ -27,6 +27,7 @@ export interface ChatRequest {
   toolChoice?: "auto" | "none" | "required" | { name: string };
   responseFormat?: { type: "json_schema"; name: string; schema: Record<string, unknown> } | { type: "json" } | { type: "text" };
   temperature?: number;
+  topP?: number;
   maxTokens?: number;
   reasoning?: { effort: "low" | "medium" | "high" };
   stop?: string[];

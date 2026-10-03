@@ -3,7 +3,7 @@ import { BudgetExhaustedError } from "@steward/core";
 import { earningRule, expiryFor } from "@steward/memory";
 import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
 import { redactSecrets } from "@steward/crypto";
-import { PolicyRule, RoutingPolicy, VerificationVerdict, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
+import { PolicyRule, RoutingPolicy, VerificationVerdict, effectiveOverclock, phaseRequest, skillContext, type OverclockConfig, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
 import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } from "@steward/tools";
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
@@ -42,6 +42,9 @@ export interface RunContextBundle {
   routingPolicy: RoutingPolicy;
   maxIterations: number;
   budgetUsdPerRun: number | null;
+  overclock?: OverclockConfig;
+  overclockRevision?: number;
+  overclockEnabled?: boolean;
 }
 
 export type IterationOutcome =
@@ -107,6 +110,7 @@ export class AgentRuntime {
     try {
       const company = await this.s.companies.get(this.scope);
       if (!company) throw new Error("Company not found");
+      const tuning = effectiveOverclock(company.settings.overclockEnabled === true, agent.config);
       const [profileRow, goals, task, recentDecisions, budgets, projectSnapshot, playbooks] = await Promise.all([
         this.s.companies.profile(this.scope),
         this.s.companies.listGoals(this.scope),
@@ -118,8 +122,8 @@ export class AgentRuntime {
       ]);
       const trigger = run.trigger as { kind: string; instruction: string; conversationId?: string };
       const instruction = trigger.instruction || task?.title || "Review the company state and propose the next most valuable work.";
-      const memoryBlock = await this.s.memory.contextBlock(`${instruction}\n${task?.description ?? ""}`, { limit: 10, maxChars: 5000 });
-      const conversation = trigger.conversationId ? await this.s.conversations.messages(this.scope, trigger.conversationId, 30) : [];
+      const memoryBlock = tuning.memoryLimit && tuning.memoryMaxChars ? await this.s.memory.contextBlock(`${instruction}\n${task?.description ?? ""}`, { limit: tuning.memoryLimit, maxChars: tuning.memoryMaxChars }) : "";
+      const conversation = trigger.conversationId && tuning.conversationLimit ? await this.s.conversations.messages(this.scope, trigger.conversationId, tuning.conversationLimit) : [];
 
       const allow = agent.toolAllowlist.length ? agent.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!);
       const tools = this.registry.list({ allow });
@@ -149,13 +153,15 @@ export class AgentRuntime {
       sections.push(`Available tools: ${toolNames.join(", ")}`);
       sections.push(`Current date: ${new Date().toISOString().slice(0, 10)}. Run id: ${runId}.`);
 
+      const skills = skillContext(tuning);
+      if (skills) sections.push(`Founder-managed skills (subordinate to runtime safety, policy, budget and approvals):\n${skills}`);
       const systemPrompt = [ROLE_PROMPTS[agent.kind] ?? ROLE_PROMPTS.custom, agent.systemPrompt, RUNTIME_RULES, sections.join("\n\n")].filter(Boolean).join("\n\n");
       const userParts: string[] = [];
       if (task) userParts.push(`Task: ${task.title}${task.description ? `\n\n${task.description}` : ""}\nTask id: ${task.id}. Update its status with task.update when you finish (done or review).`);
       if (conversation.length) userParts.push(`Conversation so far:\n${conversation.map((m) => `${m.role}: ${m.content}`).join("\n")}`);
       userParts.push(`Instruction: ${instruction}`);
       const routingPolicy = Object.keys(agent.routingPolicy).length ? RoutingPolicy.parse(agent.routingPolicy) : await this.s.providers.routingPolicy(this.scope, agent.kind === "engineering" ? "coding" : agent.kind === "orchestrator" ? "planning" : "default");
-      const bundle: RunContextBundle = { systemPrompt, userPrompt: userParts.join("\n\n"), toolNames, routingPolicy, maxIterations: agent.maxIterations, budgetUsdPerRun: agent.budgetUsdPerRun ? Number(agent.budgetUsdPerRun) : null };
+      const bundle: RunContextBundle = { systemPrompt, userPrompt: userParts.join("\n\n"), toolNames, routingPolicy, maxIterations: agent.maxIterations, budgetUsdPerRun: agent.budgetUsdPerRun ? Number(agent.budgetUsdPerRun) : null, overclock: tuning, overclockRevision: Number(agent.config.overclockRevision ?? 0), overclockEnabled: company.settings.overclockEnabled === true };
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: bundle });
       return bundle;
     } catch (e) {
@@ -180,8 +186,8 @@ export class AgentRuntime {
             { role: "user", content: `${ctx.userPrompt}\n\nBefore acting, produce a short plan as JSON matching the schema. Keep it to the fewest steps that achieve the objective.` },
           ],
           responseFormat: { type: "json_schema", name: "plan", schema: PLAN_SCHEMA as unknown as Record<string, unknown> },
-          temperature: 0.2,
-          maxTokens: 1500,
+          ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
+          ...(ctx.overclock ? phaseRequest(ctx.overclock.planning) : { temperature: 0.2, maxTokens: 1500 }),
         },
         { policy: ctx.routingPolicy, purpose: "planning", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
@@ -223,7 +229,7 @@ export class AgentRuntime {
         }
         const out = st.output as { content?: string } | null;
         const content = st.status === "failed" ? `Error: ${st.error ?? "tool failed"}` : (out?.content ?? (st.status === "skipped" ? `Skipped: ${st.error ?? "not executed"}` : ""));
-        messages.push({ role: "tool", content: [{ type: "tool_result", toolCallId: inp.toolCallId, content: content.slice(0, MAX_TOOL_OUTPUT_CHARS), isError: st.status !== "succeeded" }] });
+        messages.push({ role: "tool", content: [{ type: "tool_result", toolCallId: inp.toolCallId, content: content.slice(0, ctx.overclock?.toolOutputMaxChars ?? MAX_TOOL_OUTPUT_CHARS), isError: st.status !== "succeeded" }] });
       }
     }
     return { messages, iterations, pending };
@@ -308,7 +314,7 @@ export class AgentRuntime {
     let toolCalls: ToolCall[] = [];
     try {
       const res = await this.s.gateway.chat(
-        { messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", temperature: 0.3, maxTokens: 4000 },
+        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
       text = res.text;
@@ -447,8 +453,8 @@ export class AgentRuntime {
             { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool activity:\n${toolSummary || "(none)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
-          temperature: 0,
-          maxTokens: 800,
+          ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
+          ...(ctx.overclock ? phaseRequest(ctx.overclock.review) : { temperature: 0, maxTokens: 800 }),
         },
         { policy: { ...ctx.routingPolicy, requirements: { ...ctx.routingPolicy.requirements, preference: "cost" } }, purpose: "verification", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );

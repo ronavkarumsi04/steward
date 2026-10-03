@@ -1,3 +1,4 @@
+import { AuthFrame } from "@/components/auth-frame";
 import { Suspense } from "react";
 import Link from "next/link";
 import { clickwrapCopy } from "@steward/legal";
@@ -11,13 +12,12 @@ export const metadata = { title: "Join an organization" };
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const [me, invitation] = await Promise.all([getMeOptional(), peekInvitation(token)]);
-  const shell = "flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6";
 
   if (!invitation) {
     return (
-      <main className={shell}>
-        <section aria-labelledby="inv-title" className="card nb-left-red rise-in w-full max-w-md p-6 text-center sm:p-7">
-          <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
+      <AuthFrame>
+        <section aria-labelledby="inv-title" className="access-card rise-in w-full max-w-md p-6 text-center sm:p-7">
+          <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
             <Icon.Logo size={36} />
           </Link>
           <h1 id="inv-title" className="mt-3 text-xl font-semibold tracking-tight">This invitation isn&apos;t valid</h1>
@@ -27,26 +27,26 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             <Link href="/" className="btn btn-ghost h-11 w-full text-[15px]">Back to home</Link>
           </div>
         </section>
-      </main>
+      </AuthFrame>
     );
   }
 
   if (!me.user) {
     return (
-      <main className={shell}>
+      <AuthFrame>
         <Suspense>
           <AuthForm mode="register" agreements={clickwrapCopy()} invite={{ token, email: invitation.email, organizationName: invitation.organizationName, role: invitation.role }} />
         </Suspense>
-      </main>
+      </AuthFrame>
     );
   }
 
   const mismatch = me.user.email.toLowerCase() !== invitation.email.toLowerCase();
   return (
-    <main className={shell}>
-      <section aria-labelledby="inv-title" className="card nb-left-purple rise-in w-full max-w-md p-6 sm:p-7">
+    <AuthFrame>
+      <section aria-labelledby="inv-title" className="access-card rise-in w-full max-w-md p-6 sm:p-7">
         <div className="text-center">
-          <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
+          <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
             <Icon.Logo size={36} />
           </Link>
           <h1 id="inv-title" className="mt-3 text-xl font-semibold tracking-tight">Join {invitation.organizationName}</h1>
@@ -64,6 +64,6 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           <AcceptInvite token={token} />
         )}
       </section>
-    </main>
+    </AuthFrame>
   );
 }

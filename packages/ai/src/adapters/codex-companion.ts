@@ -39,6 +39,8 @@ export class CodexCompanionAdapter implements ProviderAdapter {
   }
 
   private payload(req: ChatRequest) {
+    if (req.metadata?.steward_overclock === "required") throw new ProviderError("unsupported", "Codex Companion cannot enforce Overclock sampling or output-token limits. Route this agent to another provider or disable Overclock.", this.type, false);
+    if (req.topP !== undefined) throw new ProviderError("unsupported", "Codex Companion does not support custom top-p", this.type, false);
     return {
       model: req.model === "codex" ? undefined : req.model,
       messages: req.messages.map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : m.content.filter((p) => p.type === "text").map((p) => (p as { text: string }).text).join("\n") })),

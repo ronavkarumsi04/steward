@@ -312,12 +312,12 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
       <button
         ref={triggerRef}
         type="button"
-        className="nb-command-trigger mt-2 flex w-full items-center justify-between gap-3 border-2 border-black bg-panel px-3 py-2 text-left text-xs font-bold text-fg shadow-[3px_3px_0_0_#000] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_0_#000]"
+        className="nb-command-trigger mt-2 flex w-full items-center justify-between gap-3 border border-line bg-panel px-3 py-2 text-left text-xs font-bold text-fg shadow-e1 transition hover:bg-panel-2 hover:shadow-e1"
         onClick={openPalette}
         aria-haspopup="dialog"
       >
         <span>Search or act…</span>
-        <kbd className="kbd mono shrink-0 border-2 border-black px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
+        <kbd className="kbd mono shrink-0 border border-line px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
       </button>
       {open && (
         <div
@@ -330,18 +330,18 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
             aria-modal="true"
             aria-labelledby="command-palette-title"
             onKeyDown={onDialogKeyDown}
-            className="nb-dialog w-full max-w-xl overflow-hidden border-2 border-black"
+            className="nb-dialog w-full max-w-xl overflow-hidden border border-line"
           >
             <h2 id="command-palette-title" className="sr-only">
               Company command palette
             </h2>
-            <div className="nb-command-header border-b-2 border-black p-3">
+            <div className="nb-command-header border-b-2 border-line p-3">
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onPaletteKeyDown}
-                className="nb-command-input w-full border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-black focus:ring-offset-2"
+                className="nb-command-input w-full border border-line bg-panel px-3 py-2 text-sm font-medium text-fg outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-black focus:ring-offset-2"
                 placeholder={picking ? "Choose the agent…" : "Search pages, approvals, runs and tasks — or type an instruction…"}
                 aria-label={picking ? "Choose the agent" : "Search or type a command"}
                 // The combobox pattern: the listbox is the popup this input controls, and the highlighted row is
@@ -393,7 +393,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                       type="button"
                       onMouseEnter={() => setSelected(i)}
                       onClick={() => activate(action)}
-                      className={`nb-command-item flex w-full items-start justify-between gap-3 border-2 border-transparent px-3 py-2 text-left text-sm ${i === selected ? "nb-command-item-active" : "text-fg-2 hover:border-black hover:bg-panel-2"}`}
+                      className={`nb-command-item flex w-full items-start justify-between gap-3 border border-transparent px-3 py-2 text-left text-sm ${i === selected ? "nb-command-item-active" : "text-fg-2 hover:border-line hover:bg-panel-2"}`}
                     >
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-2">
@@ -416,7 +416,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
               </div>
             )}
 
-            <footer className="nb-command-footer flex flex-wrap items-center justify-between gap-2 border-t-2 border-black px-3 py-2 text-[11px] font-semibold text-muted">
+            <footer className="nb-command-footer flex flex-wrap items-center justify-between gap-2 border-t-2 border-line px-3 py-2 text-[11px] font-semibold text-muted">
               {confirming ? (
                 <span>Enter confirms · Esc back</span>
               ) : picking ? (

@@ -7,7 +7,7 @@ export default function NotFound() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg p-4 sm:p-6">
       <section aria-labelledby="nf-title" className="card nb-left-yellow rise-in w-full max-w-md p-6 text-center sm:p-7">
-        <Link href="/" className="inline-flex border-2 border-transparent p-1 hover:border-line" aria-label="Steward home">
+        <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
           <Icon.Logo size={36} />
         </Link>
         <p className="mono mt-4 text-xs uppercase tracking-widest text-muted">404</p>

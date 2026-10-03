@@ -26,7 +26,7 @@ export function LegalBlock({ block }: { block: Block }) {
             <thead>
               <tr>
                 {block.head.map((h) => (
-                  <th key={h} scope="col" className="border-2 border-line bg-panel-2 px-3 py-2 font-semibold">
+                  <th key={h} scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">
                     {h}
                   </th>
                 ))}
@@ -36,7 +36,7 @@ export function LegalBlock({ block }: { block: Block }) {
               {block.rows.map((row, i) => (
                 <tr key={i}>
                   {row.map((cell, j) => (
-                    <td key={j} className="border-2 border-line px-3 py-2 align-top text-fg-2">
+                    <td key={j} className="border border-line px-3 py-2 align-top text-fg-2">
                       {cell}
                     </td>
                   ))}

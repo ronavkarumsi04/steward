@@ -49,6 +49,7 @@ const SUITE_FILES = [
   "mcp.spec.ts",
   "memory.spec.ts",
   "motion.spec.ts",
+  "overclock.spec.ts",
   SEAM,
   "session.ts",
   "site-studio.spec.ts",

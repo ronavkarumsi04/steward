@@ -106,20 +106,20 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         <p className="text-sm text-muted">Bring your own key. Secrets are encrypted at rest with the server&rsquo;s master key and never returned to the browser. Local servers (Ollama, LM Studio, vLLM) need no key.</p>
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <label className="label">Provider</label>
+            <label className="block"><span className="label">Provider</span>
             <select className="input" value={type} onChange={(e) => setType(e.target.value)} name="type">
               {types.map((t) => <option key={t.type} value={t.type}>{t.displayName}{t.local ? " (local)" : ""}</option>)}
-            </select>
+            </select></label>
             {info?.docsUrl && <a className="mt-1 block text-xs text-accent hover:underline" href={info.docsUrl} target="_blank" rel="noreferrer">Provider docs ↗</a>}
             {info?.subscriptionNote && <p className="mt-1 text-xs text-warn">{info.subscriptionNote}</p>}
           </div>
-          <div><label className="label">Label</label><input name="label" className="input" placeholder={info?.displayName ?? "My provider"} /></div>
+          <div><label className="block"><span className="label">Label</span><input name="label" className="input" placeholder={info?.displayName ?? "My provider"} /></label></div>
           {info?.authMethod === "api_key" || info?.authMethod === "azure_api_key" ? (
-            <div className="md:col-span-2"><label className="label">API key</label><input name="secret" type="password" autoComplete="off" className="input mono" required /></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">API key</span><input name="secret" type="password" autoComplete="off" className="input mono" required /></label></div>
           ) : info?.authMethod === "aws_sigv4" ? (
-            <div className="md:col-span-2"><label className="label">AWS credentials (JSON)</label><textarea name="secretConfig" className="input mono" placeholder='{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}' required /></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">AWS credentials (JSON)</span><textarea name="secretConfig" className="input mono" placeholder='{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}' required /></label></div>
           ) : info?.authMethod === "gcp_service_account" ? (
-            <div className="md:col-span-2"><label className="label">Service-account JSON</label><textarea name="secretConfig" className="input mono min-h-32" placeholder='{"type":"service_account", …}' required /></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">Service-account JSON</span><textarea name="secretConfig" className="input mono min-h-32" placeholder='{"type":"service_account", …}' required /></label></div>
           ) : info?.authMethod === "companion" ? (
             <div className="md:col-span-2">
               <label className="label">Paired companion</label>
@@ -134,9 +134,9 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           ) : (
             <p className="text-sm text-muted md:col-span-2">No credential needed. Make sure the server can reach the base URL below.</p>
           )}
-          <div><label className="label">Base URL {info?.defaultBaseUrl && <span className="text-muted">(default {info.defaultBaseUrl})</span>}</label><input name="baseUrl" type="url" className="input mono" placeholder={info?.defaultBaseUrl ?? "https://"} required={!info?.defaultBaseUrl && info?.authMethod !== "companion"} /></div>
-          <div><label className="label">Priority (lower is preferred)</label><input name="priority" type="number" min={0} max={1000} defaultValue={100} className="input" /></div>
-          {info?.authMethod === "azure_api_key" && <div className="md:col-span-2"><label className="label">Extra config (JSON)</label><textarea name="config" className="input mono" placeholder='{"apiVersion":"2024-10-21","deployments":{"gpt-4o":"my-deployment"}}' /></div>}
+          <div><label className="block"><span className="label">Base URL {info?.defaultBaseUrl && <span className="text-muted">(default {info.defaultBaseUrl})</span>}</span><input name="baseUrl" type="url" className="input mono" placeholder={info?.defaultBaseUrl ?? "https://"} required={!info?.defaultBaseUrl && info?.authMethod !== "companion"} /></label></div>
+          <div><label className="block"><span className="label">Priority (lower is preferred)</span><input name="priority" type="number" min={0} max={1000} defaultValue={100} className="input" /></label></div>
+          {info?.authMethod === "azure_api_key" && <div className="md:col-span-2"><label className="block"><span className="label">Extra config (JSON)</span><textarea name="config" className="input mono" placeholder='{"apiVersion":"2024-10-21","deployments":{"gpt-4o":"my-deployment"}}' /></label></div>}
         </div>
         <div className="flex justify-end"><button className="btn btn-primary" disabled={busy === "add" || !isAdmin}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button></div>
       </form>

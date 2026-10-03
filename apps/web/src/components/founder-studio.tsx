@@ -236,7 +236,7 @@ export function FounderStudio({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <input
               aria-label="Tell Steward what outcome you want"
-              className="input min-h-14 flex-1 border-2 border-line bg-bg text-[15px] shadow-none"
+              className="input min-h-14 flex-1 border border-line bg-bg text-[15px] shadow-none"
               placeholder="e.g. Launch the smallest version this week and get it in front of 20 real prospects"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}

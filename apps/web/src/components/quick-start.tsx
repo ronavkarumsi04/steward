@@ -32,7 +32,7 @@ export function QuickStart({ companyId, agents }: { companyId: string; agents: A
   }
 
   return (
-    <form onSubmit={submit} className="nb-panel-flat border-2 border-[#1c1917] p-3 shadow-[4px_4px_0_#1c1917]">
+    <form onSubmit={submit} className="nb-panel-flat border border-[#1c1917] p-3 shadow-e1">
       <div className="mb-2 flex items-center gap-2">
         <Icon.Sparkle size={16} aria-hidden="true" />
         <span className="nb-section-label">MANUAL TASK</span>
