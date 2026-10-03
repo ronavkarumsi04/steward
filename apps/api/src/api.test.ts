@@ -2364,6 +2364,8 @@ describe("Overclock configuration and runtime", () => {
     expect((await owner.api.json("PUT", path, { revision: 0, config: { acting: { topP: 2 } } })).status).toBe(422);
     const saved = await owner.api.json<{ agent: { config: { overclockRevision: number } } }>("PUT", path, { revision: 0, config: { skills: [{ id: "citation", name: "Citations", instructions: "Cite original evidence." }] } });
     expect(saved.status).toBe(200); expect(saved.body.agent.config.overclockRevision).toBe(1);
+    const reordered = await owner.api.json<{ agents: Array<{ id: string }> }>("GET", `${base}/agents`);
+    expect(reordered.body.agents.map((a) => a.id)).toEqual(list.body.agents.map((a) => a.id));
     expect((await owner.api.json("PUT", path, { revision: 0, config: {} })).status).toBe(409);
     const audit = await core.pool.query("select metadata from audit_log where target=$1 and action='agent.overclock.update'", [agentId]);
     expect(audit.rows).toHaveLength(1); expect(audit.rows[0].metadata.revision).toBe(1);

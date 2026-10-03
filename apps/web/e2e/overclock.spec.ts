@@ -25,7 +25,10 @@ test("Overclock persists across reloads; real agent tuning and skills validate, 
   await page.reload();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await page.getByRole("link", { name: "Configure agents" }).click();
-  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await page
+    .locator('[data-agent-kind="engineering"]')
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
   await page.getByLabel("planning sampling method").selectOption("top_p");
   await page.getByLabel("planning top P").fill("0.72");
   await page.getByLabel("planning output token limit").fill("1024");
@@ -47,7 +50,10 @@ test("Overclock persists across reloads; real agent tuning and skills validate, 
     .click();
   await expect(page.getByRole("status")).toContainText("Configuration saved");
   await page.reload();
-  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await page
+    .locator('[data-agent-kind="engineering"]')
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
   await expect(page.getByLabel("planning top P")).toHaveValue("0.72");
   await expect(page.getByLabel("Skill 1 instructions")).toHaveValue(
     "Cite the original source before recommending publication.",
@@ -56,7 +62,10 @@ test("Overclock persists across reloads; real agent tuning and skills validate, 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await page.goto(`${base}/agents`);
-  await page.getByRole("button", { name: "Edit", exact: true }).first().click();
+  await page
+    .locator('[data-agent-kind="engineering"]')
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
   await expect(page.getByLabel("planning sampling method")).toHaveCount(0);
   await networkSettled(page);
   expect(errors).toEqual([]);

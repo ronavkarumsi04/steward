@@ -17,21 +17,22 @@ No migrations or runtime dependencies added. Existing company/agent JSON, run-st
 
 ## Verification
 
-Local lint/typecheck/test orchestration passed **73/73 tasks**. The aggregate suite contains **786 passing
-tests across 63 files**, with no skips; unchanged tasks were cached (58 cached on the atomic-auth run,
+Local lint/typecheck/test orchestration passed **73/73 tasks**. The aggregate suite contains **790 passing
+tests across 64 files**, with no skips; unchanged tasks were cached (58 cached on the atomic-auth run,
 70 on the final web follow-up). Deploy/hosted-verifier script tests passed **17/17**, with no skips.
 Added ten schema cases, four provider-wire cases, four API integration cases (including invitation
-rollback) and two browser cases. Final signed-out/public and authenticated light/dark/mobile axe sweeps
+rollback and deterministic agent ordering), four frame-recovery unit cases and two browser cases. Final signed-out/public and authenticated light/dark/mobile axe sweeps
 covered **42 page/state combinations**, with zero violations, horizontal overflow or page errors.
 Final `verify:boot` passed production builds, existing migrations, database/API/Temporal health,
 readiness refusal before worker startup and readiness after startup/restart, SIGKILL recovery,
 registration/tenant smoke, embedded server rendering with the HTTP API deliberately unreachable,
 and **42/42 Chromium E2E cases**, without retries or skips. Earlier 40/42 and 41/42 attempts failed
-and are not boot passes. Agent editing stays disabled until its client handler is ready; mobile auth
+and are not boot passes. Agent lists now use a stable ID tie-breaker for shared creation timestamps; persistence tests reopen
+the same engineering agent rather than the first row. Agent editing stays disabled until its client handler is ready; mobile auth
 heading whitespace and destination-aware test interactions were corrected. Final release results
 belong in the engineering report and exact GitHub run records.
 
-Release evidence is recorded in the engineering report and GitHub checks. A code path is not called externally validated because its wire format has a unit test. Initial browser verification failed on an invalid HTML pattern and an ambiguous alert locator; initial axe review found legacy label/link/dark-mode issues. Those failed attempts are not counted as successful verification. An initial sweep observed one React hydration error; the activity metric used an unprotected relative-time string and was changed to the shared time component. Subsequent final sweeps must record runtime errors explicitly.
+Release evidence is recorded in the engineering report and GitHub checks. A code path is not called externally validated because its wire format has a unit test. Initial browser verification failed on an invalid HTML pattern and an ambiguous alert locator; initial axe review found legacy label/link/dark-mode issues. Those failed attempts are not counted as successful verification. A subsequent CI run failed on Chromium’s transient `Page.captureScreenshot` surface error; capture now retries only that error twice, records recovered retries, and fails without a real image. Actions are never replayed. The recurring persistence assertion was traced to timestamp ties reordering agents; database evidence confirmed the saved configuration belonged to a different row than the test reopened. An initial sweep observed one React hydration error; the activity metric used an unprotected relative-time string and was changed to the shared time component. Subsequent final sweeps must record runtime errors explicitly.
 
 Protected PR CI, merge CI and an exact-commit production deployment remain required before a release is called landed. Owner invitation provisioning is separately blocked until production database authorization is available; the requested address is not evidence of a provisioned account.
 
