@@ -71,6 +71,21 @@ async function status(url: string): Promise<number> {
   catch { return 0; }
 }
 
+async function waitForStartup(url: string): Promise<void> {
+  try {
+    // Cold workflow bundling shares the CI runner with other integration suites.
+    // Match the container's startup budget; outage recovery keeps its own deadline.
+    await expect.poll(async () => {
+      if (child && (child.exitCode !== null || child.signalCode !== null)) {
+        throw new Error(`Worker exited before readiness (code=${child.exitCode}, signal=${child.signalCode})`);
+      }
+      return status(url + "/ready");
+    }, { timeout: 60_000, interval: 250 }).toBe(200);
+  } catch (error) {
+    throw new Error(`Worker startup did not reach readiness. Captured worker output:\n${output}`, { cause: error });
+  }
+}
+
 it("recovers readiness across a real Temporal outage, restarts, and exits cleanly on SIGTERM", async (context) => {
   if (!available) return context.skip();
   const target = new URL(`http://${temporal.address}`);
@@ -88,7 +103,7 @@ it("recovers readiness across a real Temporal outage, restarts, and exits cleanl
   await listen();
   const url = `http://127.0.0.1:${healthPort}`;
   startWorker(healthPort, `127.0.0.1:${proxyPort}`);
-  await expect.poll(() => status(url + "/ready"), { timeout: 20_000, interval: 100 }).toBe(200);
+  await waitForStartup(url);
   await stopProxy();
   expect(await status(url + "/health")).toBe(200);
   expect(await status(url + "/ready")).toBe(503);
@@ -98,10 +113,10 @@ it("recovers readiness across a real Temporal outage, restarts, and exits cleanl
   expect(child!.exitCode, output).toBe(0);
   expect(await status(url + "/health")).toBe(0);
   startWorker(healthPort, `127.0.0.1:${proxyPort}`);
-  await expect.poll(() => status(url + "/ready"), { timeout: 20_000, interval: 100 }).toBe(200);
+  await waitForStartup(url);
   await stopChild();
   expect(child!.exitCode, output).toBe(0);
-}, 80_000);
+}, 180_000);
 
 it("exits nonzero and releases its health listener after an unreachable boot", async (context) => {
   if (!available) return context.skip();
@@ -145,14 +160,11 @@ it("boots both Temporal connections over verified TLS and refuses an untrusted c
     if (!address || typeof address === "string") throw new Error("No TLS proxy address");
     const healthPort = await reservePort();
     startWorker(healthPort, `127.0.0.1:${address.port}`, { TEMPORAL_TLS: "true", TEMPORAL_TLS_CA_PATH: certPath });
-    await expect.poll(async () => {
-      if (child?.exitCode !== null) throw new Error(output);
-      return status(`http://127.0.0.1:${healthPort}/ready`);
-    }, { timeout: 20_000, interval: 100 }).toBe(200);
+    await waitForStartup(`http://127.0.0.1:${healthPort}`);
     await stopChild(); expect(child!.exitCode, output).toBe(0);
     const untrusted = startWorker(healthPort, `127.0.0.1:${address.port}`, { TEMPORAL_TLS: "true", TEMPORAL_TLS_CA_PATH: "" });
     const [code] = await once(untrusted, "exit");
     expect(code).toBe(1);
     expect(await status(`http://127.0.0.1:${healthPort}/ready`)).toBe(0);
   } finally { await stopChild(); await stopProxy(); await rm(dir, { recursive: true, force: true }); }
-}, 40_000);
+}, 100_000);
