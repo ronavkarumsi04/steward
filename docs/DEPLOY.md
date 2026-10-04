@@ -4,7 +4,7 @@ Steward is two halves with very different hosting needs:
 
 | Half | What it is | Where it can run |
 | --- | --- | --- |
-| **Web** (`apps/web`) | Next.js 16 app. Server components call the API; the browser talks to the API through a same-origin `/api/v1/*` rewrite, so cookies stay first-party. | **Vercel** (free Hobby tier is enough), or the `web` container. |
+| **Web** (`apps/web`) | Next.js 16 app. Server components call the API; the browser talks to the API through a same-origin `/api/v1/*` rewrite, so cookies stay first-party. | **Vercel** under an eligible plan, or the `web` container. Hobby is restricted to non-commercial personal use; it is not a free commercial-launch entitlement. |
 | **Backend** (`apps/api`, `apps/worker`, Postgres + pgvector, Redis, Temporal) | Long-running processes. The worker holds open gRPC streams to Temporal and runs agent steps that take minutes; Temporal itself needs a database and a server process. | Any always-on Linux host with Docker (a $0 Oracle Cloud *Always Free* ARM VM, a Hetzner CX22, Fly.io machines, a home server) — **not** Vercel functions. |
 
 The recommended free/cheap topology:
@@ -20,6 +20,10 @@ Browser ──HTTPS──▶ Vercel (Next.js)  ──/api/v1 rewrite──▶ ht
 ```
 
 Everything below assumes you own a domain and can create two DNS records (`app.` for Vercel, `api.` for the backend host).
+
+For the current free-only constraint, read [Free hosting qualification](FREE_HOSTING.md). Oracle allocation,
+ARM compatibility, recovery and the commercial web-hosting entitlement remain unverified. Do not use a
+sleeping web service or trial credit as evidence of a free persistent execution engine.
 
 ---
 

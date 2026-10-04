@@ -324,6 +324,15 @@ returned `/ready` 503 with Temporal disabled, and no worker/Temporal hosting acc
 NIM execution, browser/sandbox isolation, email delivery, production restore and the cross-system website
 loop remain launch blockers. No new paid resources have been provisioned.
 
+🚧 2026-10-04 follow-up: the owner confirmed free-only hosting and saved NVIDIA credentials. Public
+NVIDIA discovery returned 81 IDs, including DeepSeek v4.1 Flash and GLM 5.3 Flash; it does not authenticate
+the key. Local changes report `catalog_only`, correct legacy NVIDIA verification presentation, and fix
+the numeric model-count UI contract. Actual generation/tool use remains **UNVERIFIED**. See
+[free hosting qualification](FREE_HOSTING.md) for current Oracle limits, sleeping-service exclusions,
+Vercel Hobby commercial-use restrictions and required allocation/ARM/recovery evidence. GitHub branch
+creation remains blocked by Composio's Enhanced Controls rejection; the owner chose desktop Codex for
+the publishing handoff. No hosted execution or new protected merge is claimed.
+
 ## Standing rules
 
 Binding on all future work in this repo.
