@@ -20,6 +20,8 @@ export DATABASE_URL=${DATABASE_URL:-postgres://steward:steward@localhost:5432/st
 export REDIS_URL=${REDIS_URL:-redis://localhost:6379}
 export TEMPORAL_ADDRESS=${TEMPORAL_ADDRESS:-localhost:7233}
 export TEMPORAL_TASK_QUEUE="steward-boot-$$"
+export WORKER_HEALTH_HOST=127.0.0.1
+export WORKER_HEALTH_PORT=${WORKER_HEALTH_PORT:-4340}
 export STEWARD_MASTER_KEY=${STEWARD_MASTER_KEY:-$(openssl rand -hex 32)}
 export SESSION_SECRET=${SESSION_SECRET:-$(openssl rand -hex 32)}
 export API_PORT=${API_PORT:-4100}
@@ -93,6 +95,8 @@ spawn node apps/worker/dist/main.js >"$LOGS/worker.log" 2>&1
 WORKER_PID=$LAST_PID
 for _ in $(seq 1 60); do grep -q "steward worker ready" "$LOGS/worker.log" 2>/dev/null && break; kill -0 $WORKER_PID 2>/dev/null || { echo "worker exited"; cat "$LOGS/worker.log"; exit 1; }; sleep 1; done
 grep -q "steward worker ready" "$LOGS/worker.log" || { echo "worker did not report ready"; tail -50 "$LOGS/worker.log"; exit 1; }
+wait_http "http://127.0.0.1:$WORKER_HEALTH_PORT/ready" 60
+curl -fsS "http://127.0.0.1:$WORKER_HEALTH_PORT/ready" | grep -q '"state":"RUNNING"' || { echo "worker process is not ready"; exit 1; }
 wait_http "$API_URL/ready" 60
 curl -fsS "$API_URL/ready" | grep -q '"executions":"ready"' || { echo "worker queues are not ready"; exit 1; }
 
@@ -101,6 +105,7 @@ kill -9 -- "-$WORKER_PID"; sleep 1
 spawn node apps/worker/dist/main.js >"$LOGS/worker2.log" 2>&1
 for _ in $(seq 1 60); do grep -q "steward worker ready" "$LOGS/worker2.log" 2>/dev/null && break; sleep 1; done
 grep -q "steward worker ready" "$LOGS/worker2.log" || { echo "restarted worker did not report ready"; tail -50 "$LOGS/worker2.log"; exit 1; }
+wait_http "http://127.0.0.1:$WORKER_HEALTH_PORT/ready" 60
 wait_http "$API_URL/ready" 60
 
 step "start web (standalone build)"

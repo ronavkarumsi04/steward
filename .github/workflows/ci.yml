@@ -111,5 +111,47 @@ jobs:
           context: .
           file: infra/docker/${{ matrix.service }}.Dockerfile
           push: false
+          load: true
+          tags: steward-${{ matrix.service }}:ci
+          build-args: GIT_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+      - name: Verify worker container readiness and shutdown
+        if: matrix.service == 'worker'
+        run: |
+          set -euo pipefail
+          docker compose up -d postgres temporal
+          for i in $(seq 1 60); do
+            healthy=$(docker compose ps --format json postgres temporal | grep -c '"Health":"healthy"' || true)
+            [ "$healthy" -ge 2 ] && break
+            sleep 2
+          done
+          network=$(docker inspect "$(docker compose ps -q postgres)" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}')
+          docker run --rm --network "$network" -e DATABASE_URL=postgres://steward:steward@postgres:5432/steward \
+            steward-worker:ci node packages/db/dist/migrate.js
+          docker run -d --name worker-smoke --network "$network" \
+            -e DATABASE_URL=postgres://steward:steward@postgres:5432/steward \
+            -e STEWARD_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+            -e SESSION_SECRET=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+            -e TEMPORAL_ADDRESS=temporal:7233 -e TEMPORAL_TASK_QUEUE=worker-image-smoke \
+            -e TEMPORAL_DISABLED=false -e RUN_MIGRATIONS_ON_START=false \
+            -e BROWSER_PROVIDER=none -e SANDBOX_PROVIDER=none steward-worker:ci
+          for i in $(seq 1 60); do
+            docker exec worker-smoke node -e "fetch('http://127.0.0.1:4340/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && break
+            sleep 1
+          done
+          docker exec worker-smoke node -e "fetch('http://127.0.0.1:4340/ready').then(async r=>{console.log(await r.text());process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
+          [ "$(docker exec worker-smoke id -u)" = "1000" ]
+          docker exec worker-smoke test ! -e /var/run/docker.sock
+          docker stop --time 45 worker-smoke
+          [ "$(docker inspect worker-smoke --format '{{.State.ExitCode}}')" = "0" ]
+          if docker run --rm -e TEMPORAL_DISABLED=true steward-worker:ci >disabled-worker.log 2>&1; then
+            echo 'Disabled worker incorrectly exited successfully'
+            exit 1
+          fi
+          grep -q 'A worker requires Temporal' disabled-worker.log
+
+      - name: Worker container logs
+        if: failure() && matrix.service == 'worker'
+        run: docker logs worker-smoke || true

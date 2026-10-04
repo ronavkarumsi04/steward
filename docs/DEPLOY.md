@@ -4,7 +4,7 @@ Steward is two halves with very different hosting needs:
 
 | Half | What it is | Where it can run |
 | --- | --- | --- |
-| **Web** (`apps/web`) | Next.js 16 app. Server components call the API; the browser talks to the API through a same-origin `/api/v1/*` rewrite, so cookies stay first-party. | **Vercel** (free Hobby tier is enough), or the `web` container. |
+| **Web** (`apps/web`) | Next.js 16 app. Server components call the API; the browser talks to the API through a same-origin `/api/v1/*` rewrite, so cookies stay first-party. | **Vercel** under an eligible plan, or the `web` container. Hobby is restricted to non-commercial personal use; it is not a free commercial-launch entitlement. |
 | **Backend** (`apps/api`, `apps/worker`, Postgres + pgvector, Redis, Temporal) | Long-running processes. The worker holds open gRPC streams to Temporal and runs agent steps that take minutes; Temporal itself needs a database and a server process. | Any always-on Linux host with Docker (a $0 Oracle Cloud *Always Free* ARM VM, a Hetzner CX22, Fly.io machines, a home server) — **not** Vercel functions. |
 
 The recommended free/cheap topology:
@@ -20,6 +20,10 @@ Browser ──HTTPS──▶ Vercel (Next.js)  ──/api/v1 rewrite──▶ ht
 ```
 
 Everything below assumes you own a domain and can create two DNS records (`app.` for Vercel, `api.` for the backend host).
+
+For the current free-only constraint, read [Free hosting qualification](FREE_HOSTING.md). Oracle allocation,
+ARM compatibility, recovery and the commercial web-hosting entitlement remain unverified. Do not use a
+sleeping web service or trial credit as evidence of a free persistent execution engine.
 
 ---
 
@@ -129,6 +133,14 @@ Any piece can be swapped for a managed service by changing the URL in `.env` and
 - **Temporal**: [Temporal Cloud](https://temporal.io/cloud). Set `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and either `TEMPORAL_API_KEY` or the `TEMPORAL_TLS_*` mTLS paths (see `.env.example`).
 - **API + worker**: Fly.io machines or a Kubernetes cluster using `infra/docker/{api,worker}.Dockerfile`. Keep `API_INTERNAL_URL` on the private network.
 
+For a worker alongside the existing embedded Vercel API, follow [Always-on worker deployment](WORKER_DEPLOYMENT.md).
+The worker has private `/health` and `/ready` endpoints (port 4340), validates deployment configuration,
+drains on termination and recovers recorded decisions whose approval signal was lost. Production workers
+default to migrations off and sandbox disabled unless explicitly configured. The worker image runs as UID
+1000; an existing Docker-sandbox deployment needs explicit socket permissions on an isolated execution host.
+The full legacy Compose profile mounts Docker on the worker: remove that mount before production use on
+the application host. The worker-only manifest deliberately has no socket and keeps browser/sandbox off.
+
 ---
 
 ## 2. Web on Vercel
@@ -185,7 +197,7 @@ for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `stew
 canonical domain is what `APP_URL` names and what a user should be given.
 
 Three things this mode does not have, said out loud rather than implied: email is the console
-(`RESEND_API_KEY` unset), so invitation and password-reset links land in the function log instead of an inbox;
+(`RESEND_API_KEY` unset), so production delivery is unavailable; no invitation/reset link is logged;
 Temporal is absent, so a call that would start a run answers `503` with the reason rather than pretending to
 start one; and there is no browser, so `BROWSER_PROVIDER=none` is set and a browsing run is refused with the
 package's own sentence. That last one was learned the hard way — a serverless bundle carries `playwright-core`

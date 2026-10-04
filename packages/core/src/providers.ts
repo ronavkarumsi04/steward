@@ -55,7 +55,10 @@ export class ProviderCredentialService {
     const info = providerTypeMap.get(r.providerType);
     const config = { ...r.config };
     for (const k of SECRET_CONFIG_KEYS) if (k in config) config[k] = "[encrypted]";
-    return { id: r.id, providerType: r.providerType, displayName: info?.displayName ?? r.providerType, label: r.label, authMethod: r.authMethod, baseUrl: r.baseUrl, companyId: r.companyId, config, secretLast4: r.secretLast4, status: r.status, lastVerifiedAt: r.lastVerifiedAt, lastError: r.lastError, enabled: r.enabled, priority: r.priority, local: info?.local ?? false, createdAt: r.createdAt };
+    // Older NVIDIA checks only queried a public catalog. Correct their presentation without
+    // rewriting historical rows or implying that a later inference check has happened.
+    const catalogOnly = r.providerType === "nvidia" && (r.status === "verified" || r.status === "catalog_only");
+    return { id: r.id, providerType: r.providerType, displayName: info?.displayName ?? r.providerType, label: r.label, authMethod: r.authMethod, baseUrl: r.baseUrl, companyId: r.companyId, config, secretLast4: r.secretLast4, status: catalogOnly ? "catalog_only" : r.status, lastVerifiedAt: catalogOnly ? null : r.lastVerifiedAt, lastError: r.lastError, enabled: r.enabled, priority: r.priority, local: info?.local ?? false, createdAt: r.createdAt };
   }
 
   /**
@@ -137,11 +140,12 @@ export class ProviderCredentialService {
     const gw = new AIGateway({ loadCredentials: async () => [], recordUsage: async () => {}, companionBridge: bridge });
     const adapter = gw.adapterFor({ id: row.id, providerType: row.providerType, credential: await this.decryptRow(row), priority: row.priority, enabled: true });
     const result = await adapter.testConnection();
+    const catalogOnly = result.ok && result.verification === "catalog_only";
     await this.db
       .update(providerCredentials)
-      .set(result.ok ? { status: "verified", lastVerifiedAt: new Date(), lastError: null, updatedAt: new Date() } : { status: "error", lastError: `${result.error.code}: ${result.error.message}`.slice(0, 500), updatedAt: new Date() })
-      .where(eq(providerCredentials.id, id));
-    return result.ok ? { ok: true as const, models: result.models } : { ok: false as const, error: { code: result.error.code, message: result.error.message } };
+      .set(result.ok ? { status: catalogOnly ? "catalog_only" : "verified", lastVerifiedAt: catalogOnly ? null : new Date(), lastError: null, updatedAt: new Date() } : { status: "error", lastError: `${result.error.code}: ${result.error.message}`.slice(0, 500), updatedAt: new Date() })
+      .where(and(eq(providerCredentials.id, id), eq(providerCredentials.organizationId, scope.organizationId)));
+    return result.ok ? { ok: true as const, models: result.models, verification: catalogOnly ? "catalog_only" as const : "connection" as const } : { ok: false as const, error: { code: result.error.code, message: result.error.message } };
   }
 
   async models(scope: TenantScope, bridge?: CompanionBridge) {

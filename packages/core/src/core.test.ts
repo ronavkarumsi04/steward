@@ -2,7 +2,7 @@
  * Integration tests against a real PostgreSQL (DATABASE_URL, default docker-compose). Skipped when the
  * database is unreachable so unit-only CI still passes; `pnpm verify:boot` runs them with the DB up.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { EnvMasterKeyProvider, EnvelopeCrypto } from "@steward/crypto";
 import { createDb, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
@@ -145,7 +145,7 @@ describe("core services (postgres)", () => {
     expect(undelivered?.status).toBe("approved");
     expect(undelivered?.signalDelivered).toBe(false);
     const failedEvent = (await events.since(scope, before)).find((e) => e.type === "approval.signal_failed");
-    expect(failedEvent?.payload).toMatchObject({ approvalId: stranded.id, workflowId: "wf-2", error: "temporal unavailable" });
+    expect(failedEvent?.payload).toMatchObject({ approvalId: stranded.id, workflowId: "wf-2", error: "workflow signal unavailable; the recorded decision can be recovered by the worker" });
     // A request with no workflow is recorded, and says so rather than claiming the run was resumed.
     const detached = await approvals.request(scope, { action: "email.send", reason: "Outreach", payload: { to: "z@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "resend", alternatives: [], expiresInSeconds: 60 });
     expect((await approvals.resolve(scope, detached.id, { status: "denied" }))?.signalDelivered).toBeNull();
@@ -256,5 +256,27 @@ describe("core services (postgres)", () => {
     expect(await svc.list({ organizationId: other.organization.id, actor: { type: "user", userId: other.user.id } })).toEqual([]);
     expect(await svc.delete({ organizationId: other.organization.id, actor: { type: "user", userId: other.user.id } }, created.id)).toBe(false);
     expect(await svc.delete(orgScope, created.id)).toBe(true);
+  });
+
+  d("NVIDIA public discovery and legacy verified rows never certify credentials", async () => {
+    const auth = new AuthService(db);
+    const reg = await auth.register({ email: `nim-${uniq()}@example.com`, password: "correct horse battery", name: "Owner" });
+    const scope: TenantScope = { organizationId: reg.organization.id, actor: { type: "user", userId: reg.user.id } };
+    const svc = new ProviderCredentialService(db, crypto);
+    const saved = await svc.create(scope, { providerType: "nvidia", secret: "invalid-nim-fixture" });
+    await pool.query("update provider_credentials set status='verified', last_verified_at=now() where id=$1", [saved.id]);
+    expect((await svc.list(scope))[0]).toMatchObject({ status: "catalog_only", lastVerifiedAt: null });
+    const f = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "deepseek-ai/deepseek-v4.1-flash" }] })));
+    vi.stubGlobal("fetch", f);
+    try {
+      expect(await svc.test({ organizationId: "other-org", actor: scope.actor }, saved.id)).toBeNull();
+      expect(f).not.toHaveBeenCalled();
+      expect(await svc.test(scope, saved.id)).toEqual({ ok: true, models: 1, verification: "catalog_only" });
+      const row = (await pool.query("select status, last_verified_at from provider_credentials where id=$1", [saved.id])).rows[0];
+      expect(row).toEqual({ status: "catalog_only", last_verified_at: null });
+      expect(JSON.stringify(await svc.list(scope))).not.toContain("invalid-nim-fixture");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

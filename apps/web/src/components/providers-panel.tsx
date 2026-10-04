@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
+import { providerCheckMessage, type ProviderCheckResult } from "@/lib/provider-check";
 import { Card, Empty, StatusPill, Ago, usd } from "./ui";
 
 export function ProvidersPanel({ orgId, types, providers, models, usage, devices, isAdmin }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; devices: CompanionDevice[]; isAdmin: boolean }) {
@@ -50,8 +51,8 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
   async function test(id: string) {
     setBusy(id);
     try {
-      const r = await browserApi.post<{ ok: true; models: Array<{ id: string }> } | { ok: false; error: { code: string; message: string } }>(`${base}/providers/${id}/test`, {});
-      setTestResult((m) => ({ ...m, [id]: r.ok ? `OK · ${r.models.length} models discovered` : `${r.error.code}: ${r.error.message}` }));
+      const r = await browserApi.post<ProviderCheckResult>(`${base}/providers/${id}/test`, {});
+      setTestResult((m) => ({ ...m, [id]: providerCheckMessage(r) }));
       router.refresh();
     } catch (err) {
       setTestResult((m) => ({ ...m, [id]: err instanceof ApiError ? err.message : "test failed" }));
@@ -85,10 +86,10 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="font-medium">{p.label}</span><span className="pill text-muted">{p.providerType}</span><StatusPill status={p.status} />{!p.enabled && <span className="pill text-warn">disabled</span>}{p.companyId && <span className="pill text-muted">company-scoped</span>}</div>
                   <div className="text-xs text-muted">
-                    {p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · verified <Ago iso={p.lastVerifiedAt} />
+                    {p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · {p.status === "catalog_only" ? "API key and generation unverified" : <>connection checked <Ago iso={p.lastVerifiedAt} /></>}
                     {p.lastError && <span className="text-danger"> · {p.lastError}</span>}
                   </div>
-                  {testResult[p.id] !== undefined && <div className={`text-xs ${testResult[p.id]?.startsWith("OK") ? "text-ok" : "text-danger"}`}>{testResult[p.id]}</div>}
+                  {testResult[p.id] !== undefined && <div role="status" className={`text-xs ${testResult[p.id]?.startsWith("OK") ? "text-ok" : testResult[p.id]?.startsWith("Catalog") ? "text-warn" : "text-danger"}`}>{testResult[p.id]}</div>}
                 </div>
                 <div className="flex gap-1">
                   <button className="btn" disabled={busy === p.id || !isAdmin} onClick={() => test(p.id)}>{busy === p.id ? "Testing…" : "Test"}</button>
@@ -142,6 +143,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
       </form>
 
       <Card title={`Available models (${models.length})`} className="nb-left-blue">
+        <p className="mb-3 text-xs text-muted">Catalog entries and capability estimates are discovery data. A completed agent run is required to verify generation and tool use.</p>
         {models.length === 0 ? <Empty>No models discovered yet. Add a provider and run Test.</Empty> : (
           <div className="max-h-72 overflow-auto">
             <table className="w-full text-xs">

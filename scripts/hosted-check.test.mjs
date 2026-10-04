@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const exec = promisify(execFile);
@@ -21,7 +22,7 @@ async function check(readiness, requireExecutions = true) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const env = { ...process.env, BASE: `http://127.0.0.1:${server.address().port}`, EXPECT: "any", REQUIRE_EXECUTIONS: requireExecutions ? "1" : "0" };
-    try { return { code: 0, ...(await exec(process.execPath, [new URL("./hosted-check.mjs", import.meta.url).pathname], { env, timeout: 5_000 })) }; }
+    try { return { code: 0, ...(await exec(process.execPath, [fileURLToPath(new URL("./hosted-check.mjs", import.meta.url))], { env, timeout: 5_000 })) }; }
     catch (error) { return { code: error.code, stdout: error.stdout }; }
   } finally { await new Promise((resolve) => server.close(resolve)); }
 }

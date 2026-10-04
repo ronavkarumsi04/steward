@@ -297,7 +297,9 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
   async testConnection() {
     try {
       const models = await this.listModels();
-      return { ok: true as const, models: models.length };
+      // NVIDIA's hosted /models endpoint is public. Never certify an API key from that response,
+      // or make an unmetered inference call as a side effect of catalog discovery.
+      return { ok: true as const, models: models.length, ...(this.type === "nvidia" ? { verification: "catalog_only" as const } : {}) };
     } catch (e) {
       return { ok: false as const, error: e instanceof ProviderError ? e : new ProviderError("unknown", String(e), this.type, false) };
     }

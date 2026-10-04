@@ -35,7 +35,10 @@ function mockActivities(script: IterationOutcome[], calls: Record<string, unknow
 describe("agentRunWorkflow", () => {
   let env: TestWorkflowEnvironment;
   beforeAll(async () => {
-    env = await TestWorkflowEnvironment.createTimeSkipping();
+    const path = process.env.TEMPORAL_TEST_SERVER_PATH?.trim();
+    // Managed/offline environments can run a pre-downloaded official test server instead of the Rust
+    // downloader (which does not use the environment's required HTTP proxy). Failure still fails the suite.
+    env = await TestWorkflowEnvironment.createTimeSkipping(path ? { server: { executable: { type: "existing-path", path } } } : {});
   }, 120_000);
   afterAll(async () => {
     await env?.teardown();

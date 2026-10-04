@@ -126,7 +126,8 @@ export interface ProviderAdapter {
   chat(req: ChatRequest): Promise<ChatResponse>;
   stream(req: ChatRequest): AsyncIterable<ChatEvent>;
   embed?(req: EmbedRequest): Promise<EmbedResponse>;
-  testConnection(): Promise<{ ok: true; models: number } | { ok: false; error: ProviderError }>;
+  /** Catalog discovery may be public; catalog_only is not evidence of credential or inference access. */
+  testConnection(): Promise<{ ok: true; models: number; verification?: "catalog_only" } | { ok: false; error: ProviderError }>;
 }
 
 export interface AdapterFactory {

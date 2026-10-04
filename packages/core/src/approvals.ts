@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt } from "drizzle-orm";
 import { approvals, auditLog, emitEvent, scoped, type Db } from "@steward/db";
 import type { ApprovalRequest, ApprovalStatus, TenantScope } from "@steward/schema";
 
@@ -71,7 +71,7 @@ export class ApprovalService {
       const [row] = await tx
         .update(approvals)
         .set({ status: decision.status, resolvedBy, resolvedAt: new Date(), resolution: { note: decision.note ?? "", editedPayload: decision.editedPayload ?? null } })
-        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending")))
+        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending"), gt(approvals.expiresAt, new Date())))
         .returning();
       if (!row) return null;
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "approval.resolved", actor: scope.actor, payload: { approvalId: id, status: decision.status, action: row.action }, correlation: { runId: row.runId ?? "" } });
@@ -89,7 +89,7 @@ export class ApprovalService {
         actor: { type: "system", component: "approvals" },
         payload: { approvalId: a.id, status: a.status, workflowId: a.workflowId, error },
         correlation: { runId: a.runId ?? "" },
-      }).catch(() => undefined);
+      }).catch(() => { console.warn(JSON.stringify({ error: "approval_signal_failure_event_unavailable", approvalId: a.id })); });
       return { ...a, signalDelivered: false };
     };
     // A workflow is attached but this deployment has no client to reach it (Temporal never connected). Saying
@@ -98,8 +98,8 @@ export class ApprovalService {
     try {
       await this.signal.notify(a.workflowId, id, decision);
       return { ...a, signalDelivered: true };
-    } catch (e) {
-      return undelivered(e instanceof Error ? e.message : String(e));
+    } catch {
+      return undelivered("workflow signal unavailable; the recorded decision can be recovered by the worker");
     }
   }
 

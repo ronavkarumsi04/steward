@@ -1,4 +1,4 @@
-import { ReconcileService, type RunLauncher, type createCoreContext } from "@steward/core";
+import { ReconcileService, type ApprovalSignal, type RunLauncher, type createCoreContext } from "@steward/core";
 import type { Db } from "@steward/db";
 
 /** Derived from the core context so this file needs no direct pino dependency. */
@@ -14,10 +14,13 @@ const INTERVAL_MS = 5 * 60 * 1000;
  * It runs on boot and every five minutes. Failures are logged and retried on the next tick — reconciliation
  * must never be the reason the worker goes down.
  */
-export function startReconcileJob(db: Db, log: Logger, launcher: RunLauncher | null) {
-  const service = new ReconcileService(db, launcher);
+export function startReconcileJob(db: Db, log: Logger, launcher: RunLauncher | null, approvalSignal?: ApprovalSignal) {
+  const service = new ReconcileService(db, launcher, undefined, approvalSignal);
+  let sweeping = false;
 
   const runOnce = async (reason: string) => {
+    if (sweeping) return;
+    sweeping = true;
     try {
       const report = await service.sweep();
       const total = Object.values(report).reduce((a, b) => a + b, 0);
@@ -25,6 +28,8 @@ export function startReconcileJob(db: Db, log: Logger, launcher: RunLauncher | n
       else log.debug({ reason }, "reconciliation found nothing to repair");
     } catch (err) {
       log.error({ err, reason }, "reconciliation sweep failed; will retry on the next interval");
+    } finally {
+      sweeping = false;
     }
   };
 
