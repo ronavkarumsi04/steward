@@ -5,7 +5,7 @@ import { createServer as createTlsServer } from "node:tls";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it } from "vitest";
 import { createDb } from "@steward/db";
 import { connectTemporal, temporalConfigFromEnv } from "@steward/workflows";
 
@@ -40,7 +40,7 @@ async function stopChild() {
   const timer = setTimeout(() => child?.kill("SIGKILL"), 10_000);
   try { await exited; } finally { clearTimeout(timer); }
 }
-afterAll(async () => { await stopChild(); await stopProxy(); });
+afterEach(async () => { await stopChild(); await stopProxy(); });
 
 async function reservePort() {
   const server = createServer();
@@ -58,7 +58,7 @@ function startWorker(healthPort: number, address: string, extra: NodeJS.ProcessE
       BROWSER_PROVIDER: "none", SANDBOX_PROVIDER: "none", RUN_MIGRATIONS_ON_START: "false",
       TEMPORAL_DISABLED: "false", TEMPORAL_ADDRESS: address, TEMPORAL_NAMESPACE: temporal.namespace,
       TEMPORAL_TASK_QUEUE: `worker-health-test-${process.pid}-${Date.now()}`,
-      TEMPORAL_CONNECT_TIMEOUT_MS: "500", WORKER_HEALTH_HOST: "127.0.0.1", WORKER_HEALTH_PORT: String(healthPort),
+      TEMPORAL_CONNECT_TIMEOUT_MS: "10000", WORKER_HEALTH_HOST: "127.0.0.1", WORKER_HEALTH_PORT: String(healthPort),
       ...extra },
   });
   output = "";
@@ -75,12 +75,15 @@ async function waitForStartup(url: string): Promise<void> {
   try {
     // Cold workflow bundling shares the CI runner with other integration suites.
     // Match the container's startup budget; outage recovery keeps its own deadline.
-    await expect.poll(async () => {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
       if (child && (child.exitCode !== null || child.signalCode !== null)) {
         throw new Error(`Worker exited before readiness (code=${child.exitCode}, signal=${child.signalCode})`);
       }
-      return status(url + "/ready");
-    }, { timeout: 60_000, interval: 250 }).toBe(200);
+      if (await status(url + "/ready") === 200) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error("Worker readiness remained unavailable for 60 seconds");
   } catch (error) {
     throw new Error(`Worker startup did not reach readiness. Captured worker output:\n${output}`, { cause: error });
   }
@@ -122,7 +125,7 @@ it("exits nonzero and releases its health listener after an unreachable boot", a
   if (!available) return context.skip();
   const healthPort = await reservePort();
   const unavailablePort = await reservePort();
-  const worker = startWorker(healthPort, `127.0.0.1:${unavailablePort}`);
+  const worker = startWorker(healthPort, `127.0.0.1:${unavailablePort}`, { TEMPORAL_CONNECT_TIMEOUT_MS: "500" });
   const [code] = await once(worker, "exit");
   expect(code).toBe(1);
   expect(await status(`http://127.0.0.1:${healthPort}/health`)).toBe(0);
