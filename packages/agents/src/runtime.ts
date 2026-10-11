@@ -318,6 +318,7 @@ export class AgentRuntime {
         { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }), ...(signal ? { signal } : {}) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
+      signal?.throwIfAborted();
       text = res.text;
       toolCalls = res.toolCalls;
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: { text, toolCalls, model: `${res.provider}/${res.model}`, finishReason: res.finishReason, usage: res.usage } });
@@ -325,6 +326,7 @@ export class AgentRuntime {
     } catch (e) {
       const msg = errMsg(e);
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: msg });
+      if (signal?.aborted) throw e;
       const retryable = e instanceof ProviderError ? e.retryable || e.code === "rate_limit" || e.code === "server" : false;
       if (e instanceof ProviderError && e.code === "unsupported") return { kind: "failed", error: `${msg}. Connect an AI provider in Settings → AI providers.`, retryable: false };
       return { kind: "failed", error: msg, retryable };
@@ -333,6 +335,7 @@ export class AgentRuntime {
     if (!toolCalls.length) return { kind: "done", finalText: text || "(no output)" };
 
     for (const tc of toolCalls) {
+      signal?.throwIfAborted();
       const tool = this.registry.get(tc.name);
       if (!tool || !ctx.toolNames.some((n) => matchTool(n, tc.name))) {
         const st = await this.s.runs.beginStep(this.scope, runId, { kind: "tool_call", title: `${tc.name} (unavailable)`, input: { toolCallId: tc.id, toolName: tc.name, args: tc.arguments } });
@@ -374,6 +377,7 @@ export class AgentRuntime {
   }
 
   private async executeTool(tool: ToolDefinition, args: Record<string, unknown>, meta: { runId: string; agentId: string; taskId?: string; stepId: string; toolCallId: string; approvalId?: string; decision: PolicyDecision }, signal?: AbortSignal): Promise<{ ok: boolean; content: string; fatal?: boolean }> {
+    signal?.throwIfAborted();
     const started = Date.now();
     const ctx = this.toolContext(meta.runId, meta.agentId, meta.taskId);
     const key = !tool.manifest.idempotent && tool.manifest.sideEffects === "external" ? `${meta.runId}:${meta.toolCallId}` : undefined;
@@ -420,6 +424,7 @@ export class AgentRuntime {
       const msg = redactSecrets(errMsg(e));
       await this.s.runs.finishStep(this.scope, meta.stepId, { status: "failed", error: msg });
       await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: null, status: e instanceof ToolTimeoutError ? "timed_out" : "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
+      if (signal?.aborted) throw e;
       // A timeout is a failed tool call, not a fatal run: the model sees it and can choose another path.
       return { ok: false, content: msg, fatal: e instanceof BudgetExhaustedError };
     } finally {

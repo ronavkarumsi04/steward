@@ -190,7 +190,7 @@ export class ProviderCredentialService {
           correlation: { runId: rec.context.runId, ...(rec.context.stepId ? { stepId: rec.context.stepId } : {}) },
         }).catch(() => undefined);
       }
-      if (rec.context?.runId && rec.status === "ok") {
+      if (rec.context?.runId && (rec.status === "ok" || rec.costUsd > 0 || rec.usage.inputTokens > 0 || rec.usage.outputTokens > 0)) {
         await this.db
           .update(agentRuns)
           .set({ costUsd: sql`${agentRuns.costUsd} + ${rec.costUsd.toFixed(6)}`, inputTokens: sql`${agentRuns.inputTokens} + ${rec.usage.inputTokens}`, outputTokens: sql`${agentRuns.outputTokens} + ${rec.usage.outputTokens}`, updatedAt: new Date() })
