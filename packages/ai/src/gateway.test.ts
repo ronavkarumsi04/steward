@@ -134,13 +134,50 @@ describe("AIGateway reasoning-budget recovery", () => {
     expect(adapters.get("credential-1")!.chat).toHaveBeenCalledTimes(2);
     expect(adapters.get("credential-2")!.chat).toHaveBeenCalledOnce();
     expect(records).toHaveLength(3);
-    expect(records.slice(0, 2).every((record) => record.status === "ok")).toBe(true);
+    expect(records.slice(0, 2).map((record) => record.status)).toEqual(["ok", "error"]);
+    expect(records[1]).toMatchObject({
+      errorCode: "invalid_request",
+      usage: { inputTokens: 10, outputTokens: 4_096, reasoningTokens: 4_096 },
+    });
+    expect(records[2]?.status).toBe("ok");
 
-    const singleRoute = setup(new Map([["credential-1", [response({}), response({})]]])).gateway;
-    await expect(singleRoute.chat(request(1_000), { policy })).rejects.toMatchObject({
+    const singleRoute = setup(new Map([["credential-1", [response({}), response({})]]]));
+    await expect(singleRoute.gateway.chat(request(1_000), { policy })).rejects.toMatchObject({
       code: "invalid_request",
       message: "Model used its entire 4096-token output budget on reasoning and returned no answer",
     });
+    expect(singleRoute.records.map((record) => record.status)).toEqual(["ok", "error"]);
+    expect(singleRoute.records[1]).toMatchObject({ errorCode: "invalid_request", usage: { outputTokens: 800 } });
+  });
+
+  it("preserves a content-filter result from the reasoning-budget retry", async () => {
+    const { gateway, records, adapters } = setup(
+      new Map([
+        ["credential-1", [response({}), response({ finishReason: "content_filter", usage: { inputTokens: 12, outputTokens: 3 } })]],
+        ["credential-2", [response({ text: "fallback", finishReason: "stop", usage: { inputTokens: 10, outputTokens: 12 } })]],
+      ]),
+      [credential("credential-1", 10), credential("credential-2", 20)],
+    );
+
+    const result = await gateway.chat(request(1_000), { policy });
+
+    expect(result.text).toBe("fallback");
+    expect(adapters.get("credential-1")!.chat).toHaveBeenCalledTimes(2);
+    expect(adapters.get("credential-2")!.chat).toHaveBeenCalledOnce();
+    expect(records[1]).toMatchObject({ status: "error", errorCode: "content_filter", usage: { outputTokens: 3 } });
+  });
+
+  it("does not retry when the model output cap cannot increase the requested budget", async () => {
+    const { gateway, records, adapters } = setup(new Map([["credential-1", [response({})]]]));
+
+    await expect(gateway.chat(request(9_000), { policy })).rejects.toMatchObject({
+      code: "invalid_request",
+      message: "Model used its entire 8192-token output budget on reasoning and returned no answer",
+    });
+
+    expect(adapters.get("credential-1")!.chat).toHaveBeenCalledOnce();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ status: "error", errorCode: "invalid_request", usage: { outputTokens: 800 } });
   });
 
   it("does not retry a length response that contains text", async () => {

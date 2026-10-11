@@ -38,6 +38,8 @@ export interface UsageRecord {
 interface UsageAttempt {
   usage: Usage;
   latencyMs: number;
+  status?: UsageRecord["status"];
+  errorCode?: string;
 }
 
 interface ExecutionResult<T> {
@@ -241,7 +243,7 @@ export class AIGateway {
           const executionError = err as GatewayExecutionError;
           for (const [index, previous] of (executionError.usageAttempts ?? []).entries()) {
             const { costUsd, estimated } = estimateCost(model, previous.usage);
-            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: "ok", retries: attempt + index, routingReason: route.reason, context: opts.context });
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: previous.status ?? "ok", ...(previous.errorCode ? { errorCode: previous.errorCode } : {}), retries: attempt + index, routingReason: route.reason, context: opts.context });
           }
           if (!executionError.usageAttemptsComplete) {
             await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt + (executionError.usageAttempts?.length ?? 0), routingReason: route.reason, context: opts.context });
@@ -280,6 +282,12 @@ export class AIGateway {
       if (!shouldRetry) return { result: first, usage: first.usage, latencyMs: firstLatencyMs };
 
       const retryMaxTokens = Math.min(Math.max(requestedMaxTokens * 4, 4096), model?.capabilities.maxOutputTokens ?? 16384);
+      if (retryMaxTokens <= requestedMaxTokens) {
+        const error = new ProviderError("invalid_request", `Model used its entire ${retryMaxTokens}-token output budget on reasoning and returned no answer`, route.provider, false) as GatewayExecutionError;
+        error.usageAttempts = [{ usage: first.usage, latencyMs: firstLatencyMs, status: "error", errorCode: error.code }];
+        error.usageAttemptsComplete = true;
+        throw error;
+      }
       const retryStarted = this.now();
       let retry: ChatResponse;
       try {
@@ -292,11 +300,21 @@ export class AIGateway {
       }
       const retryLatencyMs = this.now() - retryStarted;
 
+      if (retry.finishReason === "content_filter") {
+        const error = new ProviderError("content_filter", "Model response was blocked by content policy", route.provider, false) as GatewayExecutionError;
+        error.usageAttempts = [
+          { usage: first.usage, latencyMs: firstLatencyMs },
+          { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
+        ];
+        error.usageAttemptsComplete = true;
+        throw error;
+      }
+
       if (retry.text.trim() === "" && retry.toolCalls.length === 0) {
         const error = new ProviderError("invalid_request", `Model used its entire ${retryMaxTokens}-token output budget on reasoning and returned no answer`, route.provider, false) as GatewayExecutionError;
         error.usageAttempts = [
           { usage: first.usage, latencyMs: firstLatencyMs },
-          { usage: retry.usage, latencyMs: retryLatencyMs },
+          { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
         ];
         error.usageAttemptsComplete = true;
         throw error;
