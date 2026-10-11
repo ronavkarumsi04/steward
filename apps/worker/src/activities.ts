@@ -13,7 +13,7 @@ function tenantScope(scope: WorkflowScope): TenantScope {
 /** Keeps the activity alive for long tool executions; Temporal times out activities that stop heartbeating. */
 function heartbeatLoop(): () => void {
   const ctx = Context.current();
-  const timer = setInterval(() => ctx.heartbeat(), 20_000);
+  const timer = setInterval(() => ctx.heartbeat(), 5_000);
   return () => clearInterval(timer);
 }
 
@@ -47,9 +47,10 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     },
 
     async plan(input) {
+      const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        const plan = await (await runtimeFor(input)).plan(input.runId, asRuntimeCtx(input.ctx));
+        const plan = await (await runtimeFor(input)).plan(input.runId, asRuntimeCtx(input.ctx), signal);
         return { objective: plan.objective };
       } catch (e) {
         throw classify(e);
@@ -59,9 +60,10 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     },
 
     async iterate(input) {
+      const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        return await (await runtimeFor(input)).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume);
+        return await (await runtimeFor(input)).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume, signal);
       } catch (e) {
         throw classify(e);
       } finally {
@@ -70,9 +72,10 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
     },
 
     async verify(input) {
+      const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText);
+        return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText, signal);
       } finally {
         stop();
       }

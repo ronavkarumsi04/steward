@@ -1,4 +1,4 @@
-import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
+import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, patched, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
 import { endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
 import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
 
@@ -36,6 +36,7 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
   let iterations = 0;
   let waitingApprovalId: string | null = null;
   let cancelRequested: string | null = null;
+  let activeScope: CancellationScope | undefined;
   const decisions = new Map<string, ApprovalDecisionSignal>();
 
   setHandler(approvalDecisionSignal, (d) => {
@@ -43,6 +44,7 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
   });
   setHandler(cancelRunSignal, (c) => {
     cancelRequested = c.reason ?? "cancelled by user";
+    if (patched("cancel-activity-on-signal")) activeScope?.cancel();
   });
   setHandler(runStatusQuery, () => ({ phase, iterations, waitingApprovalId }));
 
@@ -55,6 +57,21 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
     return { status: finalized?.status ?? outcome.status };
   };
 
+  const runCancellableActivity = async <T>(call: () => Promise<T>): Promise<{ cancelled: true } | { cancelled: false; value: T }> => {
+    const scope = new CancellationScope();
+    activeScope = scope;
+    try {
+      return { cancelled: false, value: await scope.run(call) };
+    } catch (e) {
+      if (isCancellation(e) && cancelRequested) return { cancelled: true };
+      throw e;
+    } finally {
+      if (activeScope === scope) activeScope = undefined;
+    }
+  };
+
+  const finishCancelled = () => finish({ status: "cancelled", error: cancelRequested ?? "cancelled by user" });
+
   try {
     await bookkeeping.markRunning({ ...input, workflowRunId: workflowInfo().runId });
     phase = "context";
@@ -62,16 +79,20 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
     if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
 
     phase = "planning";
-    await model.plan({ ...input, ctx });
+    const planning = await runCancellableActivity(() => model.plan({ ...input, ctx }));
+    if (planning.cancelled) return finishCancelled();
     if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
 
     phase = "executing";
     let resume: ApprovalResumption | undefined;
     for (;;) {
       if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
-      const outcome: IterationOutcome = await iteration.iterate({ ...input, ctx, resume });
+      const iterationResult = await runCancellableActivity(() => iteration.iterate({ ...input, ctx, resume }));
+      if (iterationResult.cancelled) return finishCancelled();
+      const outcome: IterationOutcome = iterationResult.value;
       resume = undefined;
       iterations += 1;
+      if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
       if (outcome.kind === "needs_approval") {
         phase = "waiting_approval";
         waitingApprovalId = outcome.approvalId;
@@ -93,7 +114,12 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
       // decided in `endingFor`, which the in-process drivers share so that none of them can disagree with the
       // workflow about whether work was reviewed.
       if (outcome.kind === "done") phase = "verifying";
-      const verification = outcome.kind === "done" ? await model.verify({ ...input, ctx, finalText: outcome.finalText }) : undefined;
+      const verificationResult = outcome.kind === "done"
+        ? await runCancellableActivity(() => model.verify({ ...input, ctx, finalText: outcome.finalText }))
+        : undefined;
+      if (verificationResult?.cancelled) return finishCancelled();
+      const verification = verificationResult?.value;
+      if (cancelRequested) return finish({ status: "cancelled", error: cancelRequested });
       const ending = endingFor(outcome, verification);
       switch (ending.action) {
         case "continue":

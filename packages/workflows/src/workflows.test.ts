@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { Context } from "@temporalio/activity";
+import { ApplicationFailure } from "@temporalio/common";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -44,9 +46,23 @@ describe("agentRunWorkflow", () => {
     await env?.teardown();
   });
 
-  async function run(script: IterationOutcome[], drive?: (handle: Awaited<ReturnType<typeof env.client.workflow.start>>) => Promise<void>, verify?: Parameters<typeof mockActivities>[2]) {
+  async function run(
+    script: IterationOutcome[],
+    drive?: (handle: Awaited<ReturnType<typeof env.client.workflow.start>>) => Promise<void>,
+    verify?: Parameters<typeof mockActivities>[2],
+    plan?: AgentActivities["plan"],
+  ) {
     const calls: Record<string, unknown[]> = {};
-    const worker = await Worker.create({ connection: env.nativeConnection, taskQueue: "test", workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)), activities: mockActivities(script, calls, verify) });
+    const activities = mockActivities(script, calls, verify);
+    if (plan) activities.plan = plan;
+    const worker = await Worker.create({
+      connection: env.nativeConnection,
+      taskQueue: "test",
+      workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)),
+      activities,
+      defaultHeartbeatThrottleInterval: "5 seconds",
+      maxHeartbeatThrottleInterval: "5 seconds",
+    });
     const result = await worker.runUntil(async () => {
       const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue: "test", workflowId: `wf-${Math.random()}`, args: [input] });
       if (drive) await drive(handle);
@@ -102,5 +118,40 @@ describe("agentRunWorkflow", () => {
       await handle.signal(CANCEL_SIGNAL, { reason: "stop" });
     });
     expect(result.status).toBe("cancelled");
+  }, 60_000);
+
+  it("cancels an in-flight plan activity and finalizes with the signal reason", async () => {
+    let observedAbort = false;
+    let planStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      planStarted = resolve;
+    });
+    const cancellablePlan: AgentActivities["plan"] = async () => {
+      const activity = Context.current();
+      const signal = activity.cancellationSignal;
+      planStarted();
+      await new Promise<never>((_resolve, reject) => {
+        const heartbeat = setInterval(() => activity.heartbeat(), 50);
+        const timeout = setTimeout(() => {
+          clearInterval(heartbeat);
+          reject(ApplicationFailure.nonRetryable("Timed out waiting for activity cancellation", "NonRetryable"));
+        }, 15_000);
+        signal.addEventListener("abort", () => {
+          observedAbort = true;
+          clearInterval(heartbeat);
+          clearTimeout(timeout);
+          reject(signal.reason);
+        }, { once: true });
+      });
+      return { objective: "unreachable" };
+    };
+    const { result, calls } = await run([], async (handle) => {
+      await started;
+      await handle.signal(CANCEL_SIGNAL, { reason: "stop while planning" });
+    }, undefined, cancellablePlan);
+
+    expect(result.status).toBe("cancelled");
+    expect(observedAbort).toBe(true);
+    expect(calls.finalize![0]).toMatchObject({ status: "cancelled", error: "stop while planning" });
   }, 60_000);
 });
