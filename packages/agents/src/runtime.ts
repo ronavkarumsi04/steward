@@ -172,7 +172,7 @@ export class AgentRuntime {
 
   // ---------- 2. Plan ----------
 
-  async plan(runId: string, ctx: RunContextBundle): Promise<Plan> {
+  async plan(runId: string, ctx: RunContextBundle, signal?: AbortSignal): Promise<Plan> {
     const { run, agent } = await this.loadRun(runId);
     if (run.plan && Object.keys(run.plan).length) return Plan.parse(run.plan);
     const actor = this.actor(agent.id, runId);
@@ -186,6 +186,7 @@ export class AgentRuntime {
             { role: "user", content: `${ctx.userPrompt}\n\nBefore acting, produce a short plan as JSON matching the schema. Keep it to the fewest steps that achieve the objective.` },
           ],
           responseFormat: { type: "json_schema", name: "plan", schema: PLAN_SCHEMA as unknown as Record<string, unknown> },
+          ...(signal ? { signal } : {}),
           ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.planning) : { temperature: 0.2, maxTokens: 1500 }),
         },
@@ -235,7 +236,7 @@ export class AgentRuntime {
     return { messages, iterations, pending };
   }
 
-  async iterate(runId: string, ctx: RunContextBundle, resume?: ApprovalResumption): Promise<IterationOutcome> {
+  async iterate(runId: string, ctx: RunContextBundle, resume?: ApprovalResumption, signal?: AbortSignal): Promise<IterationOutcome> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     const scope = { ...this.scope, actor };
@@ -294,7 +295,7 @@ export class AgentRuntime {
       }
 
       // The human's yes is the authority; the record keeps both that fact and the policy reasoning behind it.
-      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: pending.stepId, toolCallId: pending.toolCallId, approvalId: pending.approvalId, decision: { decision: "allow", reason: `approved by user (${assessment.detail}); policy: ${decision.reason}`, dimension: decision.dimension, risk: decision.risk } });
+      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: pending.stepId, toolCallId: pending.toolCallId, approvalId: pending.approvalId, decision: { decision: "allow", reason: `approved by user (${assessment.detail}); policy: ${decision.reason}`, dimension: decision.dimension, risk: decision.risk } }, signal);
       if (!result.ok && result.fatal) return { kind: "failed", error: result.content, retryable: false };
       return { kind: "continue" };
     }
@@ -314,9 +315,10 @@ export class AgentRuntime {
     let toolCalls: ToolCall[] = [];
     try {
       const res = await this.s.gateway.chat(
-        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }) },
+        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }), ...(signal ? { signal } : {}) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
+      signal?.throwIfAborted();
       text = res.text;
       toolCalls = res.toolCalls;
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: { text, toolCalls, model: `${res.provider}/${res.model}`, finishReason: res.finishReason, usage: res.usage } });
@@ -324,6 +326,7 @@ export class AgentRuntime {
     } catch (e) {
       const msg = errMsg(e);
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: msg });
+      if (signal?.aborted) throw e;
       const retryable = e instanceof ProviderError ? e.retryable || e.code === "rate_limit" || e.code === "server" : false;
       if (e instanceof ProviderError && e.code === "unsupported") return { kind: "failed", error: `${msg}. Connect an AI provider in Settings → AI providers.`, retryable: false };
       return { kind: "failed", error: msg, retryable };
@@ -332,6 +335,7 @@ export class AgentRuntime {
     if (!toolCalls.length) return { kind: "done", finalText: text || "(no output)" };
 
     for (const tc of toolCalls) {
+      signal?.throwIfAborted();
       const tool = this.registry.get(tc.name);
       if (!tool || !ctx.toolNames.some((n) => matchTool(n, tc.name))) {
         const st = await this.s.runs.beginStep(this.scope, runId, { kind: "tool_call", title: `${tc.name} (unavailable)`, input: { toolCallId: tc.id, toolName: tc.name, args: tc.arguments } });
@@ -366,13 +370,14 @@ export class AgentRuntime {
       }
 
       const st = await this.s.runs.beginStep(this.scope, runId, { kind: "tool_call", title: pre?.summary ?? tc.name, input: { toolCallId: tc.id, toolName: tc.name, args } });
-      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: st.id, toolCallId: tc.id, decision });
+      const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: st.id, toolCallId: tc.id, decision }, signal);
       if (!result.ok && result.fatal) return { kind: "failed", error: result.content, retryable: false };
     }
     return { kind: "continue" };
   }
 
-  private async executeTool(tool: ToolDefinition, args: Record<string, unknown>, meta: { runId: string; agentId: string; taskId?: string; stepId: string; toolCallId: string; approvalId?: string; decision: PolicyDecision }): Promise<{ ok: boolean; content: string; fatal?: boolean }> {
+  private async executeTool(tool: ToolDefinition, args: Record<string, unknown>, meta: { runId: string; agentId: string; taskId?: string; stepId: string; toolCallId: string; approvalId?: string; decision: PolicyDecision }, signal?: AbortSignal): Promise<{ ok: boolean; content: string; fatal?: boolean }> {
+    signal?.throwIfAborted();
     const started = Date.now();
     const ctx = this.toolContext(meta.runId, meta.agentId, meta.taskId);
     const key = !tool.manifest.idempotent && tool.manifest.sideEffects === "external" ? `${meta.runId}:${meta.toolCallId}` : undefined;
@@ -385,6 +390,16 @@ export class AgentRuntime {
       }
     }
     const ac = new AbortController();
+    let rejectCancellation!: (reason?: unknown) => void;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      rejectCancellation = reject;
+    });
+    const onAbort = () => {
+      ac.abort(signal?.reason);
+      rejectCancellation(signal?.reason ?? new Error("Tool execution aborted"));
+    };
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
     // A timeout must end the call, not just request that it ends. The signal is still handed to the tool so
     // well-behaved tools can unwind, but the race below abandons a tool that ignores it instead of letting it
     // hold the run open indefinitely. Promise.race attaches handlers to both branches, so a late settle from
@@ -397,7 +412,8 @@ export class AgentRuntime {
       }, tool.manifest.timeoutMs);
     });
     try {
-      const res = await Promise.race([tool.execute(args, { ...ctx, signal: ac.signal }), timedOut]);
+      const execution = tool.execute(args, { ...ctx, signal: ac.signal });
+      const res = await (signal ? Promise.race([execution, timedOut, cancelled]) : Promise.race([execution, timedOut]));
       const content = redactSecrets(res.content).slice(0, MAX_TOOL_OUTPUT_CHARS);
       await this.s.runs.finishStep(this.scope, meta.stepId, { status: res.ok ? "succeeded" : "failed", output: { content, data: safeJson(res.data), costUsd: res.costUsd }, error: res.ok ? undefined : content.slice(0, 500) });
       await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: { content: content.slice(0, 4000), data: safeJson(res.data) }, status: res.ok ? "succeeded" : "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
@@ -408,10 +424,12 @@ export class AgentRuntime {
       const msg = redactSecrets(errMsg(e));
       await this.s.runs.finishStep(this.scope, meta.stepId, { status: "failed", error: msg });
       await this.s.runs.recordToolCall(this.scope, { runId: meta.runId, stepId: meta.stepId, toolName: tool.manifest.name, input: args, output: null, status: e instanceof ToolTimeoutError ? "timed_out" : "failed", risk: meta.decision.risk, policyDecision: meta.decision, approvalId: meta.approvalId, idempotencyKey: key, durationMs: Date.now() - started });
+      if (signal?.aborted) throw e;
       // A timeout is a failed tool call, not a fatal run: the model sees it and can choose another path.
       return { ok: false, content: msg, fatal: e instanceof BudgetExhaustedError };
     } finally {
       if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
 
@@ -437,7 +455,7 @@ export class AgentRuntime {
 
   // ---------- 4. Verify ----------
 
-  async verify(runId: string, ctx: RunContextBundle, finalText: string): Promise<Verification> {
+  async verify(runId: string, ctx: RunContextBundle, finalText: string, signal?: AbortSignal): Promise<Verification> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "verifying");
@@ -453,6 +471,7 @@ export class AgentRuntime {
             { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool activity:\n${toolSummary || "(none)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
+          ...(signal ? { signal } : {}),
           ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.review) : { temperature: 0, maxTokens: 800 }),
         },

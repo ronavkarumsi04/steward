@@ -112,6 +112,8 @@ async function main() {
       activities,
       maxConcurrentActivityTaskExecutions: settings.maxActivities,
       maxConcurrentWorkflowTaskExecutions: settings.maxWorkflows,
+      defaultHeartbeatThrottleInterval: "5 seconds",
+      maxHeartbeatThrottleInterval: "5 seconds",
       shutdownGraceTime: settings.shutdownGraceMs,
       identity: `steward-worker@${process.env.HOSTNAME ?? "local"}:${process.pid}`,
     });

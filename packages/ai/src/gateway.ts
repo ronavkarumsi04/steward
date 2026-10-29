@@ -35,6 +35,25 @@ export interface UsageRecord {
   context?: Record<string, string | undefined>;
 }
 
+interface UsageAttempt {
+  usage: Usage;
+  latencyMs: number;
+  status?: UsageRecord["status"];
+  errorCode?: string;
+}
+
+interface ExecutionResult<T> {
+  result: T;
+  usage: Usage;
+  previousAttempts?: UsageAttempt[];
+  latencyMs?: number;
+}
+
+type GatewayExecutionError = ProviderError & {
+  usageAttempts?: UsageAttempt[];
+  usageAttemptsComplete?: boolean;
+};
+
 export interface GatewayOptions {
   /** Loads enabled credentials for the calling tenant. */
   loadCredentials: () => Promise<ResolvedCredential[]>;
@@ -190,7 +209,7 @@ export class AIGateway {
   private async execute<T>(
     req: { model?: string; signal?: AbortSignal },
     opts: GatewayCallOptions,
-    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined) => Promise<{ result: T; usage: Usage }>,
+    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined) => Promise<ExecutionResult<T>>,
   ): Promise<T & { route: RouteChoice }> {
     const { routes, creds, candidates } = await this.plan(opts.policy);
     if (!routes.length) {
@@ -209,15 +228,26 @@ export class AIGateway {
         if (req.signal?.aborted) throw new ProviderError("unknown", "aborted", route.provider, false);
         const started = this.now();
         try {
-          const { result, usage } = await fn(adapter, route, model);
+          const { result, usage, previousAttempts = [], latencyMs: resultLatencyMs } = await fn(adapter, route, model);
+          for (const [index, previous] of previousAttempts.entries()) {
+            const { costUsd, estimated } = estimateCost(model, previous.usage);
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: "ok", retries: attempt + index, routingReason: route.reason, context: opts.context });
+          }
           const { costUsd, estimated } = estimateCost(model, usage);
-          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt, routingReason: route.reason, context: opts.context });
+          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: resultLatencyMs ?? this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt + previousAttempts.length, routingReason: route.reason, context: opts.context });
           this.markSuccess(cred.id);
           return Object.assign(result as object, { route }) as T & { route: RouteChoice };
         } catch (e) {
           const err = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
           lastErr = err;
-          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt, routingReason: route.reason, context: opts.context });
+          const executionError = err as GatewayExecutionError;
+          for (const [index, previous] of (executionError.usageAttempts ?? []).entries()) {
+            const { costUsd, estimated } = estimateCost(model, previous.usage);
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: previous.status ?? "ok", ...(previous.errorCode ? { errorCode: previous.errorCode } : {}), retries: attempt + index, routingReason: route.reason, context: opts.context });
+          }
+          if (!executionError.usageAttemptsComplete) {
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt + (executionError.usageAttempts?.length ?? 0), routingReason: route.reason, context: opts.context });
+          }
           if (err.code === "invalid_request" || err.code === "content_filter" || err.code === "context_length") {
             // Not a provider health problem; move to the next route without penalizing.
             break;
@@ -235,9 +265,62 @@ export class AIGateway {
   async chat(req: Omit<ChatRequest, "model"> & { model?: string }, opts: GatewayCallOptions): Promise<ChatResponse & { route: RouteChoice }> {
     const codec = new ToolNameCodec(req.tools);
     const encoded = codec.encodeRequest(req);
-    return this.execute(encoded, opts, async (adapter, route) => {
-      const res = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model }));
-      return { result: res, usage: res.usage };
+    return this.execute(encoded, opts, async (adapter, route, model) => {
+      const firstStarted = this.now();
+      const first = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model }));
+      const firstLatencyMs = this.now() - firstStarted;
+      const requestedMaxTokens = encoded.maxTokens;
+      const reasoningTokens = first.usage.reasoningTokens ?? 0;
+      const shouldRetry =
+        requestedMaxTokens !== undefined &&
+        first.text.trim() === "" &&
+        first.toolCalls.length === 0 &&
+        first.finishReason === "length" &&
+        first.usage.outputTokens > 0 &&
+        reasoningTokens >= first.usage.outputTokens * 0.8;
+
+      if (!shouldRetry) return { result: first, usage: first.usage, latencyMs: firstLatencyMs };
+
+      const retryMaxTokens = Math.min(Math.max(requestedMaxTokens * 4, 4096), model?.capabilities.maxOutputTokens ?? 16384);
+      if (retryMaxTokens <= requestedMaxTokens) {
+        const error = new ProviderError("invalid_request", `Model used its entire ${retryMaxTokens}-token output budget on reasoning and returned no answer`, route.provider, false) as GatewayExecutionError;
+        error.usageAttempts = [{ usage: first.usage, latencyMs: firstLatencyMs, status: "error", errorCode: error.code }];
+        error.usageAttemptsComplete = true;
+        throw error;
+      }
+      const retryStarted = this.now();
+      let retry: ChatResponse;
+      try {
+        retry = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model, maxTokens: retryMaxTokens }));
+      } catch (e) {
+        const error = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
+        const executionError = error as GatewayExecutionError;
+        executionError.usageAttempts = [{ usage: first.usage, latencyMs: firstLatencyMs }];
+        throw executionError;
+      }
+      const retryLatencyMs = this.now() - retryStarted;
+
+      if (retry.finishReason === "content_filter") {
+        const error = new ProviderError("content_filter", "Model response was blocked by content policy", route.provider, false) as GatewayExecutionError;
+        error.usageAttempts = [
+          { usage: first.usage, latencyMs: firstLatencyMs },
+          { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
+        ];
+        error.usageAttemptsComplete = true;
+        throw error;
+      }
+
+      if (retry.text.trim() === "" && retry.toolCalls.length === 0) {
+        const error = new ProviderError("invalid_request", `Model used its entire ${retryMaxTokens}-token output budget on reasoning and returned no answer`, route.provider, false) as GatewayExecutionError;
+        error.usageAttempts = [
+          { usage: first.usage, latencyMs: firstLatencyMs },
+          { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
+        ];
+        error.usageAttemptsComplete = true;
+        throw error;
+      }
+
+      return { result: retry, usage: retry.usage, previousAttempts: [{ usage: first.usage, latencyMs: firstLatencyMs }], latencyMs: retryLatencyMs };
     });
   }
 
