@@ -14,8 +14,8 @@ export default function OpenGraphImage() {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "#f5f4ec",
-        color: "#182d28",
+        background: "#f8f6ef",
+        color: "#17181c",
         padding: "52px 70px",
         fontFamily: "sans-serif",
       }}
@@ -31,7 +31,7 @@ export default function OpenGraphImage() {
       >
         <span style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 32, fontWeight: 700, letterSpacing: -1 }}><StewardMark size={36} />steward</span>
         <span style={{ fontSize: 13, letterSpacing: 2 }}>
-          THE COMPANY OPERATING SYSTEM
+          AN OPERATING SYSTEM FOR AI-RUN COMPANIES
         </span>
       </div>
       <div
@@ -44,9 +44,9 @@ export default function OpenGraphImage() {
           lineHeight: 1,
         }}
       >
-        <span>Big ideas.</span>
-        <span style={{ paddingLeft: 90, fontStyle: "italic", paddingTop: 12 }}>
-          Real momentum.
+        <span>Agents do the work.</span>
+        <span style={{ paddingTop: 12, color: "#2b3990" }}>
+          You keep the record.
         </span>
       </div>
       <div

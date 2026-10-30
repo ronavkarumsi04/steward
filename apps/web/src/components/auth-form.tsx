@@ -74,7 +74,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
       )}
       <div>
         <label className="label" htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" className="input" required autoComplete="email" defaultValue={invite?.email} readOnly={Boolean(invite)} aria-describedby={invite ? "email-hint" : undefined} />
+        <input id="email" name="email" type="email" className="input" required autoComplete="email" defaultValue={invite?.email ?? params.get("email") ?? undefined} readOnly={Boolean(invite)} aria-describedby={invite ? "email-hint" : undefined} />
         {invite && <p id="email-hint" className="hint">The invitation is tied to this address.</p>}
       </div>
       <div>

@@ -3,85 +3,88 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { getMeOptional, getAuthConfig } from "@/lib/server";
-import { Icon } from "@/components/icons";
 import { landingArrival } from "@/lib/arrivals";
-import { JourneyObject } from "@/components/showcase/journey-object";
-import { ScrollShowcase } from "@/components/showcase/scroll";
-import {
-  ArrowGlyph,
-  BrandMark,
-  CompanyCanvas,
-  PlanScene,
-  BuildScene,
-  VerifyScene,
-  ApprovalScene,
-  StudioArt,
-} from "@/components/showcase/scenes";
-import s from "@/components/showcase/showcase.module.css";
+import { StewardMark } from "@/components/brand";
+import { Icon } from "@/components/icons";
+import { Pad } from "@/components/work-order/pad";
+import { EntryForm } from "@/components/work-order/entry-form";
+import s from "@/components/work-order/work-order.module.css";
 
 export const metadata: Metadata = {
-  title: { absolute: "Steward — Big ideas. Real momentum." },
+  title: { absolute: "Steward — Agents do the work. You keep the record." },
   description:
-    "An AI-native operating system for building and operating companies. Bring agents, studios, workflows and company knowledge together, with you in control.",
+    "Steward is an operating system for AI-run companies. Every task becomes a work order: planned, budgeted, approved by you and filed with its evidence.",
 };
+
 const ARRIVAL = landingArrival();
-const CHAPTERS = [
+const delay = (step: number) => ({ "--enter-delay": `${ARRIVAL.delayMs(step)}ms` }) as CSSProperties;
+
+const PLAN = [
+  ["Reproduce the rounding error on staging", "Done"],
+  ["Patch the cart total and add a regression test", "Done"],
+  ["Ship the fix", "Approved by you, 14:02"],
+] as const;
+
+const COPIES = [
   {
-    id: "intent",
-    title: "Start with intent.",
-    number: "01",
-    label: "Give it direction",
-    copy: "A business starts with a point of view. Give your agents the goal, the context and the boundaries. Make the plan visible before the work begins.",
-    Scene: PlanScene,
+    id: "work",
+    colour: "White copy",
+    title: "The work",
+    copy: "Agents plan before they act. The plan, every model call and every tool call are written onto the order as they happen.",
+    rows: [
+      ["Plan", "3 steps, written before any action"],
+      ["Model calls", "6, with prompts and outputs kept"],
+      ["Tools", "repo.read, repo.patch, browser.check"],
+      ["Verified by", "Test output and a browser trace"],
+    ],
   },
   {
-    id: "build",
-    title: "Make it tangible.",
-    number: "02",
-    label: "Build in context",
-    copy: "Move between Site Studio and Code IDE. Work with the design, inspect the source and review proposed changes in your company’s workspace.",
-    Scene: BuildScene,
+    id: "approval",
+    colour: "Canary copy",
+    title: "The approval",
+    copy: "You decide how far agents go. Set an autonomy level, cap budgets per category, and gate the steps that matter.",
+    rows: [
+      ["Autonomy", "Level 2 of 4: ask before anything ships"],
+      ["Budget", "$5.00 per run, engineering"],
+      ["Gate", "Deploys and outbound email wait for you"],
+      ["Decision", "Approved, with the plan in front of you"],
+    ],
   },
   {
-    id: "verify",
-    title: "Evidence over instinct.",
-    number: "03",
-    label: "Inspect the work",
-    copy: "Use browser traces, test output and run records to understand what happened. A finished-looking screen is the start of verification, not the end.",
-    Scene: VerifyScene,
+    id: "record",
+    colour: "Pink copy",
+    title: "The record",
+    copy: "Nothing happens off the books. The timeline, the cost and the approval that allowed each step stay on file, and cancel really stops a run.",
+    rows: [
+      ["14:01:12", "Plan accepted, run started"],
+      ["14:01:40", "Patch written, tests passed"],
+      ["14:02:05", "Approval granted by you"],
+      ["Total", "$0.41, 9 calls, 0 retries"],
+    ],
   },
-  {
-    id: "decide",
-    title: "You call the shots.",
-    number: "04",
-    label: "Keep control",
-    copy: "Policies and budgets define the room to act. Approvals govern the consequential steps. Inspect the proposal before a change leaves your workspace.",
-    Scene: ApprovalScene,
-  },
-];
-const STUDIOS = [
-  {
-    id: "site-studio",
-    name: "A place to build.",
-    tag: "SITE STUDIO + CODE IDE",
-    copy: "Visual editing, owned source, versions and proposed changes. Design and engineering can share the same starting point.",
-    kind: "site" as const,
-  },
-  {
-    id: "workflow-studio",
-    name: "A way to operate.",
-    tag: "WORKFLOW STUDIO + AGENTS",
-    copy: "Turn repeatable work into inspectable workflows. Connect agents and tools behind explicit policies and approval gates.",
-    kind: "workflow" as const,
-  },
-  {
-    id: "company-memory",
-    name: "A memory to grow.",
-    tag: "KNOWLEDGE GRAPH + MEMORY",
-    copy: "Keep company context close to the work: facts, relationships, provenance and memories that can be reviewed and corrected.",
-    kind: "memory" as const,
-  },
-];
+] as const;
+
+const DESKS = [
+  ["Agents", "Seven per company: orchestrator, engineering, marketing, sales, support, research and finance, each with its own model routing, tools and budget."],
+  ["Run Inspector", "Every run as a timeline: the plan, each model and tool call, what it cost and who approved it."],
+  ["Site Studio", "A company website built from plain blocks, previewed by the same renderer that publishes it, with numbered versions."],
+  ["Code IDE", "Your repository, read through your own GitHub connection. Steward keeps no copy of it."],
+  ["Browser", "A real Chromium an agent can drive while you watch, limited to seven actions and stoppable mid-flight."],
+  ["Workflows", "Standing work, drawn: a trigger, the agent that does it and the ceiling it works under."],
+  ["Knowledge & memory", "Projects, decisions and documents in one graph, plus memories your team can review and correct."],
+  ["MCP marketplace", "Install a Model Context Protocol server and see exactly what it may do before anything can call it."],
+  ["Providers", "Bring your own keys for 25+ model provider families. Credentials are encrypted at rest."],
+  ["Integrations", "GitHub, Slack, Stripe, Vercel, Resend and more, through OAuth or API keys."],
+] as const;
+
+const CONDITIONS = [
+  ["Autonomy is yours to set.", "Each company runs at a level from 0 to 4, from suggest-only to act-and-report."],
+  ["Consequential steps wait.", "Every tool carries a risk class; critical actions stop at an approval gate."],
+  ["Budgets are ceilings.", "Spend is capped per category, so a run cannot quietly cost more than you allowed."],
+  ["Cancel means stop.", "Cancelling interrupts in-flight model and tool calls and skips every later side effect."],
+  ["Companies are sealed.", "Every query and background job carries an explicit organization and company scope."],
+  ["Work survives restarts.", "Runs execute as durable Temporal workflows with retries, so a crash resumes the order."],
+] as const;
 
 export default async function Landing() {
   const [me, auth] = await Promise.all([getMeOptional(), getAuthConfig()]);
@@ -89,344 +92,244 @@ export default async function Landing() {
   const open = auth?.signupOpen === true;
   const entry = open ? "/register" : "/login";
   const entryLabel = open ? "Create your company" : "Enter workspace";
+  const entryNote = open
+    ? "Free to start. Bring your own model keys."
+    : auth
+      ? "Hosted access is by invitation. Invited? Your link creates your account."
+      : "We couldn't check hosted access right now. Sign in still works.";
+
   return (
-    <ScrollShowcase className={s.home}>
-      <a className={s.skipLink} href="#main">
+    <Pad className={`paper ${s.home}`}>
+      <a className={s.skip} href="#main">
         Skip to content
       </a>
-      <header className={s.header}>
-        <nav className={s.nav} aria-label="Primary">
+      <header className={s.binding}>
+        <nav className={s.bindingInner} aria-label="Primary">
           <Link href="/" className={s.brand} aria-label="Steward home">
-            <BrandMark /> steward
+            <StewardMark size={22} /> Steward
           </Link>
-          <div className={s.navMiddle}>
-            <a href="#story">The story</a>
-            <a href="#studios">The workspace</a>
-            <a href="#control">Your control</a>
+          <div className={s.navLinks}>
+            <a href="#how">How it works</a>
+            <a href="#workspace">The workspace</a>
+            <a href="#conditions">Conditions</a>
           </div>
-          <Link href={entry} className={s.navCta}>
-            {open ? "Get started" : "Sign in"}
-            <Icon.ArrowRight size={15} />
-          </Link>
+          <div className={s.navActions}>
+            <Link href="/login" className={s.navSignIn}>
+              Sign in
+            </Link>
+            {open ? (
+              <Link href="/register" className={s.navCta}>
+                Create your company
+              </Link>
+            ) : (
+              <Link href="/login" className={s.navCta}>
+                Enter workspace
+              </Link>
+            )}
+          </div>
         </nav>
       </header>
-      <main id="main">
-        <section className={s.hero} aria-labelledby="hero-title" data-hero>
-          <div className={`${s.heroEyebrow} rise-in`}>
-            <span className={s.tinyStar}>✳︎</span> THE COMPANY OPERATING SYSTEM{" "}
-            <span className={s.edition}>BUILT FOR WHAT’S NEXT / 001</span>
-          </div>
-          <h1
-            data-sc-copy
-            id="hero-title"
-            className={`${s.heroTitle} rise-in`}
-            style={
-              { "--enter-delay": `${ARRIVAL.delayMs(1)}ms` } as CSSProperties
-            }
-          >
-            Big ideas.
-            <br />
-            <span>
-              Real <em>momentum.</em>
-            </span>
-          </h1>
-          <div
-            className={`${s.heroBottom} rise-in`}
-            style={
-              { "--enter-delay": `${ARRIVAL.delayMs(2)}ms` } as CSSProperties
-            }
-          >
-            <p data-sc-copy>
-              One place to build and operate your company.
-              <br />
-              AI agents, connected tools, and you at the controls.
-            </p>
-            <div className={s.heroActions}>
-              <Link href={entry} className={s.button}>
-                {entryLabel}
-                <Icon.ArrowRight size={18} />
-              </Link>
-              <a className={s.textLink} href="#story">
-                Explore the story <span>↓</span>
-              </a>
-            </div>
-          </div>
-          <div className={s.heroMeta}>
-            <span>BUILT BY RONAV KARUMSI.</span>
-            <span>
-              {open
-                ? "YOUR COMPANY. YOUR CONTROL."
-                : auth
-                  ? "HOSTED ACCESS BY INVITATION."
-                  : "HOSTED ACCESS STATUS UNAVAILABLE."}
-            </span>
-          </div>
-        </section>
-        <section
-          className={s.zoom}
-          data-zoom
-          data-sc-act="pin"
-          aria-label="A closer look at the company workspace"
-        >
-          <div className={s.zoomSticky} data-sc-stage>
-            <div className={s.zoomBackdrop} aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className={s.orbitLabel}>
-              An idea.
-              <br />
-              <em>A whole operating system.</em>
-              <span>
-                <ArrowGlyph direction="down-right" />
-              </span>
-            </div>
-            <div className={s.canvasTransform}>
-              <CompanyCanvas />
-            </div>
 
-            <span className={s.canvasDisclaimer}>
-              Illustrative product preview · not a live company
-            </span>
-          </div>
-        </section>
-        <section className={s.bridge}>
-          <span className={s.eyebrow}>LESS FRAGMENTATION. MORE FORWARD.</span>
-          <h2 data-sc-copy>
-            Your company doesn’t
-            <br />
-            happen in <em>one tab.</em>
-          </h2>
-          <div className={s.bridgeBottom}>
-            <span className={s.bridgeSymbol} aria-hidden="true">
-              ↳
-            </span>
-            <p data-sc-copy>
-              Give the work a shared home. Bring your agents, your context and
-              your decisions into one connected system.
-            </p>
-            <a
-              href="#story"
-              className={s.circleLink}
-              aria-label="Explore the workflow story"
-            >
-              <span aria-hidden="true">↓</span>
-            </a>
-          </div>
-        </section>
-        <section
-          className={s.story}
-          id="story"
-          data-story
-          data-sc-act="pin"
-          aria-label="From idea to authorized action"
-        >
-          <div className={s.storySticky} data-sc-stage>
-            <div className={s.storyIntro}>
-              <span className={s.eyebrow}>THE STEWARD WAY</span>
-              <h2 data-sc-copy>
-                From “what if”
-                <br />
-                to <em>what’s next.</em>
-              </h2>
-              <nav className={s.chapterNav} aria-label="Workflow chapters">
-                {CHAPTERS.map((chapter, index) => (
-                  <a
-                    href={`#${chapter.id}`}
-                    data-chapter-link={index}
-                    key={chapter.id}
-                  >
-                    <span>{chapter.number}</span>
-                    {chapter.label}
-                    <span className={s.chapterArrow}>
-                      <ArrowGlyph />
-                    </span>
-                  </a>
-                ))}
-              </nav>
-              <div className={s.storyMeter} aria-hidden="true">
-                <span />
-              </div>
-              <p data-sc-copy className={s.storyDisclaimer}>
-                An illustrated journey through Steward’s tools.
-                <br />
-                Execution depends on your configured services.
+      <main id="main" className={s.pad}>
+        <section className={`${s.set} rise-in`} aria-labelledby="hero-title" data-hero>
+          <div className={s.sheet}>
+            <aside className={s.stub} aria-label="Order details">
+              <p>
+                <span className={s.fieldLabel}>No.</span>
+                <span className={s.serial}>000412</span>
               </p>
-            </div>
-            <div className={s.chapterStage}>
-              <JourneyObject />
-              {CHAPTERS.map(({ id, title, copy, Scene, number }) => (
-                <article
-                  className={s.chapter}
-                  id={id}
-                  key={id}
-                  data-chapter-panel
-                >
-                  <div className={s.chapterCopy}>
-                    <span>{number} / FOUR CHAPTERS</span>
-                    <h3 data-sc-copy>{title}</h3>
-                    <p data-sc-copy>{copy}</p>
+              <p>
+                <span className={s.fieldLabel}>Filed</span>
+                <span className={s.carbon}>Oct 29</span>
+              </p>
+              <ul className={s.copyKey}>
+                <li data-copy="work">White · the work</li>
+                <li data-copy="approval">Canary · the approval</li>
+                <li data-copy="record">Pink · the record</li>
+              </ul>
+              <StewardMark size={40} className={s.stubMark} />
+            </aside>
+            <div className={s.perf} aria-hidden="true" />
+            <div className={s.body}>
+              <div className={s.formHead}>
+                <span>Work order</span>
+                <span>Form STW-1 · An operating system for AI-run companies</span>
+              </div>
+              <h1 id="hero-title" className={`${s.h1} rise-in`} style={delay(1)}>
+                Agents do the work. <span>You keep the record.</span>
+              </h1>
+              <p className={`${s.lede} rise-in`} style={delay(2)}>
+                Steward runs your company’s engineering, marketing, sales and operations with AI agents. Every task becomes a work order: planned, budgeted, approved by you and filed with its evidence.
+              </p>
+              <div className={s.fieldsWrap}>
+                <dl className={s.fields}>
+                  <div className={`${s.field} ${s.span3}`}>
+                    <dt className={s.fieldLabel}>Instruction</dt>
+                    <dd className={s.carbon}>Fix the checkout bug before Friday’s launch, then tell me what changed.</dd>
                   </div>
-                  <Scene />
+                  <div className={s.field}>
+                    <dt className={s.fieldLabel}>Assigned to</dt>
+                    <dd className={s.carbon}>Engineering agent</dd>
+                  </div>
+                  <div className={`${s.field} ${s.span2} ${s.planField}`}>
+                    <dt className={s.fieldLabel}>Plan</dt>
+                    <dd>
+                      <ol className={s.plan}>
+                        {PLAN.map(([step, status]) => (
+                          <li key={step}>
+                            <span className={s.carbon}>{step}</span>
+                            <span className={s.status}>{status}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </dd>
+                  </div>
+                  <div className={s.field}>
+                    <dt className={s.fieldLabel}>Evidence</dt>
+                    <dd className={s.carbon}>6 model calls, 3 tool calls, 1 browser trace</dd>
+                  </div>
+                  <div className={s.field}>
+                    <dt className={s.fieldLabel}>Cost</dt>
+                    <dd className={s.carbon}>$0.41 of a $5.00 budget</dd>
+                  </div>
+                </dl>
+                <div className={s.stamp} aria-hidden="true">
+                  <strong>Approved</strong>
+                  <span>Oct 29 · by you</span>
+                </div>
+              </div>
+              <EntryForm id="hero-email" action={entry} label={entryLabel} note={entryNote} />
+              <p className={s.footnote}>Illustration of a Steward work order, not a live run. In the product, every step is recorded.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="how" className={s.leaf} aria-labelledby="how-title">
+          <div className={s.leafHead}>
+            <p className={s.kicker}>How a work order moves</p>
+            <h2 id="how-title" className={s.h2}>
+              Written once. <span>Filed three times.</span>
+            </h2>
+            <p className={s.sectionLede}>Pull any copy forward. Each one is a view of the same run, the way carbon copies are the same order.</p>
+          </div>
+          <div className={s.copyDesk}>
+            <fieldset className={s.copyTabs}>
+              <legend className={s.fieldLabel}>Show copy</legend>
+              {COPIES.map((c) => (
+                <label key={c.id} className={s.copyTab} data-copy={c.id}>
+                  <input type="radio" name="copy" value={c.id} id={`copy-${c.id}`} defaultChecked={c.id === "work"} className={s.copyRadio} />
+                  <span className={s.swatch} aria-hidden="true" />
+                  <span>
+                    <span className={s.copyTabColour}>{c.colour}</span>
+                    {c.title}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <div className={s.copies}>
+              {COPIES.map((c, index) => (
+                <article key={c.id} className={s.copy} data-copy={c.id} style={{ "--i": index } as CSSProperties} aria-labelledby={`copy-${c.id}-title`}>
+                  <div className={s.copyHead}>
+                    <span className={s.fieldLabel}>{c.colour} · No. 000412</span>
+                  </div>
+                  <h3 id={`copy-${c.id}-title`} className={s.h3}>
+                    {c.title}
+                  </h3>
+                  <p>{c.copy}</p>
+                  <dl className={s.copyRows}>
+                    {c.rows.map(([k, v]) => (
+                      <div key={k}>
+                        <dt className={s.fieldLabel}>{k}</dt>
+                        <dd className={s.carbon}>{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 </article>
               ))}
             </div>
           </div>
         </section>
-        <section
-          className={s.studios}
-          id="studios"
-          data-rail
-          data-sc-act="pan"
-          aria-labelledby="studios-title"
-        >
-          <div className={s.railSticky} data-sc-stage>
-            <div className={s.studioHeading}>
-              <div>
-                <span className={s.eyebrow}>
-                  ONE SYSTEM. MANY WAYS FORWARD.
-                </span>
-                <h2 data-sc-copy id="studios-title">
-                  Space for your
-                  <br />
-                  <em>whole company.</em>
-                </h2>
-              </div>
-              <div className={s.studioNav}>
-                <span>
-                  EXPLORE THE WORKSPACE <ArrowGlyph />
-                </span>
-                <nav aria-label="Workspace showcase">
-                  {STUDIOS.map((studio, index) => (
-                    <a
-                      key={studio.id}
-                      href={`#${studio.id}`}
-                      data-rail-link={index}
-                      aria-label={`0${index + 1}: Explore ${studio.tag}`}
-                    >
-                      0{index + 1}
-                    </a>
-                  ))}
-                </nav>
-              </div>
-            </div>
-            <div className={s.railViewport}>
-              <div className={s.studioTrack} data-track data-sc-pan>
-                {STUDIOS.map((studio, index) => (
-                  <article
-                    className={s.studioCard}
-                    key={studio.id}
-                    id={studio.id}
-                  >
-                    <div className={s.studioCardTop}>
-                      <span>{studio.tag}</span>
-                      <span>0{index + 1} / 03</span>
-                    </div>
-                    <StudioArt kind={studio.kind} />
-                    <div className={s.studioCardCopy}>
-                      <h3 data-sc-copy>{studio.name}</h3>
-                      <p data-sc-copy>{studio.copy}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className={s.railMeter} aria-hidden="true">
-              <span />
-            </div>
-          </div>
-        </section>
-        <section
-          className={s.control}
-          id="control"
-          aria-labelledby="control-title"
-        >
-          <div className={s.controlTop}>
-            <span className={s.eyebrow}>AUTONOMY NEEDS A FOUNDATION.</span>
-            <h2 data-sc-copy id="control-title">
-              Ambitious by nature.
-              <br />
-              <em>Accountable by design.</em>
+
+        <section id="workspace" className={s.leaf} aria-labelledby="workspace-title">
+          <div className={s.leafHead}>
+            <p className={s.kicker}>The order book</p>
+            <h2 id="workspace-title" className={s.h2}>
+              One workspace. <span>Every desk on it.</span>
             </h2>
-            <p data-sc-copy>
-              Give your company room to move without losing sight of the work.
-            </p>
+            <p className={s.sectionLede}>What an agent can be handed, and where you inspect what it did.</p>
           </div>
-          <div className={s.controlGrid}>
-            {[
-              [
-                Icon.Approvals,
-                "You set the boundaries.",
-                "Per-company policies, budgets and approval gates define what your agents are authorized to do.",
-              ],
-              [
-                Icon.Eye,
-                "The record stays with you.",
-                "Inspect runs, steps, tool calls and decisions. Every step is recorded so you can trace the work and diagnose failures.",
-              ],
-              [
-                Icon.Server,
-                "Your stack. Your choice.",
-                "Connect your model providers and integrations. Keep company permissions scoped and credentials encrypted at rest.",
-              ],
-            ].map(([Glyph, title, copy]) => {
-              const G = Glyph as typeof Icon.Eye;
-              return (
-                <article key={title as string}>
-                  <G size={24} />
-                  <h3 data-sc-copy>{title as string}</h3>
-                  <p data-sc-copy>{copy as string}</p>
-                </article>
-              );
-            })}
-          </div>
+          <table className={s.ledger}>
+            <caption className={s.srOnly}>Desks in every Steward company</caption>
+            <thead>
+              <tr>
+                <th scope="col">Line</th>
+                <th scope="col">Desk</th>
+                <th scope="col">What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DESKS.map(([desk, what], index) => (
+                <tr key={desk}>
+                  <td className={s.lineNo}>{String(index + 1).padStart(2, "0")}</td>
+                  <th scope="row">{desk}</th>
+                  <td>{what}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className={s.ledgerNote}>Hosted beta: accounts, organizations and workspaces are live. Hosted agent execution is still being brought online.</p>
         </section>
-        <section className={s.finalCta}>
-          <span className={s.eyebrow}>
-            FOR THE THING YOU CAN’T STOP THINKING ABOUT.
-          </span>
-          <h2 data-sc-copy>
-            Let’s give it
-            <br />
-            <em>some momentum.</em>
-            <span aria-hidden="true">
-              <ArrowGlyph />
-            </span>
-          </h2>
-          <div className={s.finalBottom}>
-            <p data-sc-copy>
-              The idea is yours.
-              <br />
-              Make Steward your place to move it forward.
-            </p>
-            <Link href={entry} className={s.button}>
-              {entryLabel}
-              <Icon.ArrowRight size={20} />
-            </Link>
+
+        <section id="conditions" className={s.leaf} aria-labelledby="conditions-title">
+          <div className={s.leafHead}>
+            <p className={s.kicker}>Printed on the back of every order</p>
+            <h2 id="conditions-title" className={s.h2}>
+              Conditions. <span>Not fine print.</span>
+            </h2>
           </div>
+          <ol className={s.conditions}>
+            {CONDITIONS.map(([title, copy]) => (
+              <li key={title}>
+                <h3 className={s.h3}>{title}</h3>
+                <p>{copy}</p>
+              </li>
+            ))}
+          </ol>
+          <p className={s.imprint}>
+            <span className={s.fieldLabel}>Built with</span> Next.js, Hono, Temporal, PostgreSQL with pgvector, Redis and Playwright.{" "}
+            <a href="/api/v1/openapi.json">API reference</a>
+          </p>
+        </section>
+
+        <section className={`${s.leaf} ${s.closing}`} aria-labelledby="closing-title">
+          <div className={s.closingHead}>
+            <span className={s.fieldLabel}>No.</span>
+            <span className={s.serial}>000413</span>
+          </div>
+          <h2 id="closing-title" className={s.h2}>
+            The next order is <span>yours to write.</span>
+          </h2>
+          <div className={s.blankInstruction} aria-hidden="true">
+            <span className={s.fieldLabel}>Instruction</span>
+            <span className={s.carbon}>Your first instruction goes here.</span>
+          </div>
+          <EntryForm id="closing-email" action={entry} label={entryLabel} note={entryNote} />
         </section>
       </main>
+
       <footer className={s.footer}>
-        <Link href="/" className={s.brand}>
-          <BrandMark /> steward
-        </Link>
-        <span>
-          A COMPANY OS, BUILT WITH INTENT.
-          <br />© 2026 Ronav Karumsi. All rights reserved.
-        </span>
+        <span>Form STW-1 · © 2026 Steward. All rights reserved.</span>
         <nav aria-label="Footer">
-          <a href="/api/v1/openapi.json">
-            API reference <ArrowGlyph />
-          </a>
+          <Link href="/legal">Trust &amp; legal</Link>
           <Link href="/legal/terms">Terms</Link>
           <Link href="/legal/privacy">Privacy</Link>
+          <a href="/api/v1/openapi.json">API reference</a>
           <Link href="/login">Sign in</Link>
+          <a href="#main">
+            Back to top <Icon.ArrowRight size={14} className={s.up} />
+          </a>
         </nav>
-        <a href="#main" className={s.backTop}>
-          BACK TO TOP ↑
-        </a>
       </footer>
-    </ScrollShowcase>
+    </Pad>
   );
 }

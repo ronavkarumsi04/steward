@@ -1,3 +1,5 @@
+> Superseded on 2026-10-29 by the work-order redesign (`apps/web/DESIGN.md`). Kept as history.
+
 # Public homepage redesign — verification record
 
 Baseline: current protected `main`, `71c82ca7a6a873c6cb8083b62de562d81f0b56cb`, inspected on 2026-10-02.

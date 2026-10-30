@@ -10,7 +10,7 @@ export default async function LegalLayout({ children }: { children: ReactNode })
   const business = docs.filter((d) => d.audience === "business-customers");
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="paper min-h-screen">
       <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-bg shadow-e1">
         <div className="mx-auto flex h-13 max-w-[1360px] items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 font-black tracking-tight">

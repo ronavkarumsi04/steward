@@ -1,0 +1,4 @@
+
+# Impeccable working files; only surface briefs are durable
+.impeccable/*
+!.impeccable/briefs/
