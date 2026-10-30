@@ -479,6 +479,19 @@
   }
 
   .nb-command-item-active,
+  .nb-command-item[aria-selected="true"],
+  .nav-item[aria-current="page"],
+  .segmented > [aria-current="page"],
+  .segmented > [aria-pressed="true"],
+  .segmented > [data-active="true"] {
+    /* Canary is light in both themes, so text on it always uses light-stock ink. */
+    --fg: #17181c;
+    --fg-2: #34353b;
+    --muted: #45464c;
+    --faint: #45464c;
+  }
+
+  .nb-command-item-active,
   .nb-command-item[aria-selected="true"] {
     background: var(--yellow);
     color: #111111;
