@@ -1,11 +1,11 @@
 # Steward identity
 
-Steward is a proprietary AI-native company operating system developed by Ronav Karumsi.
+Steward is a proprietary AI-native company operating system built by the Steward team.
 
-The logo is a connected folded S. It expresses continuity: intent, source, evidence and decisions stay together. Use `StewardMark` from the shared brand component, or `apps/web/public/brand/steward-symbol.svg`. Preserve its proportions and negative space. At small sizes, use the symbol alone. Do not add a shield, cube container, glow or drop shadow to the mark.
+The mark is a work order with its two carbon copies stacked behind it: every action is written once and filed as the work, the approval and the record. Use `StewardMark` from the shared brand component, or `apps/web/public/brand/steward-symbol.svg`. It is a single even-odd path; render it in one colour, never with a glow, container or shadow. At small sizes use the symbol alone.
 
-Shared palette: warm paper `#f5f4ec`, forest ink `#182d28`, mint `#d9edc8`, lime `#dcff9c`. The approved public typography uses a large sans headline with an editorial serif emphasis. Auth and legal pages carry that editorial identity; authenticated workspaces use the same palette, mark, restrained borders and soft elevation with compact, readable table/editor metrics. Dark mode uses forest panels and mint accents. Status colors retain their semantic meaning. Embedded third-party sites and provider interfaces remain outside Steward's visual ownership.
+Public surfaces (landing, access and legal pages) use the work-order world documented in `apps/web/DESIGN.md`: paper stock, near-black printed ink, carbon-blue fill, canary and pink copies, and red reserved for serial numbers and approvals. Type is Archivo (expanded display, condensed form labels) with IBM Plex Mono for filled-in carbon text. The authenticated workspace will move to the same world in its own redesign; until then it keeps its existing tokens. Status colours retain their semantic meaning. Embedded third-party sites and provider interfaces remain outside Steward's visual ownership.
 
-Motion follows work: the existing perspective zoom brings company context closer; the folio stays physically continuous through the story; horizontal traversal reveals the breadth of the workspace. Anchor clicks travel smoothly, page changes fade briefly, and reduced motion keeps every destination and piece of content available. Public product scenes are illustrations, not verified live runs.
+Motion is restrained: an approval stamp lands once, a carbon copy lifts when pulled forward, and reduced motion removes both while keeping every destination and piece of content. Public product scenes are illustrations, not verified live runs.
 
-Copyright © 2026 Ronav Karumsi. All rights reserved. Third-party components retain their own licences.
+Copyright © 2026 Steward. All rights reserved. Third-party components retain their own licences.

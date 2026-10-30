@@ -227,7 +227,8 @@ describe("proprietary identity revision", () => {
     const terms = JSON.stringify(resolveDocument(getDocument("terms")!, cfg));
     const notices = JSON.stringify(resolveDocument(getDocument("third-party-notices")!, cfg));
     expect(terms).toContain("proprietary, closed-source");
-    expect(terms).toContain("Ronav Karumsi");
+    expect(terms).toContain("the Steward team");
+    expect(terms).not.toContain("Ronav");
     expect(terms).not.toContain("maintainers");
     expect(terms).not.toContain("Apache");
     expect(notices).toContain("Third-party license grants and required notices remain intact");

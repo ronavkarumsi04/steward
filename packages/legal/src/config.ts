@@ -58,8 +58,8 @@ export function legalConfigFromEnv(processEnv: NodeJS.ProcessEnv = process.env):
     // No incorporated entity exists today; the documents say exactly that rather than implying one.
     operator: e.entity
       ? `${e.entity}, which operates the hosted Steward service`
-      : "Ronav Karumsi, who operates the hosted Steward service",
-    operatorName: e.entity ?? "Ronav Karumsi",
+      : "the Steward team, which operates the hosted Steward service",
+    operatorName: e.entity ?? "the Steward team",
     legalEntityName: e.entity,
     legalEntityAddress: e.address,
     contactEmail: e.email,
