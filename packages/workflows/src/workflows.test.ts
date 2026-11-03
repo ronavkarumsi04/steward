@@ -55,16 +55,19 @@ describe("agentRunWorkflow", () => {
     const calls: Record<string, unknown[]> = {};
     const activities = mockActivities(script, calls, verify);
     if (plan) activities.plan = plan;
+    // One task queue per run: if a test times out, its still-registered worker must not make the
+    // next Worker.create fail with "overlapping worker task types on the same task queue".
+    const taskQueue = `test-${Math.random().toString(36).slice(2)}`;
     const worker = await Worker.create({
       connection: env.nativeConnection,
-      taskQueue: "test",
+      taskQueue,
       workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)),
       activities,
       defaultHeartbeatThrottleInterval: "5 seconds",
       maxHeartbeatThrottleInterval: "5 seconds",
     });
     const result = await worker.runUntil(async () => {
-      const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue: "test", workflowId: `wf-${Math.random()}`, args: [input] });
+      const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue, workflowId: `wf-${Math.random()}`, args: [input] });
       if (drive) await drive(handle);
       return handle.result();
     });
