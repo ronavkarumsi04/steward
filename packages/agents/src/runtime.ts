@@ -88,30 +88,38 @@ export function verificationEvidence(steps: readonly LedgerStep[], calls: readon
     if (o && typeof o === "object" && "content" in o && typeof (o as { content: unknown }).content === "string") return (o as { content: string }).content;
     return o;
   };
+  // Tool output is data a third party may have written (a fetched page, an email). It is fenced here, after
+  // truncation, so a cut can never remove the closing marker and promote the page's text to instructions.
+  const fence = (text: string) => `<untrusted_content source="tool output">${text.replace(/<\/?untrusted_content[^>]*>/g, "")}</untrusted_content>`;
   const lines: string[] = [];
   const byStep = new Map(calls.map((c) => [c.stepId, c] as const));
   for (const s of steps) {
-    if (s.kind === "approval") lines.push(`- approval: ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`);
-    if (s.kind !== "tool_call") continue;
+    if (s.kind !== "tool_call" && s.kind !== "approval") continue;
+    // An approved call is recorded against its approval step, so the approval and the call it unlocked read as one line.
     const c = byStep.get(s.id);
+    const head = s.kind === "approval" ? `- approval: ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}` : null;
     if (!c) {
-      lines.push(`- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`);
+      lines.push(head ?? `- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`);
       continue;
     }
     const half = Math.floor(VERIFY_CALL_CHARS / 2);
-    lines.push(`- ${c.toolName}(${compact(c.input, half)}) → ${c.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""} → ${compact(outputOf(c.output), half) || "(no output)"}`);
+    const out = compact(outputOf(c.output), half);
+    const call = `${c.toolName}(${compact(c.input, half)}) → ${c.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""} → ${out ? fence(out) : "(no output)"}`;
+    lines.push(head ? `${head}; ${call}` : `- ${call}`);
   }
+  // Over budget, the most recent calls stay: the artefact that closes a task is written last, after the research.
   let total = 0;
   const kept: string[] = [];
-  for (const line of lines) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
     if (total + line.length > VERIFY_LEDGER_CHARS) {
-      kept.push(`- … ${lines.length - kept.length} more call(s) omitted for length`);
+      kept.push(`- … ${i + 1} earlier call(s) omitted for length`);
       break;
     }
     kept.push(line);
     total += line.length + 1;
   }
-  return kept.join("\n");
+  return kept.reverse().join("\n");
 }
 
 /**
