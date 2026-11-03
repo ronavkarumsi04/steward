@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   title: { default: "Steward", template: "%s · Steward" },
   description: DESCRIPTION,
   applicationName: "Steward",
+  appleWebApp: { capable: true, title: "Steward", statusBarStyle: "black-translucent" },
   openGraph: { type: "website", siteName: "Steward", title: "Steward", description: DESCRIPTION, url: "/" },
   twitter: { card: "summary_large_image", title: "Steward", description: DESCRIPTION },
 };
