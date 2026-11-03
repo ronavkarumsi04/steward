@@ -47,7 +47,8 @@ test("register → onboarding → dashboard → tasks → settings → providers
 
   // Dashboard renders durable state seeded by company creation, including the onboarding profile.
   await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
-  await expect(page.getByText("A weekly analytics digest for small online stores.")).toBeVisible();
+  // Exact: the launch-kit run that creation starts quotes the idea inside its instruction too.
+  await expect(page.getByText("A weekly analytics digest for small online stores.", { exact: true })).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Build" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
