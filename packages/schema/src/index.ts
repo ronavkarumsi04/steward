@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BrandKit, emptyBrandKit } from "./brand.js";
 
 // ---------- Tenancy ----------
 export const Role = z.enum(["owner", "admin", "member", "viewer"]);
@@ -483,6 +484,8 @@ export const CompanyProfile = z.object({
   goals: z.array(z.object({ title: z.string(), metric: z.string().default(""), target: z.string().default(""), horizon: z.string().default("") })).default([]),
   constraints: z.array(z.string()).default([]),
   techStack: z.array(z.string()).default([]),
+  /** The brand kit every surface reuses; absent on profiles saved before it existed, so it defaults. */
+  brand: BrandKit.default(emptyBrandKit),
 });
 export type CompanyProfile = z.infer<typeof CompanyProfile>;
 
@@ -541,4 +544,5 @@ export function verificationVerdict(v: { passed?: boolean | null; verdict?: Veri
 
 /** The site model — the company's own website as durable rows rather than generated markup (ADR-0016). */
 export * from "./site.js";
+export * from "./brand.js";
 export * from "./overclock.js";

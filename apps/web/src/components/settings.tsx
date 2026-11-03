@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel } from "@steward/schema";
+import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
@@ -65,7 +65,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const body: CompanyProfile = {
-      ...(profile ?? { name: company.name, tagline: "", description: "", stage: "idea", businessModel: "", targetCustomers: [], valueProposition: "", products: [], competitors: [], channels: [], brandVoice: "", goals: [], constraints: [], techStack: [] }),
+      ...(profile ?? { name: company.name, tagline: "", description: "", stage: "idea", businessModel: "", targetCustomers: [], valueProposition: "", products: [], competitors: [], channels: [], brandVoice: "", goals: [], constraints: [], techStack: [], brand: emptyBrandKit() }),
       name: String(fd.get("pname") || company.name),
       tagline: String(fd.get("tagline") ?? ""),
       description: String(fd.get("description") ?? ""),

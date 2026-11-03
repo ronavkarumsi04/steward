@@ -3,7 +3,7 @@ import { BudgetExhaustedError } from "@steward/core";
 import { earningRule, expiryFor } from "@steward/memory";
 import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
 import { redactSecrets } from "@steward/crypto";
-import { PolicyRule, RoutingPolicy, VerificationVerdict, effectiveOverclock, phaseRequest, skillContext, type OverclockConfig, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest } from "@steward/schema";
+import { PolicyRule, RoutingPolicy, VerificationVerdict, effectiveOverclock, phaseRequest, skillContext, type OverclockConfig, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest, BrandKit, brandKitDecided, brandVoiceBrief } from "@steward/schema";
 import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } from "@steward/tools";
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
@@ -133,6 +133,10 @@ export class AgentRuntime {
       const sections: string[] = [];
       sections.push(`# Company: ${company.name}`);
       if (profile) sections.push(`Profile:\n${JSON.stringify(profile, null, 1).slice(0, 6000)}`);
+      const brand = BrandKit.safeParse((profile as { brand?: unknown } | undefined)?.brand ?? {});
+      if (brand.success && brandKitDecided(brand.data)) {
+        sections.push(`Brand kit (every document, page, post and email must sound and look like this):\n${brandVoiceBrief(brand.data, profile?.name || company.name)}`);
+      }
       if (playbooks.length) {
         const playbookBlock = playbooks.map((p) => `## ${p.title} (v${p.version}${p.projectId ? ", project-specific" : ", company-wide"})\n${p.content.slice(0, 3500)}`).join("\n\n").slice(0, 14000);
         sections.push(`Company playbooks (founder-managed operating instructions; follow them unless they conflict with Steward's safety, policy, budget, or approval rules):\n${playbookBlock}`);

@@ -8,7 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { createDb, type Db } from "@steward/db";
-import { SITE_BLOCK_KINDS, SITE_HOME_SLUG, SiteBlock, SiteModel, checkSiteModel, type SiteModel as SiteModelShape, type TenantScope } from "@steward/schema";
+import { SITE_BLOCK_KINDS, SITE_HOME_SLUG, SiteBlock, SiteModel, checkSiteModel, type SiteModel as SiteModelShape, type TenantScope, BrandKit } from "@steward/schema";
 import { AuthService } from "./auth.js";
 import { CompanyService } from "./companies.js";
 import {
@@ -484,5 +484,15 @@ describe("the draft and its versions", () => {
     expect(checkSiteModel(parsed.success ? parsed.data : model())).toEqual([]);
     const saved = await sites.saveDraft(scope, starter, null);
     expect(saved.pages.map((page) => page.slug)).toEqual([SITE_HOME_SLUG, "contact"]);
+  });
+
+  d("starts a first draft in the company's brand kit when it has one", async () => {
+    const { sites } = await setup();
+    const brand = BrandKit.parse({ tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true });
+    const starter = sites.starter("Northwind Analytics", "", brand);
+    expect(starter.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true });
+    const hero = starter.pages[0]?.blocks[0];
+    expect(hero?.kind === "hero" && hero.heading).toBe("Numbers, weekly.");
+    expect(SiteModel.safeParse(starter).success).toBe(true);
   });
 });
