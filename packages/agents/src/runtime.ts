@@ -93,7 +93,8 @@ export function verificationEvidence(steps: readonly LedgerStep[], calls: readon
   const fence = (text: string) => `<untrusted_content source="tool output">${text.replace(/<\/?untrusted_content[^>]*>/g, "")}</untrusted_content>`;
   // Reads (fetches, searches, listings) are the bulk of a ledger and the least decisive part of it; the
   // calls that changed something, and approvals, are what a verdict rests on, so they are the last to go.
-  const isRead = (tool: string) => /^web\.|\.(list|get|read|search|recall)$|^company\.profile$/.test(tool);
+  const isRead = (tool: string) =>
+    /^web\.|^browser\.(open|read)$|\.(list|get|read|search|recall|status|summary|about|profile)$|\.(read|list)_[a-z_]+$/.test(tool);
   const lines: { text: string; read: boolean }[] = [];
   const byStep = new Map(calls.map((c) => [c.stepId, c] as const));
   for (const s of steps) {
