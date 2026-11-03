@@ -112,6 +112,8 @@ export default async function Landing() {
             <a href="#how">How it works</a>
             <a href="#workspace">The workspace</a>
             <a href="#conditions">Conditions</a>
+            <Link href="/pricing">Pricing</Link>
+            <Link href="/compare">Compare</Link>
           </div>
           <div className={s.navActions}>
             <Link href="/login" className={s.navSignIn}>
@@ -320,6 +322,8 @@ export default async function Landing() {
       <footer className={s.footer}>
         <span>Form STW-1 · © 2026 Steward. All rights reserved.</span>
         <nav aria-label="Footer">
+          <Link href="/pricing">Pricing</Link>
+          <Link href="/compare">Compare</Link>
           <Link href="/legal">Trust &amp; legal</Link>
           <Link href="/legal/terms">Terms</Link>
           <Link href="/legal/privacy">Privacy</Link>
