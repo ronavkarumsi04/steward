@@ -147,7 +147,7 @@ describe("verification evidence", () => {
     const text = verificationEvidence(steps, calls);
     expect(text.length).toBeLessThan(10_000);
     expect(text).toContain("more chars)");
-    expect(text).toMatch(/earlier call\(s\) omitted for length/);
+    expect(text).toMatch(/call\(s\) omitted for length/);
   });
 
   it("keeps the latest calls when research fills the budget, so the artefact that closes the task is still in evidence", () => {
@@ -162,7 +162,23 @@ describe("verification evidence", () => {
     ];
     const text = verificationEvidence(steps, calls);
     expect(text).toContain("Saved document Brief (doc_9)");
-    expect(text.split("\n")[0]).toMatch(/earlier call\(s\) omitted/);
+    expect(text.split("\n")[0]).toMatch(/call\(s\) omitted/);
+  });
+
+  it("keeps an early artefact write when the research that followed it fills the budget", () => {
+    const big = "x".repeat(5_000);
+    const steps = [
+      { id: "w", kind: "tool_call", title: "document.write", status: "succeeded", error: null },
+      ...Array.from({ length: 40 }, (_, i) => ({ id: `r${i}`, kind: "tool_call", title: "web.fetch", status: "succeeded", error: null })),
+    ];
+    const calls = [
+      { stepId: "w", toolName: "document.write", input: { title: "Brief" }, output: { content: "Saved document Brief (doc_9)" }, status: "succeeded" },
+      ...steps.slice(1).map((s) => ({ stepId: s.id, toolName: "web.fetch", input: { url: "https://example.com" }, output: { content: big }, status: "succeeded" })),
+    ];
+    const text = verificationEvidence(steps, calls);
+    expect(text.split("\n")[0]).toContain("Saved document Brief (doc_9)");
+    expect(text).toMatch(/call\(s\) omitted for length/);
+    expect(text.length).toBeLessThan(10_000);
   });
 
   it("shows the call an approval unlocked, and fences fetched text so a cut page cannot speak as the ledger", () => {

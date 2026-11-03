@@ -91,7 +91,10 @@ export function verificationEvidence(steps: readonly LedgerStep[], calls: readon
   // Tool output is data a third party may have written (a fetched page, an email). It is fenced here, after
   // truncation, so a cut can never remove the closing marker and promote the page's text to instructions.
   const fence = (text: string) => `<untrusted_content source="tool output">${text.replace(/<\/?untrusted_content[^>]*>/g, "")}</untrusted_content>`;
-  const lines: string[] = [];
+  // Reads (fetches, searches, listings) are the bulk of a ledger and the least decisive part of it; the
+  // calls that changed something, and approvals, are what a verdict rests on, so they are the last to go.
+  const isRead = (tool: string) => /^web\.|\.(list|get|read|search|recall)$|^company\.profile$/.test(tool);
+  const lines: { text: string; read: boolean }[] = [];
   const byStep = new Map(calls.map((c) => [c.stepId, c] as const));
   for (const s of steps) {
     if (s.kind !== "tool_call" && s.kind !== "approval") continue;
@@ -99,27 +102,39 @@ export function verificationEvidence(steps: readonly LedgerStep[], calls: readon
     const c = byStep.get(s.id);
     const head = s.kind === "approval" ? `- approval: ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}` : null;
     if (!c) {
-      lines.push(head ?? `- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`);
+      lines.push({ text: head ?? `- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`, read: false });
       continue;
     }
     const half = Math.floor(VERIFY_CALL_CHARS / 2);
     const out = compact(outputOf(c.output), half);
     const call = `${c.toolName}(${compact(c.input, half)}) → ${c.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""} → ${out ? fence(out) : "(no output)"}`;
-    lines.push(head ? `${head}; ${call}` : `- ${call}`);
+    lines.push({ text: head ? `${head}; ${call}` : `- ${call}`, read: !head && isRead(c.toolName) });
   }
-  // Over budget, the most recent calls stay: the artefact that closes a task is written last, after the research.
+  // Fit the budget: every write and approval first, then reads newest-first; within a class the latest survive.
+  const keep = new Set<number>();
   let total = 0;
-  const kept: string[] = [];
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]!;
-    if (total + line.length > VERIFY_LEDGER_CHARS) {
-      kept.push(`- … ${i + 1} earlier call(s) omitted for length`);
-      break;
+  for (const pass of [false, true]) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
+      if (line.read !== pass || total + line.text.length + 1 > VERIFY_LEDGER_CHARS) continue;
+      keep.add(i);
+      total += line.text.length + 1;
     }
-    kept.push(line);
-    total += line.length + 1;
   }
-  return kept.reverse().join("\n");
+  const out: string[] = [];
+  let dropped = 0;
+  const flush = () => {
+    if (dropped) out.push(`- … ${dropped} call(s) omitted for length`);
+    dropped = 0;
+  };
+  lines.forEach((line, i) => {
+    if (keep.has(i)) {
+      flush();
+      out.push(line.text);
+    } else dropped++;
+  });
+  flush();
+  return out.join("\n");
 }
 
 /**
