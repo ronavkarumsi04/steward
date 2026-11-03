@@ -170,11 +170,11 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         <div className="rise-in" style={delay(5)}>
           <LaunchKit companyId={companyId} initial={launchRun} />
         </div>
-      ) : runs.runs.length === 0 ? (
+      ) : (
         <div className="rise-in" style={delay(5)}>
           <LaunchKitStart companyId={companyId} />
         </div>
-      ) : null}
+      )}
 
       <section className="nb-panel-flat nb-accent-blue rise-in" style={delay(5)}>
         <div className="nb-section-label mb-3">MANUAL TASK LAUNCHER</div>
