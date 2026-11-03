@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, type RunContextBundle } from "./runtime.js";
+import { AgentRuntime, verificationEvidence, type RunContextBundle } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -117,5 +117,36 @@ describe("AgentRuntime cancellation", () => {
       expect.anything(),
       expect.objectContaining({ toolName: "test.first", status: "failed" }),
     );
+  });
+});
+
+describe("verification evidence", () => {
+  it("shows the verifier what each tool was asked and what it returned, not just a status", () => {
+    const steps = [
+      { id: "s1", kind: "model_call", title: "Think", status: "succeeded", error: null },
+      { id: "s2", kind: "tool_call", title: "document.write", status: "succeeded", error: null },
+      { id: "s3", kind: "approval", title: "Send outreach email", status: "succeeded", error: null },
+      { id: "s4", kind: "tool_call", title: "email.send", status: "failed", error: "Outbound paused by founder" },
+    ];
+    const calls = [
+      { stepId: "s2", toolName: "document.write", input: { title: "Positioning", content: "- one\n- two\n- three" }, output: { content: "Saved document Positioning (doc_123)" }, status: "succeeded" },
+      { stepId: "s4", toolName: "email.send", input: { to: "a@example.com" }, output: null, status: "failed" },
+    ];
+    const text = verificationEvidence(steps, calls);
+    expect(text).toContain('document.write({"title":"Positioning"');
+    expect(text).toContain("→ succeeded → Saved document Positioning (doc_123)");
+    expect(text).toContain("- approval: Send outreach email → succeeded");
+    expect(text).toContain("email.send({\"to\":\"a@example.com\"}) → failed (Outbound paused by founder) → (no output)");
+    expect(text).not.toContain("Think");
+  });
+
+  it("caps each call and the whole ledger so one chatty tool cannot crowd out the decisive one", () => {
+    const big = "x".repeat(5_000);
+    const steps = Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, kind: "tool_call", title: "web.fetch", status: "succeeded", error: null }));
+    const calls = steps.map((s) => ({ stepId: s.id, toolName: "web.fetch", input: { url: "https://example.com" }, output: { content: big }, status: "succeeded" }));
+    const text = verificationEvidence(steps, calls);
+    expect(text.length).toBeLessThan(10_000);
+    expect(text).toContain("more chars)");
+    expect(text).toMatch(/more call\(s\) omitted for length/);
   });
 });
