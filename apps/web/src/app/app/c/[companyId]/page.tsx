@@ -41,9 +41,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     api.get<{ integrations: Integration[] }>(`/orgs/${overview.company.organizationId}/integrations`),
     // What the attention queue needs: runs that stopped for a human, and the open work that could be late.
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=needs_review,failed,waiting_budget,waiting_approval&limit=50`),
+    api.get<{ tasks: Task[] }>(`/companies/${companyId}/tasks?status=backlog,todo,in_progress,blocked,waiting_approval,review&limit=100`),
     // The launch kit is looked up by its trigger, not from the recent page, so it is still found after many later runs.
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?trigger=launch&limit=1`),
-    api.get<{ tasks: Task[] }>(`/companies/${companyId}/tasks?status=backlog,todo,in_progress,blocked,waiting_approval,review&limit=100`),
   ]);
   const { company, goals, agents, taskCounts, budgets } = overview;
   const profile = overview.profile?.profile ?? null;
