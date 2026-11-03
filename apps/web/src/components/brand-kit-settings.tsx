@@ -14,10 +14,10 @@ import {
   emptyBrandKit,
   monogram,
   type BrandKit,
-  type Company,
   type CompanyProfile,
 } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
+import type { Company } from "@/lib/types";
 
 const FONT_LABEL = { sans: "Sans", serif: "Serif", mono: "Mono" } as const;
 const RADIUS_LABEL = { sharp: "Sharp", soft: "Soft", round: "Round" } as const;
