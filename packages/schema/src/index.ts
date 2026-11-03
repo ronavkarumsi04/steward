@@ -274,6 +274,9 @@ export const ModelInfo = z.object({
   pricing: ModelPricing.optional(),
   deprecated: z.boolean().default(false),
   local: z.boolean().default(false),
+  /** True for models Steward ships in its seed catalog (known capabilities, pricing and behaviour);
+   *  absent/false for models only discovered through a provider's live `/models` listing. */
+  curated: z.boolean().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfo>;
 
