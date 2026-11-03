@@ -35,7 +35,11 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
     setError(null);
     try {
       const body: Record<string, unknown> = { status };
-      if (status === "approved" && edited) body.editedPayload = { ...approval.payload, [item.field]: text };
+      if (status === "approved" && edited) {
+        // The founder edited the words; a stale html body would still carry the agent's, so the edited message goes as text.
+        const { html: _html, ...rest } = approval.payload as Record<string, unknown> & { html?: unknown };
+        body.editedPayload = { ...rest, [item.field]: text };
+      }
       const { approval: a } = await browserApi.post<{ approval: Approval }>(`/companies/${companyId}/approvals/${approval.id}/decide`, body);
       onDone(a);
       router.refresh();
@@ -81,7 +85,9 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
  * rendered as the message itself: read it, fix it, send it or hold it. Nothing here has left yet.
  */
 export function Outbox({ companyId, items }: { companyId: string; items: Approval[] }) {
-  const [pending, setPending] = useState(items.filter((a) => a.status === "pending"));
+  // Decided rows drop out immediately; everything else follows `items`, so a refresh with new drafts shows them.
+  const [decided, setDecided] = useState<ReadonlySet<string>>(() => new Set());
+  const pending = items.filter((a) => a.status === "pending" && !decided.has(a.id));
   return (
     <section className="card overflow-hidden" aria-labelledby="outbox-heading">
       <div className="border-b border-line px-4 py-3 sm:px-5">
@@ -93,7 +99,7 @@ export function Outbox({ companyId, items }: { companyId: string; items: Approva
       ) : (
         <div className="divide-y divide-line">
           {pending.map((a) => (
-            <OutboxRow key={a.id} companyId={companyId} approval={a} onDone={(done) => setPending((rows) => rows.filter((r) => r.id !== done.id))} />
+            <OutboxRow key={a.id} companyId={companyId} approval={a} onDone={(done) => setDecided((ids) => new Set([...ids, done.id]))} />
           ))}
         </div>
       )}
