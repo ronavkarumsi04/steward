@@ -491,8 +491,9 @@ describe("the draft and its versions", () => {
     const brand = BrandKit.parse({ tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true });
     const starter = sites.starter("Northwind Analytics", "", brand);
     expect(starter.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true });
-    const hero = starter.pages[0]?.blocks[0];
-    expect(hero?.kind === "hero" && hero.heading).toBe("Numbers, weekly.");
+    const hero = starter.pages[0]?.blocks[0] as { kind: string; heading?: string } | undefined;
+    expect(hero?.kind).toBe("hero");
+    expect(hero?.heading).toBe("Numbers, weekly.");
     expect(SiteModel.safeParse(starter).success).toBe(true);
   });
 });

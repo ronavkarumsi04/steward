@@ -6,6 +6,7 @@ import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDi
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
+import { BrandKitSettings } from "./brand-kit-settings";
 import { Card, Empty, StatusPill, usd } from "./ui";
 
 const DIMENSIONS: Array<{ id: PolicyDimension; label: string }> = [
@@ -194,6 +195,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
         <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
       </form>
+
+      <BrandKitSettings company={company} profile={profile} />
 
       <Card title="Policies" className="nb-left-yellow">
         <p className="mb-3 text-sm text-muted">Per-dimension rules evaluated before every tool call. <b>deny</b> blocks outright, <b>approve</b> always asks you, <b>allow</b> lets the agent proceed up to the chosen risk level and within the limits.</p>

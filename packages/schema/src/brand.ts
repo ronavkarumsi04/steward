@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { SITE_ACCENTS, SITE_FONTS, SITE_RADII } from "./site.js";
+import { SITE_ACCENTS, SITE_FONTS, SITE_RADII, type SiteAccent, type SiteFont, type SiteRadius } from "./site.js";
+
+/** The one hex each accent resolves to, shared by the published site and every in-app preview of it. */
+export const BRAND_ACCENT_HEX: Record<SiteAccent, string> = { indigo: "#4f46e5", violet: "#7c3aed", emerald: "#059669", amber: "#d97706", rose: "#e11d48", slate: "#475569", cyan: "#0891b2" };
+export const BRAND_FONT_STACK: Record<SiteFont, string> = {
+  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  serif: "Georgia, 'Iowan Old Style', 'Times New Roman', serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+};
+export const BRAND_RADIUS_CSS: Record<SiteRadius, string> = { sharp: "0", soft: "10px", round: "999px" };
 
 /**
  * A company's brand kit: the few decisions every surface reuses so that the site, the posts, the decks and the

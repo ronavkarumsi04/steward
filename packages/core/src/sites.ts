@@ -6,15 +6,15 @@ import {
   SiteModel as SiteModelSchema,
   SITE_HOME_SLUG,
   SITE_MAX_PAGES,
-  type SiteAccent,
   type SiteBlock,
   type SiteBlockKind,
-  type SiteFont,
   type SiteModel,
-  type SiteRadius,
   type SiteTheme,
   type TenantScope,
   type BrandKit,
+  BRAND_ACCENT_HEX,
+  BRAND_FONT_STACK,
+  BRAND_RADIUS_CSS,
 } from "@steward/schema";
 import { RunService, type RunTrigger } from "./work.js";
 
@@ -304,13 +304,9 @@ export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
 
-const ACCENT_HEX: Record<SiteAccent, string> = { indigo: "#4f46e5", violet: "#7c3aed", emerald: "#059669", amber: "#d97706", rose: "#e11d48", slate: "#475569", cyan: "#0891b2" };
-const FONT_STACK: Record<SiteFont, string> = {
-  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-  serif: "Georgia, 'Iowan Old Style', 'Times New Roman', serif",
-  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
-};
-const RADIUS: Record<SiteRadius, string> = { sharp: "0", soft: "10px", round: "999px" };
+const ACCENT_HEX = BRAND_ACCENT_HEX;
+const FONT_STACK = BRAND_FONT_STACK;
+const RADIUS = BRAND_RADIUS_CSS;
 
 /**
  * The stylesheet every page carries inline, so a bundle is a set of files that works when opened from disk and
