@@ -155,7 +155,7 @@ export class AgentService {
 }
 
 export interface RunTrigger {
-  kind: "user" | "schedule" | "task" | "event" | "chat" | "system" | "delegation";
+  kind: "user" | "schedule" | "task" | "event" | "chat" | "system" | "delegation" | "launch";
   instruction: string;
   parentRunId?: string;
   parentAgentId?: string;

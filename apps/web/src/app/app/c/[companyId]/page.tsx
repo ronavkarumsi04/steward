@@ -12,6 +12,7 @@ import { WorkspaceDecision } from "@/components/workspace-decision";
 import { Icon } from "@/components/icons";
 import { LiveFeed } from "@/components/live-feed";
 import { QuickStart } from "@/components/quick-start";
+import { LaunchKit } from "@/components/launch-kit";
 import { FounderStudio, type StudioSchedule } from "@/components/founder-studio";
 import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
 
@@ -67,6 +68,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const base = `/app/c/${companyId}`;
   // The dashboard shows state; this ranks what actually needs the founder, and why. Rules live in
   // `lib/attention.ts` so they are tested without a browser.
+  const launchRun = runs.runs.find((r) => (r.trigger as { kind?: string } | null)?.kind === "launch") ?? null;
   const attention = buildAttentionQueue({
     companyId,
     approvals: approvals.approvals,
@@ -163,6 +165,12 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
           }}
         />
       </section>
+
+      {launchRun && (
+        <div className="rise-in" style={delay(5)}>
+          <LaunchKit companyId={companyId} initial={launchRun} />
+        </div>
+      )}
 
       <section className="nb-panel-flat nb-accent-blue rise-in" style={delay(5)}>
         <div className="nb-section-label mb-3">MANUAL TASK LAUNCHER</div>
