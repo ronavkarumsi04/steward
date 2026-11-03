@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DisabledBrowserProvider, NO_BROWSER_REASON } from "@steward/browser";
 import type { TenantScope } from "@steward/schema";
-import { buildToolRegistry, DEFAULT_TOOL_ALLOWLIST } from "./tools.js";
+import { BRIEF_FOLDER, buildToolRegistry, DEFAULT_TOOL_ALLOWLIST, renderBrief } from "./tools.js";
 
 describe("operator capability surface", () => {
   it("exposes launch and payment-path tools with policy dimensions", () => {
@@ -165,5 +165,57 @@ describe("durable delegation", () => {
     expect(runCreate).toHaveBeenCalledWith(steward.scope, expect.objectContaining({ agentId: "agent-eng", taskId: "task-child", projectId: "project-1", trigger: expect.objectContaining({ kind: "delegation", parentRunId: "run-parent", parentAgentId: "agent-chief" }) }));
     expect(start).toHaveBeenCalledWith({ runId: "run-child", scope: { organizationId: "org-1", companyId: "company-1" } });
     expect(attachWorkflow).toHaveBeenCalledWith(steward.scope, "run-child", "run-run-child", "temporal-child");
+  });
+});
+
+describe("document.brief", () => {
+  const scope: TenantScope = { organizationId: "org", companyId: "co", actor: { type: "system", component: "test" } };
+  function briefCtx(calls: Array<{ toolName: string; input: unknown; output: unknown }>) {
+    const upsert = vi.fn(async (_scope: TenantScope, input: { title: string; content: string; folder?: string }) => ({ id: "doc_1", version: 1, ...input }));
+    const addArtifact = vi.fn(async () => undefined);
+    const ctx = {
+      runId: "run_1",
+      taskId: null,
+      services: { steward: { scope, runs: { toolCallsFor: async () => calls, addArtifact }, documents: { findByTitle: async () => null, upsert } } },
+    };
+    return { ctx, upsert, addArtifact };
+  }
+  const findings = [
+    { claim: "Foundable sells credits in four tiers from $0 to $200 a month.", source: "https://foundable.app/pricing", quote: "Max $200" },
+    { claim: "Polsia positions itself as running the company while you sleep.", source: "https://polsia.com/" },
+  ];
+
+  it("refuses a source the run never fetched or searched, naming it", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const { ctx, upsert } = briefCtx([{ toolName: "web.fetch", input: { url: "https://foundable.app/pricing" }, output: { content: "…" } }]);
+    const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings }, ctx as never);
+    expect(result.ok).toBe(false);
+    expect(result.content).toContain("https://polsia.com");
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("writes a cited brief into the briefs folder when every source was visited, and records the artifact", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const { ctx, upsert, addArtifact } = briefCtx([
+      { toolName: "web.fetch", input: { url: "https://foundable.app/pricing#plans" }, output: { content: "…" } },
+      { toolName: "web.search", input: { query: "polsia" }, output: { content: "1. Polsia\n   https://polsia.com/\n   AI that runs your company" } },
+    ]);
+    const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings, nextSteps: ["Publish the rate card"] }, ctx as never);
+    expect(result.ok).toBe(true);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    const written = upsert.mock.calls[0]![1];
+    expect(written.folder).toBe(BRIEF_FOLDER);
+    expect(written.content).toContain("[^1]: https://foundable.app/pricing");
+    expect(written.content).toContain("[^2]: https://polsia.com");
+    expect(written.content).toContain("> Max $200");
+    expect(written.content).toContain("- Publish the rate card");
+    expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ kind: "document", metadata: expect.objectContaining({ brief: true, findings: 2, sources: 2 }) }));
+  });
+
+  it("numbers repeated sources once", () => {
+    const md = renderBrief({ title: "T", question: "Q?", summary: "S", findings: [{ claim: "First claim here.", source: "https://a.example/x" }, { claim: "Second claim here.", source: "https://a.example/x/" }], writtenAt: "2026-11-03" });
+    expect(md.match(/\[\^1\]/g)?.length).toBe(3);
+    expect(md).not.toContain("[^2]");
+    expect(md).toContain("**Written.** 2026-11-03");
   });
 });

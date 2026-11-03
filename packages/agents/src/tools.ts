@@ -194,6 +194,107 @@ const documentWrite = defineTool({
   },
 });
 
+/** A brief's sources must be pages this run actually touched; a URL the agent never fetched or found is refused. */
+function urlsTouchedByRun(calls: ReadonlyArray<{ toolName: string; input: unknown; output: unknown }>): Set<string> {
+  const seen = new Set<string>();
+  const pattern = /https?:\/\/[^\s"'<>)\]\\]+/g;
+  for (const c of calls) {
+    if (!c.toolName.startsWith("web.")) continue;
+    for (const part of [c.input, c.output]) {
+      const text = typeof part === "string" ? part : JSON.stringify(part ?? "");
+      for (const m of text.match(pattern) ?? []) seen.add(normaliseUrl(m));
+    }
+  }
+  return seen;
+}
+
+function normaliseUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    u.hash = "";
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return raw.replace(/\/$/, "");
+  }
+}
+
+export const BRIEF_FOLDER = "/briefs";
+
+const BriefFinding = z.object({
+  claim: z.string().min(8).max(600),
+  source: z.string().url(),
+  quote: z.string().max(400).optional(),
+});
+
+export function renderBrief(input: { title: string; question: string; summary: string; findings: Array<z.infer<typeof BriefFinding>>; nextSteps?: string[]; writtenAt?: string }): string {
+  const sources: string[] = [];
+  const indexOf = (url: string) => {
+    const key = normaliseUrl(url);
+    let i = sources.indexOf(key);
+    if (i === -1) {
+      sources.push(key);
+      i = sources.length - 1;
+    }
+    return i + 1;
+  };
+  const findings = input.findings.map((f) => {
+    const n = indexOf(f.source);
+    return `${f.claim.trim()} [^${n}]${f.quote ? `\n\n   > ${f.quote.trim()}` : ""}`;
+  });
+  const lines = [
+    `# ${input.title.trim()}`,
+    "",
+    `**Question.** ${input.question.trim()}`,
+    "",
+    `**Written.** ${input.writtenAt ?? new Date().toISOString().slice(0, 10)} · ${sources.length ? "" : ""}${input.findings.length} finding${input.findings.length === 1 ? "" : "s"}, every one cited.`,
+    "",
+    "## Summary",
+    "",
+    input.summary.trim(),
+    "",
+    "## Findings",
+    "",
+    ...findings.map((f, i) => `${i + 1}. ${f}`),
+    "",
+  ];
+  if (input.nextSteps?.length) lines.push("## Next steps", "", ...input.nextSteps.map((s) => `- ${s.trim()}`), "");
+  lines.push("## Sources", "", ...sources.map((u, i) => `[^${i + 1}]: ${u}`), "");
+  return lines.join("\n");
+}
+
+const documentBrief = defineTool({
+  name: "document.brief",
+  description:
+    "Write a research brief: a question, a summary, and findings that each cite a source URL you actually read with web.fetch or saw in web.search during this run. Use it for any research the founder asked for instead of document.write; it is refused if a source was never visited, so research first, then write.",
+  input: z.object({
+    title: z.string().min(3).max(200),
+    question: z.string().min(8).max(600),
+    summary: z.string().min(40).max(4000),
+    findings: z.array(BriefFinding).min(2).max(20),
+    nextSteps: z.array(z.string().min(3).max(300)).max(10).optional(),
+  }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    if (!ctx.runId) return fail("A brief can only be written from inside a run.");
+    const touched = urlsTouchedByRun(await s.runs.toolCallsFor(s.scope, ctx.runId));
+    const unvisited = [...new Set(input.findings.map((f) => f.source).filter((u) => !touched.has(normaliseUrl(u))))];
+    if (unvisited.length) {
+      return fail(
+        `Refused: ${unvisited.length} source${unvisited.length === 1 ? " was" : "s were"} never fetched or searched in this run (${unvisited.slice(0, 3).join(", ")}${unvisited.length > 3 ? ", …" : ""}). Read each source with web.fetch, or drop the finding.`,
+      );
+    }
+    const content = renderBrief(input);
+    const existing = await s.documents.findByTitle(s.scope, input.title, BRIEF_FOLDER, "document");
+    const d = await s.documents.upsert(s.scope, { id: existing?.id, title: input.title, content, folder: BRIEF_FOLDER, kind: "document" });
+    if (!d) return fail("Failed to write the brief.");
+    const sources = new Set(input.findings.map((f) => normaliseUrl(f.source))).size;
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title: input.title, metadata: { documentId: d.id, version: d.version, brief: true, findings: input.findings.length, sources } });
+    return { ok: true, content: `Wrote brief "${input.title}" (v${d.version}, id ${d.id}): ${input.findings.length} findings across ${sources} source${sources === 1 ? "" : "s"}.`, data: { id: d.id, version: d.version, sources } };
+  },
+});
+
 const decisionRecord = defineTool({
   name: "decision.record",
   description: "Record a significant business decision and its rationale in the decision log.",
@@ -1234,7 +1335,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, documentBrief, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
