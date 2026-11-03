@@ -141,8 +141,9 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const deps = c.get("deps");
     const [company, profile, agents] = await Promise.all([deps.services.companies.get(scope), deps.services.companies.profile(scope), deps.services.agents.list(scope)]);
     if (!company) throw new HttpError(404, "not_found");
-    const chief = agents.find((a) => a.kind === "orchestrator" && a.enabled) ?? agents.find((a) => a.enabled);
-    if (!chief) throw new HttpError(409, "no_agent", "Enable at least one agent before starting the launch kit");
+    // Only the orchestrator's allowlist covers every deliverable (documents, a decision and task.create); a specialist would stall the kit.
+    const chief = agents.find((a) => a.kind === "orchestrator" && a.enabled);
+    if (!chief) throw new HttpError(409, "no_agent", "Enable the Chief of Staff before starting the launch kit");
     const current = profile?.profile;
     const instruction = launchKitBrief({ ...(current ?? {}), name: current?.name || company.name });
     return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { agentId: chief.id, instruction, kind: "launch" }) }, 201);

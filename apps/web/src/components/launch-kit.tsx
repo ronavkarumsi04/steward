@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { launchKitProgress, type LaunchKitDeliverable } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
@@ -8,8 +9,40 @@ import type { Run, RunDetail } from "@/lib/types";
 import { Icon } from "./icons";
 import { StatusPill } from "./ui";
 
-const ACTIVE = new Set(["queued", "planning", "running", "verifying", "waiting_approval", "waiting_budget"]);
+const ACTIVE = new Set(["queued", "building_context", "planning", "executing", "verifying", "waiting_approval", "waiting_budget"]);
 const POLL_MS = 4_000;
+
+/**
+ * When the kit never started (the first request failed before a run was recorded), the card still exists:
+ * it says so and offers the same start, so a founder is never left with a bare workspace and no way back.
+ */
+export function LaunchKitStart({ companyId }: { companyId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function start() {
+    setBusy(true);
+    setError(null);
+    try {
+      await browserApi.post(`/companies/${companyId}/launch-kit`, {});
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not start the launch kit.");
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="nb-panel-flat nb-accent-blue p-5" aria-labelledby="launch-kit-start">
+      <div className="eyebrow">Launch kit</div>
+      <h2 id="launch-kit-start" className="mt-1 text-lg font-semibold">The launch kit has not started</h2>
+      <p className="mt-1 text-sm text-muted">Positioning, brand brief, landing copy, a target-customer decision and five week-one tasks, from your idea.</p>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => void start()} disabled={busy}>{busy ? "Starting…" : "Start the launch kit"}</button>
+        {error && <span role="alert" className="text-sm text-danger">{error}</span>}
+      </div>
+    </section>
+  );
+}
 
 /**
  * The first-run promise made visible: one card that fills in as the Chief of Staff produces each
