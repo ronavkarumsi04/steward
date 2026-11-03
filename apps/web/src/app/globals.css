@@ -489,6 +489,9 @@
     --fg-2: #34353b;
     --muted: #45464c;
     --faint: #45464c;
+    --panel: #fbf3c4;
+    --panel-2: #f8ec9f;
+    --line: #17181c66;
   }
 
   .nb-command-item-active,
