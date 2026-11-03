@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, browserApi } from "@/lib/api";
 import type { CampaignChannel, CampaignStatus, GrowthSnapshot, Lead, LeadStage } from "@/lib/types";
+import { Outbox } from "./outbox";
 import { Empty, PageHeader, Pill } from "./ui";
 
 const STAGES: Array<{ id: LeadStage; label: string; tone: "neutral" | "accent" | "warn" | "ok" | "danger" }> = [
@@ -220,6 +221,8 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
           </div>
         </div>
       )}
+
+      <Outbox companyId={companyId} items={initial.outbox ?? []} />
 
       <section className="card overflow-hidden">
         <div className="border-b border-line px-4 py-3 sm:px-5"><div className="eyebrow">Recent outreach</div><h2 className="mt-1 text-base font-semibold">Messages Steward actually sent</h2></div>

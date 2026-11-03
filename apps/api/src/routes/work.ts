@@ -26,6 +26,9 @@ async function requireProject(services: AgentServiceFactory, scope: TenantScope,
  * that was interrupted. If Temporal is down the row is left queued with its workflow id recorded, and the caller
  * is told the work is pending — rather than the run existing in the database while nothing will ever run it.
  */
+/** Tool calls that send something to someone outside the company; their approvals are the outbox. */
+const OUTBOX_ACTIONS = new Set(["email.send", "social.publish", "sms.send"]);
+
 export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event"; sourceSignalId?: string }) {
   if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
   const company = await services.companies.get(scope);
@@ -235,8 +238,10 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/growth", tag: "growth", summary: "Lead pipeline and recent outbound activity", query: z.object({ stage: z.enum(LEAD_STAGES).optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const growth = c.get("deps").services.growth;
-    const [leads, outbound, campaigns] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope)]);
-    return c.json({ leads, outbound, campaigns });
+    const [leads, outbound, campaigns, pending] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope), c.get("deps").services.approvals.list(scope, "pending", 100)]);
+    /** Outreach the agents drafted and are waiting on a person for: the queue a founder reviews before anything leaves. */
+    const outbox = pending.filter((a) => OUTBOX_ACTIONS.has(a.action));
+    return c.json({ leads, outbound, campaigns, outbox });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/leads", tag: "growth", summary: "Create a lead/contact in the company pipeline", body: z.object({ title: z.string().min(1).max(300), stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional(), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
