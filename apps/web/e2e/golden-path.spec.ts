@@ -50,7 +50,7 @@ test("register → onboarding → dashboard → tasks → settings → providers
   // Exact: the launch-kit run that creation starts quotes the idea inside its instruction too.
   await expect(page.getByText("A weekly analytics digest for small online stores.", { exact: true })).toBeVisible();
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Build" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Earn" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Turn on Autopilot/i })).toBeVisible();
