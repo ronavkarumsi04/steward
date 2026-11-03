@@ -14,8 +14,7 @@ import {
   type BrandKit,
   BRAND_ACCENT_HEX,
   BRAND_FONT_STACK,
-  BRAND_RADIUS_CSS,
-} from "@steward/schema";
+  BRAND_RADIUS_CSS, monogram } from "@steward/schema";
 import { RunService, type RunTrigger } from "./work.js";
 
 /**
@@ -327,6 +326,7 @@ export function renderSiteCss(theme: SiteTheme): string {
     `header.site-head{border-bottom:1px solid var(--line);padding:1.25rem 0}`,
     `header.site-head .wrap{display:flex;flex-wrap:wrap;gap:1rem;align-items:baseline;justify-content:space-between}`,
     `.brand{font-weight:700;text-decoration:none;color:var(--ink)}`,
+    `.brand .mark{display:inline-grid;place-items:center;width:2em;height:2em;margin-right:.5em;background:var(--accent);color:#fff;border-radius:var(--radius);font-size:.75em;letter-spacing:.05em;vertical-align:middle}`,
     `nav.pages{display:flex;flex-wrap:wrap;gap:1.25rem;font-size:.9375rem}`,
     `nav.pages a{text-decoration:none;color:var(--muted)}`,
     `nav.pages a[aria-current="page"]{color:var(--ink);font-weight:600}`,
@@ -433,7 +433,7 @@ export function renderPageHtml(model: SiteModel, slug: string): string {
     "</head>",
     "<body>",
     '<header class="site-head"><div class="wrap">',
-    `<a class="brand" href="${escapeHtml(hrefForSlug(SITE_HOME_SLUG))}">${escapeHtml(model.name)}</a>`,
+    `<a class="brand" href="${escapeHtml(hrefForSlug(SITE_HOME_SLUG))}">${model.theme.mark === "monogram" ? `<span class="mark" aria-hidden="true">${escapeHtml(monogram(model.name))}</span>` : ""}${escapeHtml(model.name)}</a>`,
     `<nav class="pages" aria-label="Pages">${nav}</nav>`,
     "</div></header>",
     '<main class="wrap">',
@@ -599,12 +599,13 @@ export class SiteService {
    * company has a brand kit, that kit's palette and type, so the first draft already looks like the company.
    */
   starter(companyName: string, tagline: string, brand?: BrandKit): SiteDraftInput {
-    const line = tagline || brand?.tagline || "";
+    // A tagline set in the brand kit is a deliberate decision; the profile's free-text one is the fallback.
+    const line = brand?.tagline || tagline || "";
     return {
       name: companyName.slice(0, 80),
       theme: brand
-        ? { accent: brand.accent, font: brand.font, radius: brand.radius, dark: brand.dark }
-        : { accent: "indigo", font: "sans", radius: "soft", dark: false },
+        ? { accent: brand.accent, font: brand.font, radius: brand.radius, dark: brand.dark, mark: brand.mark }
+        : { accent: "indigo", font: "sans", radius: "soft", dark: false, mark: "wordmark" },
       pages: [
         {
           slug: SITE_HOME_SLUG,

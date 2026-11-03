@@ -58,7 +58,7 @@ const d = (name: string, fn: () => Promise<void>) => it(name, async () => {
 function model(over: Partial<SiteModelShape> = {}): SiteModelShape {
   return {
     name: over.name ?? "Northwind Analytics",
-    theme: over.theme ?? { accent: "emerald", font: "serif", radius: "soft", dark: false },
+    theme: over.theme ?? { accent: "emerald", font: "serif", radius: "soft", dark: false, mark: "wordmark" },
     pages: over.pages ?? [
       {
         slug: SITE_HOME_SLUG,
@@ -404,7 +404,7 @@ describe("the draft and its versions", () => {
     const { scope, company, sites } = await setup();
     await sites.saveDraft(scope, model(), null);
     const first = (await sites.publish(scope)).version;
-    await sites.saveDraft(scope, model({ name: "Moved on", theme: { accent: "rose", font: "mono", radius: "round", dark: true } }), (await sites.get(scope))!.updatedAt.toISOString());
+    await sites.saveDraft(scope, model({ name: "Moved on", theme: { accent: "rose", font: "mono", radius: "round", dark: true, mark: "wordmark" } }), (await sites.get(scope))!.updatedAt.toISOString());
 
     const restored = await sites.restore(scope, first.id);
     expect(restored.site.name).toBe("Northwind Analytics");
@@ -488,9 +488,9 @@ describe("the draft and its versions", () => {
 
   d("starts a first draft in the company's brand kit when it has one", async () => {
     const { sites } = await setup();
-    const brand = BrandKit.parse({ tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true });
+    const brand = BrandKit.parse({ tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram" });
     const starter = sites.starter("Northwind Analytics", "", brand);
-    expect(starter.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true });
+    expect(starter.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram" });
     const hero = starter.pages[0]?.blocks[0] as { kind: string; heading?: string } | undefined;
     expect(hero?.kind).toBe("hero");
     expect(hero?.heading).toBe("Numbers, weekly.");

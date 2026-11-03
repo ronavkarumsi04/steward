@@ -463,7 +463,7 @@ describe("brand kit", () => {
     expect(after.body.profile.profile.brand).toMatchObject({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram", voice: { tone: ["plain", "exact"] } });
 
     const studio = await a.api.json<{ starter: { theme: Record<string, unknown>; pages: Array<{ blocks: Array<{ kind: string; heading?: string }> }> } | null }>("GET", `/companies/${companyId}/site`);
-    expect(studio.body.starter?.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true });
+    expect(studio.body.starter?.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram" });
 
     const bad = await a.api.call("PUT", `/companies/${companyId}/profile`, { name: "Northwind Analytics", brand: { accent: "neon" } });
     expect(bad.status).toBe(422);

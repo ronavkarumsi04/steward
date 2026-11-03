@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SITE_ACCENTS, SITE_FONTS, SITE_RADII, type SiteAccent, type SiteFont, type SiteRadius } from "./site.js";
+import { SITE_ACCENTS, SITE_FONTS, SITE_MARKS, SITE_RADII, type SiteAccent, type SiteFont, type SiteMark, type SiteRadius } from "./site.js";
 
 /** The one hex each accent resolves to, shared by the published site and every in-app preview of it. */
 export const BRAND_ACCENT_HEX: Record<SiteAccent, string> = { indigo: "#4f46e5", violet: "#7c3aed", emerald: "#059669", amber: "#d97706", rose: "#e11d48", slate: "#475569", cyan: "#0891b2" };
@@ -18,8 +18,8 @@ export const BRAND_RADIUS_CSS: Record<SiteRadius, string> = { sharp: "0", soft: 
  * voice is a handful of tone words plus the phrases to use and avoid. That is what an agent can actually honour,
  * and what a founder can actually decide in a minute.
  */
-export const BRAND_MARKS = ["wordmark", "monogram"] as const;
-export type BrandMark = (typeof BRAND_MARKS)[number];
+export const BRAND_MARKS = SITE_MARKS;
+export type BrandMark = SiteMark;
 
 const words = (max: number) => z.array(z.string().trim().min(1).max(80)).max(max).default([]);
 
