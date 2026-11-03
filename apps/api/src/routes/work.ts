@@ -127,7 +127,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   });
 
   // ---- runs ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), trigger: z.string().max(40).optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ runs: await c.get("deps").services.runs.list(scope, query) });
   });

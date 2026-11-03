@@ -30,7 +30,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const api = await serverApi();
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
-  const [events, runs, approvals, usage, schedules, artifacts, documents, integrations, attentionRuns, attentionTasks] = await Promise.all([
+  const [events, runs, approvals, usage, schedules, artifacts, documents, integrations, attentionRuns, attentionTasks, launchRuns] = await Promise.all([
     api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=50`),
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=20`),
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
@@ -41,6 +41,8 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     api.get<{ integrations: Integration[] }>(`/orgs/${overview.company.organizationId}/integrations`),
     // What the attention queue needs: runs that stopped for a human, and the open work that could be late.
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=needs_review,failed,waiting_budget,waiting_approval&limit=50`),
+    // The launch kit is looked up by its trigger, not from the recent page, so it is still found after many later runs.
+    api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?trigger=launch&limit=1`),
     api.get<{ tasks: Task[] }>(`/companies/${companyId}/tasks?status=backlog,todo,in_progress,blocked,waiting_approval,review&limit=100`),
   ]);
   const { company, goals, agents, taskCounts, budgets } = overview;
@@ -68,7 +70,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const base = `/app/c/${companyId}`;
   // The dashboard shows state; this ranks what actually needs the founder, and why. Rules live in
   // `lib/attention.ts` so they are tested without a browser.
-  const launchRun = runs.runs.find((r) => (r.trigger as { kind?: string } | null)?.kind === "launch") ?? null;
+  const launchRun = launchRuns.runs[0] ?? null;
   const attention = buildAttentionQueue({
     companyId,
     approvals: approvals.approvals,

@@ -2433,6 +2433,8 @@ describe("launch kit", () => {
     });
     const companyId = co.body.company.id;
     const started = await api.json<{ run: { id: string; agentId: string; trigger: { kind: string; instruction: string } } }>("POST", `/companies/${companyId}/launch-kit`, {});
+    const byTrigger = await api.json<{ runs: { id: string }[] }>("GET", `/companies/${companyId}/runs?trigger=launch&limit=1`);
+    expect(byTrigger.body.runs.map((r) => r.id)).toEqual([started.body.run.id]);
     expect(started.status).toBe(201);
     expect(started.body.run.trigger.kind).toBe("launch");
     expect(started.body.run.trigger.instruction).toContain("Bookkeeping that closes itself");
