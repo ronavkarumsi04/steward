@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { serverApi } from "@/lib/server";
 import type { BusinessSignal, Project, ReactionCatalog, ReactionFire, ReactionRule } from "@/lib/types";
 import { ReactionsPanel } from "@/components/reactions-panel";
 import { SignalInbox } from "@/components/signal-inbox";
+
+export const metadata: Metadata = { title: "Signals" };
 
 export default async function SignalsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

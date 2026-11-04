@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { Agent, RunDetail } from "@/lib/types";
 import { RunDetailView } from "@/components/run-detail";
+
+export const metadata: Metadata = { title: "Run" };
 
 export default async function RunPage({ params }: { params: Promise<{ companyId: string; runId: string }> }) {
   const { companyId, runId } = await params;

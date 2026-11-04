@@ -7,7 +7,7 @@ import { actorLabel, summarizeEvent } from "@/lib/event-format";
 import { Empty, Ago } from "./ui";
 
 export function LiveFeed({ companyId, initial, compact = false }: { companyId: string; initial: StewardEvent[]; compact?: boolean }) {
-  const { events, connected } = useLiveEvents(companyId, { initial, max: compact ? 40 : 300 });
+  const { events, connected } = useLiveEvents(companyId, { initial, max: compact ? 12 : 300 });
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-xs text-muted">
@@ -40,7 +40,7 @@ export function LiveFeed({ companyId, initial, compact = false }: { companyId: s
                   <span className="text-xs text-muted">{actorLabel(e.actor)}</span>
                 </div>
                 <div className="truncate text-fg-2">{summarizeEvent(e)}</div>
-                {!compact && e.correlation.runId && (
+                {e.correlation.runId && (
                   <Link className="text-xs text-accent hover:underline" href={`/app/c/${companyId}/runs/${e.correlation.runId}`}>
                     view run
                   </Link>

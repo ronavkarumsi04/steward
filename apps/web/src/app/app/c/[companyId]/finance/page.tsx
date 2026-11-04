@@ -3,7 +3,7 @@ import { FinanceCenter } from "@/components/finance-center";
 import { serverApi } from "@/lib/server";
 import type { Budget, BudgetLedgerEntry, CompanyOverview, UsageRow } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Finance · Steward" };
+export const metadata: Metadata = { title: "Finance" };
 
 export default async function FinancePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

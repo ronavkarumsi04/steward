@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import { preferredSession } from "@/lib/browser";
 import type { BrowserSessionRead, BrowserWorkspaceRead } from "@/lib/types";
 import { BrowserWorkspace } from "@/components/browser-workspace";
+
+export const metadata: Metadata = { title: "Browser" };
 
 /**
  * The browser route.

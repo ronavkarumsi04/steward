@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { WorkflowWorkspaceRead } from "@/lib/types";
 import { WorkflowStudio } from "@/components/workflow-studio";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Workflows" };
 
 /**
  * The workflows route.

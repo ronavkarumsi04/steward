@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { requireMe, serverApi } from "@/lib/server";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
 import { CompanionPanel } from "@/components/companion-panel";
 import { ProvidersPanel } from "@/components/providers-panel";
 import { OrgHeader } from "@/components/org-header";
+
+export const metadata: Metadata = { title: "Providers" };
 
 export default async function ProvidersPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;

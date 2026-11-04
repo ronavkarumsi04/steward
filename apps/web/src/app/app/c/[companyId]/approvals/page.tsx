@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { serverApi } from "@/lib/server";
 import type { Approval, Run } from "@/lib/types";
 import { ApprovalsList } from "@/components/approvals-list";
 import { Icon } from "@/components/icons";
 import { Empty, PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Approvals" };
 
 export default async function ApprovalsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ status?: string }> }) {
   const { companyId } = await params;

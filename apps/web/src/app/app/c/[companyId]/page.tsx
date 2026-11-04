@@ -31,7 +31,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
   const [events, runs, approvals, usage, schedules, artifacts, documents, integrations, attentionRuns, attentionTasks, launchRuns] = await Promise.all([
-    api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=50`),
+    api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=12`),
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=20`),
     api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=pending&limit=5`),
     api.get<{ usage: UsageRow[] }>(`/orgs/${overview.company.organizationId}/providers/usage?companyId=${companyId}&days=30`),
@@ -121,7 +121,17 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         arriveAfterMs={ARRIVAL.delayMs(2)}
       />
 
-      <div className="nb-bento rise-in grid gap-3 sm:grid-cols-2 xl:grid-cols-4" style={delay(3)}>
+      {launchRun ? (
+        <div className="rise-in" style={delay(3)}>
+          <LaunchKit companyId={companyId} initial={launchRun} />
+        </div>
+      ) : (
+        <div className="rise-in" style={delay(3)}>
+          <LaunchKitStart companyId={companyId} />
+        </div>
+      )}
+
+      <div className="nb-bento rise-in grid gap-3 sm:grid-cols-2 xl:grid-cols-4" style={delay(4)}>
         <div className="nb-metric nb-accent-blue">
           <Stat label="Open tasks" value={openTasks} hint={`${taskCounts.done ?? 0} done`} href={`${base}/tasks`} />
         </div>
@@ -141,7 +151,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         </div>
       </div>
 
-      <section className="nb-panel-flat nb-accent-purple rise-in" style={delay(4)}>
+      <section className="nb-panel-flat nb-accent-purple rise-in" style={delay(5)}>
         <FounderStudio
           companyId={companyId}
           organizationId={company.organizationId}
@@ -168,16 +178,6 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         />
       </section>
 
-      {launchRun ? (
-        <div className="rise-in" style={delay(5)}>
-          <LaunchKit companyId={companyId} initial={launchRun} />
-        </div>
-      ) : (
-        <div className="rise-in" style={delay(5)}>
-          <LaunchKitStart companyId={companyId} />
-        </div>
-      )}
-
       <section className="nb-panel-flat nb-accent-blue rise-in" style={delay(5)}>
         <div className="nb-section-label mb-3">MANUAL TASK LAUNCHER</div>
         <QuickStart companyId={companyId} agents={agents} />
@@ -186,7 +186,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
       <div className="rise-in grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" style={delay(6)}>
         <div className="nb-left-purple nb-accent-blue min-w-0">
           <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/activity`}>All activity <Icon.ChevronRight size={14} /></Link>}>
-            <LiveFeed companyId={companyId} initial={events.events} />
+            <LiveFeed companyId={companyId} initial={events.events} compact />
           </Card>
         </div>
         <div className="min-w-0 space-y-4">
@@ -215,12 +215,12 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
             </Card>
           </div>
           <div className="nb-left-blue nb-accent-purple">
-            <Card title="Recent runs">
+            <Card title="Recent runs" action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>}>
               {runs.runs.length === 0 ? (
                 <Empty icon={<Icon.Runs size={20} />}>No runs yet.</Empty>
               ) : (
                 <ul className="-mx-2 text-sm">
-                  {runs.runs.map((r) => (
+                  {runs.runs.slice(0, 6).map((r) => (
                     <li key={r.id}>
                       <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border px-2 py-2 transition-colors duration-150 hover:nb-accent-purple">
                         <div className="flex items-center justify-between gap-2">

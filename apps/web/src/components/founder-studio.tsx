@@ -372,6 +372,11 @@ export function FounderStudio({
           </div>
         </div>
 
+        {!businessPulse.payments.connected && !stats.liveProductUrl && !pulseLoading ? (
+          <p className="mt-4 text-sm text-muted">
+            Nothing to measure yet: revenue, orders and customers appear here once the product is live and payments are connected.
+          </p>
+        ) : (
         <div className="nb-bento mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="nb-metric nb-panel-flat min-w-0 p-4">
             <div className="nb-section-label">Live product</div>
@@ -398,6 +403,7 @@ export function FounderStudio({
             <div className="tnum mt-3 text-lg font-bold">{pulseLoading ? "…" : businessPulse.payments.available ? businessPulse.revenue?.newCustomers ?? 0 : "—"}</div>
           </div>
         </div>
+        )}
 
         {!businessPulse.payments.connected && (
           <p className="mt-3 text-xs text-muted">Connect Stripe in <Link className="font-semibold text-accent hover:underline" href={`/app/org/${organizationId}/integrations`}>Integrations</Link> to turn Earn into a real checkout + revenue loop.</p>

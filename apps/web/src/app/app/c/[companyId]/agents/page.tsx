@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { serverApi } from "@/lib/server";
 import type { Agent, CompanyOverview } from "@/lib/types";
 import { AgentsPanel, type Schedule } from "@/components/agents-panel";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Agents" };
 
 export default async function AgentsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

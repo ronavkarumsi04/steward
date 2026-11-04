@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { requireMe, serverApi } from "@/lib/server";
 import { MembersPanel, type Invitation, type Member } from "@/components/members-panel";
 import { OrgHeader } from "@/components/org-header";
+
+export const metadata: Metadata = { title: "Members" };
 
 export default async function MembersPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
