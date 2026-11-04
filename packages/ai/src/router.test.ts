@@ -60,6 +60,21 @@ describe("planRoutes with live-listed models", () => {
   it("keeps the qualified default first for balanced routing", () => {
     expect(planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, nim)[0]!.model).toBe("z-ai/glm-5.3-flash");
   });
+  it("leaves listing-only models out once three qualified routes are healthy", () => {
+    const enough: Candidate[] = [
+      ...nim,
+      { credentialId: "n1", provider: "nvidia", model: model("nvidia", "nvidia/nemotron-3-ultra-550b-a55b"), priority: 100, healthy: true },
+    ];
+    const routes = planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, enough).map((r) => r.model);
+    expect(routes).toHaveLength(3);
+    expect(routes.every((m) => !m.startsWith("01-ai/") && !m.startsWith("adept/"))).toBe(true);
+    // One qualified route degraded: the listing is a last resort again, after the healthy qualified ones.
+    const oneDown = enough.map((c) => (c.model.id === "z-ai/glm-5.3-flash" ? { ...c, healthy: false } : c));
+    const again = planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, oneDown).map((r) => r.model);
+    expect(again).toHaveLength(5);
+    expect(again.slice(0, 2).sort()).toEqual(["deepseek-ai/deepseek-v4.1-flash", "nvidia/nemotron-3-ultra-550b-a55b"]);
+    expect(again[4]).toBe("z-ai/glm-5.3-flash");
+  });
   it("still prefers an unknown healthy model over a curated unhealthy one", () => {
     const degraded = nim.map((c) => (c.model.curated ? { ...c, healthy: false } : c));
     expect(planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, degraded)[0]!.model).toBe("01-ai/yi-large");

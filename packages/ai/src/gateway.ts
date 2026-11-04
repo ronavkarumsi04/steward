@@ -8,7 +8,7 @@ import { OllamaAdapter } from "./adapters/ollama.js";
 import { OpenAICompatibleAdapter } from "./adapters/openai-compatible.js";
 import { providerTypeMap, seedModelsFor } from "./catalog.js";
 import { ToolNameCodec } from "./toolnames.js";
-import { planRoutes, type Candidate, type RouteChoice } from "./router.js";
+import { planRoutes, type Candidate, type RouteChoice, ROUTE_SHARE_CAP } from "./router.js";
 import { ProviderError, type ChatEvent, type ChatRequest, type ChatResponse, type EmbedRequest, type EmbedResponse, type ProviderAdapter, type ProviderCredential, type Usage } from "./types.js";
 
 export interface ResolvedCredential {
@@ -222,9 +222,12 @@ export class AIGateway {
     if (deadline === undefined) return null;
     const left = deadline - this.now();
     const usable = left - DEADLINE_RESERVE_MS;
-    // Share what is left across the routes still untried, so the first provider cannot spend the whole budget
-    // and leave the fallbacks nothing; a lone route still gets everything up to the transport ceiling.
-    const share = Math.max(MIN_ATTEMPT_MS, Math.floor(usable / Math.max(1, routesLeft)));
+    // Share what is left across the next few routes, so the first provider cannot spend the whole budget
+    // and leave the fallbacks nothing; a lone route still gets everything up to the transport ceiling. Only
+    // `ROUTE_SHARE_CAP` routes count: a provider listing ninety models would otherwise leave every attempt
+    // the ten-second floor, which a large model on a long planning prompt cannot meet, and each route would
+    // time out in turn until the run ended with no answer.
+    const share = Math.max(MIN_ATTEMPT_MS, Math.floor(usable / Math.max(1, Math.min(routesLeft, ROUTE_SHARE_CAP))));
     const timeoutMs = Math.min(ATTEMPT_CEILING_MS, share, usable);
     return { timeoutMs: timeoutMs < MIN_ATTEMPT_MS ? 0 : timeoutMs, left };
   }
