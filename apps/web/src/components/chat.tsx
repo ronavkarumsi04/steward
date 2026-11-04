@@ -7,6 +7,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, Conversation, Message, Run } from "@/lib/types";
 import { Empty, StatusPill, Ago } from "./ui";
+import { Icon } from "./icons";
 import { useToast } from "./feedback";
 
 export function ConversationList({ companyId, conversations, activeId }: { companyId: string; conversations: Conversation[]; activeId?: string }) {
@@ -41,6 +42,59 @@ export function ConversationList({ companyId, conversations, activeId }: { compa
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Four things a founder can ask on day one; each starts a conversation and sends the ask, so the first reply is already on its way. */
+const STARTERS = [
+  "Write a 3-bullet positioning statement and record a decision about our target customer.",
+  "Research our three closest competitors and write a brief with sources.",
+  "Draft a launch post for X and LinkedIn and put both in the Outbox for my review.",
+  "Build a week-one task list with owners, from our goals.",
+];
+
+export function ChatStarters({ companyId }: { companyId: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  async function start(prompt: string) {
+    setBusy(prompt);
+    try {
+      const { conversation } = await browserApi.post<{ conversation: Conversation }>(`/companies/${companyId}/conversations`, { title: prompt.slice(0, 60) });
+      await browserApi.post(`/companies/${companyId}/conversations/${conversation.id}/messages`, { content: prompt });
+      router.push(`/app/c/${companyId}/chat/${conversation.id}`);
+      router.refresh();
+    } catch (err) {
+      toast("err", err instanceof ApiError ? err.message : "Could not start a conversation");
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="nb-panel-flat nb-accent-blue flex h-full flex-col justify-center gap-5 px-5 py-8 sm:px-8">
+      <div className="max-w-xl">
+        <div className="nb-section-label mb-2">Chief of Staff</div>
+        <h2 className="text-2xl font-black leading-tight tracking-tight">Tell Steward what you want done.</h2>
+        <p className="mt-2 text-sm text-muted">
+          Every message becomes a durable run: it plans, uses the tools your policies allow, stops for approval when it must, and reports back here with what it produced.
+        </p>
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2" aria-label="Suggested first asks">
+        {STARTERS.map((prompt) => (
+          <li key={prompt}>
+            <button
+              type="button"
+              className="nb-panel-flat flex w-full items-start gap-3 border px-3 py-2.5 text-left text-sm transition-colors duration-150 hover:nb-accent-yellow disabled:opacity-60"
+              onClick={() => start(prompt)}
+              disabled={busy !== null}
+            >
+              <span className="mt-0.5 shrink-0 text-accent"><Icon.ChevronRight size={16} /></span>
+              <span>{busy === prompt ? "Starting…" : prompt}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted">Or press “New conversation” and write your own.</p>
     </div>
   );
 }
