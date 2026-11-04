@@ -203,10 +203,17 @@ function urlsReadByRun(calls: ReadonlyArray<{ toolName: string; input: unknown; 
   for (const c of calls) {
     if (c.status !== "succeeded") continue;
     const input = (c.input ?? {}) as Record<string, unknown>;
-    if (c.toolName === "web.fetch" && typeof input.url === "string") seen.add(normaliseUrl(input.url));
+    const output = (c.output ?? {}) as { content?: unknown; data?: unknown };
+    if (c.toolName === "web.fetch") {
+      if (typeof input.url === "string") seen.add(normaliseUrl(input.url));
+      // A redirect means the page read is not the page asked for; both are honest citations.
+      const landed = (output.data as { url?: unknown } | null)?.url;
+      if (typeof landed === "string") seen.add(normaliseUrl(landed));
+    }
     if (c.toolName === "web.search") {
-      const data = (c.output as { data?: unknown } | null)?.data;
-      if (Array.isArray(data)) for (const r of data) if (r && typeof r === "object" && typeof (r as { url?: unknown }).url === "string") seen.add(normaliseUrl((r as { url: string }).url));
+      if (Array.isArray(output.data)) for (const r of output.data) if (r && typeof r === "object" && typeof (r as { url?: unknown }).url === "string") seen.add(normaliseUrl((r as { url: string }).url));
+      // The ledger drops oversized `data`; the formatted result text still lists each URL on its own line.
+      if (typeof output.content === "string") for (const m of output.content.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []) seen.add(normaliseUrl(m));
     }
   }
   return seen;

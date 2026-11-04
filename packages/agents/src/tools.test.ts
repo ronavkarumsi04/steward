@@ -235,6 +235,16 @@ describe("document.brief", () => {
     expect(upsert.mock.calls[0]![1].content).toContain(`[^1]: ${url}`);
   });
 
+  it("accepts the page a redirect landed on, and search URLs from the result text when the data was truncated", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const { ctx } = briefCtx([
+      { toolName: "web.fetch", input: { url: "https://foundable.app/plans" }, output: { content: "…", data: { url: "https://foundable.app/pricing", status: 200 } } },
+      { toolName: "web.search", input: { query: "polsia" }, output: { content: "1. Polsia\n   https://polsia.com/\n   AI that runs your company", data: { truncated: true } } },
+    ]);
+    const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings }, ctx as never);
+    expect(result.ok).toBe(true);
+  });
+
   it("numbers repeated sources once", () => {
     const md = renderBrief({ title: "T", question: "Q?", summary: "S", findings: [{ claim: "First claim here.", source: "https://a.example/x" }, { claim: "Second claim here.", source: "https://a.example/x/" }], writtenAt: "2026-11-03" });
     expect(md.match(/\[\^1\]/g)?.length).toBe(3);
