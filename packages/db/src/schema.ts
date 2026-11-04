@@ -1179,6 +1179,31 @@ export const browserFrames = pgTable("browser_frames", {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex("browser_frames_seq_idx").on(t.sessionId, t.seq), index("browser_frames_company_idx").on(t.companyId, t.createdAt)]);
 
+/**
+ * Pictures a company asked for and keeps: a post image, a hero, a logo candidate. Unlike browser frames these
+ * are deliverables, so they are never swept and each one is also an artifact of the run that made it. Base64
+ * text rather than a blob store for the same reason frames are: Steward has no blob store, and a FLUX picture
+ * is about a megabyte.
+ */
+export const images = pgTable("images", {
+  id: id(),
+  organizationId: text("organization_id").notNull(),
+  companyId: text("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  runId: text("run_id"),
+  /** picture | logo — what the company asked for, which decides where the workspace shows it. */
+  purpose: text("purpose").notNull().default("picture"),
+  prompt: text("prompt").notNull(),
+  model: text("model").notNull(),
+  seed: integer("seed").notNull().default(0),
+  mimeType: text("mime_type").notNull().default("image/png"),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  bytes: integer("bytes").notNull(),
+  digest: text("digest").notNull(),
+  data: text("data").notNull(),
+  createdAt: createdAt(),
+}, (t) => [index("images_company_idx").on(t.companyId, t.createdAt)]);
+
 // ---------- Business ----------
 export const contacts = pgTable("contacts", {
   id: id(),

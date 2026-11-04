@@ -4,7 +4,8 @@ import { outboundMessages, suppressionList } from "@steward/db";
 import { BrowserAction, BrowserRefusal, describeAction, type PageSnapshot } from "@steward/browser";
 import { BranchName, CompanyProfile, RepoRef, BrandKit, brandVoiceBrief } from "@steward/schema";
 import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, TwilioClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
-import { BrowserError, ENTITY_TYPES, GRAPH_NODE_KINDS, GRAPH_RELATION_IDS, GraphError, PrivacyService, type BrowserSessionView } from "@steward/core";
+import { BrowserError, ENTITY_TYPES, IMAGE_PURPOSES, GRAPH_NODE_KINDS, GRAPH_RELATION_IDS, GraphError, PrivacyService, type BrowserSessionView } from "@steward/core";
+import { IMAGE_ASPECTS, generateImage } from "@steward/ai";
 import { ToolRegistry, defineTool, untrusted, webFetchTool, webSearchTool, type ToolContext, type ToolDefinition } from "@steward/tools";
 import { applyEmailCompliance, applySmsCompliance } from "./outbound.js";
 import type { AgentServices } from "./services.js";
@@ -441,6 +442,42 @@ const documentDeck = defineTool({
     if (!d) return fail("Failed to write the deck.");
     await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title: input.title, metadata: { documentId: d.id, version: d.version, deck: true, slides: input.slides.length } });
     return { ok: true, content: `Wrote deck "${input.title}" (v${d.version}, id ${d.id}): ${input.slides.length} slides.`, data: { id: d.id, version: d.version, slides: input.slides.length } };
+  },
+});
+
+/**
+ * A picture the company keeps. The run names what it is for — a post image, a hero, a logo candidate — and the
+ * company's own NVIDIA credential pays for it, so a company with no image-capable key is told so instead of
+ * getting a placeholder. The picture is stored with the company and recorded as an artifact of the run, so the
+ * verifier can see it was made and the founder can open it from Knowledge or the run.
+ */
+const imageGenerate = defineTool({
+  name: "image.generate",
+  description: "Generate a picture for the company (post image, hero, illustration or logo candidate) from a prompt. Returns the picture's id and URL. Needs an NVIDIA credential.",
+  risk: "LOW",
+  input: z.object({
+    prompt: z.string().trim().min(8).max(1000).describe("What the picture shows, in concrete visual terms: subject, style, colours, background. Include the brand's accent colour and mood."),
+    purpose: z.enum(IMAGE_PURPOSES).default("picture").describe("picture for posts/pages/decks; logo for a logo candidate (ask for a flat, simple mark on a plain background)."),
+    aspect: z.enum(IMAGE_ASPECTS).default("square").describe("square 1024×1024, wide 1344×768, tall 768×1344."),
+    seed: z.number().int().min(0).max(2147483647).optional().describe("Repeat a seed to get the same picture again."),
+  }),
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const cred = (await s.providers.resolveForGateway(s.scope)).filter((c) => c.providerType === "nvidia" && c.credential.apiKey).sort((a, b) => a.priority - b.priority)[0];
+    if (!cred) return fail("No NVIDIA credential is set for this company, so no picture can be made. Ask the founder to add one under Settings → Providers.");
+    let generated;
+    try {
+      generated = await generateImage(cred.credential, { prompt: input.prompt, aspect: input.aspect, seed: input.seed }, { timeoutMs: 90_000 });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return fail(`The image model did not return a picture (${msg}). Try once more with a shorter prompt; if it keeps failing, say so and move on without the picture.`);
+    }
+    const image = await s.images.create(s.scope, { runId: ctx.runId ?? null, purpose: input.purpose, prompt: input.prompt, model: generated.model, seed: generated.seed, mimeType: generated.mimeType, width: generated.width, height: generated.height, data: generated.data });
+    const url = `/v1/companies/${s.scope.companyId}/images/${image.id}`;
+    if (ctx.runId) {
+      await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId ?? undefined, kind: "image", title: `${input.purpose === "logo" ? "Logo candidate" : "Picture"}: ${input.prompt.slice(0, 80)}`, url, mimeType: image.mimeType, metadata: { imageId: image.id, purpose: image.purpose, width: image.width, height: image.height, bytes: image.bytes, seed: image.seed, model: image.model } });
+    }
+    return { ok: true, content: `Made a ${image.width}×${image.height} ${input.purpose} (id ${image.id}, ${Math.round(image.bytes / 1024)} kB). URL: ${url}. Seed ${image.seed} reproduces it.`, data: { imageId: image.id, url, width: image.width, height: image.height, seed: image.seed } };
   },
 });
 
@@ -1505,7 +1542,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, documentBrief, documentSheet, documentDeck, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, companyBrandUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, documentBrief, documentSheet, documentDeck, imageGenerate, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, companyBrandUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
@@ -1520,10 +1557,10 @@ export function buildToolRegistry(): ToolRegistry {
  * per-agent allowlist is for.
  */
 export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
-  orchestrator: ["memory.*", "knowledge.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "browser.*", "slack.post"],
+  orchestrator: ["memory.*", "knowledge.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "image.generate", "campaign.list", "lead.list", "web.*", "browser.*", "slack.post"],
   research: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "browser.*"],
   engineering: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "web.*", "browser.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "company.brand_update", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
+  marketing: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "company.brand_update", "image.generate", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
   sales: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "browser.*", "email.send"],
   support: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
   finance: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],
