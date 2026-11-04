@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { Context } from "@temporalio/activity";
 import { ApplicationFailure } from "@temporalio/common";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
-import { Worker } from "@temporalio/worker";
+import { Worker, bundleWorkflowCode, type WorkflowBundle } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { APPROVAL_SIGNAL, CANCEL_SIGNAL, type AgentActivities, type IterationOutcome } from "./types.js";
 
@@ -36,7 +36,11 @@ function mockActivities(script: IterationOutcome[], calls: Record<string, unknow
 
 describe("agentRunWorkflow", () => {
   let env: TestWorkflowEnvironment;
+  let bundle: WorkflowBundle;
   beforeAll(async () => {
+    // Bundle the workflow code once: `Worker.create({ workflowsPath })` re-runs webpack for every worker,
+    // which on a loaded CI runner cost tens of seconds per test and pushed "cancels on signal" past 60s.
+    bundle = await bundleWorkflowCode({ workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)) });
     const path = process.env.TEMPORAL_TEST_SERVER_PATH?.trim();
     // Managed/offline environments can run a pre-downloaded official test server instead of the Rust
     // downloader (which does not use the environment's required HTTP proxy). Failure still fails the suite.
@@ -61,7 +65,7 @@ describe("agentRunWorkflow", () => {
     const worker = await Worker.create({
       connection: env.nativeConnection,
       taskQueue,
-      workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)),
+      workflowBundle: bundle,
       activities,
       defaultHeartbeatThrottleInterval: "5 seconds",
       maxHeartbeatThrottleInterval: "5 seconds",
