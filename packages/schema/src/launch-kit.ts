@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SITE_ACCENTS, SITE_FONTS, SITE_RADII } from "./site.js";
 import type { CompanyProfile } from "./index.js";
 
 /**
@@ -14,7 +15,7 @@ export const LAUNCH_KIT_TITLES = {
 
 export const LAUNCH_KIT_MIN_TASKS = 5;
 
-export const LaunchKitDeliverableId = z.enum(["positioning", "brand", "landing", "decision", "tasks"]);
+export const LaunchKitDeliverableId = z.enum(["positioning", "brand", "kit", "landing", "decision", "tasks"]);
 export type LaunchKitDeliverableId = z.infer<typeof LaunchKitDeliverableId>;
 
 export interface LaunchKitDeliverable {
@@ -30,6 +31,7 @@ export interface LaunchKitDeliverable {
 export const LAUNCH_KIT_DELIVERABLES: ReadonlyArray<{ id: LaunchKitDeliverableId; label: string; detail: string }> = [
   { id: "positioning", label: LAUNCH_KIT_TITLES.positioning, detail: "Who it is for, the problem, the promise, and why now." },
   { id: "brand", label: LAUNCH_KIT_TITLES.brand, detail: "Name check, tagline options, voice, and a starting palette." },
+  { id: "kit", label: "Brand kit", detail: "Tagline, tone words and accent saved under Settings → Brand, so the site starter and every post reuse them." },
   { id: "landing", label: LAUNCH_KIT_TITLES.landing, detail: "Hero, three benefits, proof, and a call to action, ready to paste into Site Studio." },
   { id: "decision", label: "Target customer decided", detail: "One recorded decision you can overturn later." },
   { id: "tasks", label: `First ${LAUNCH_KIT_MIN_TASKS} work orders`, detail: "The week-one tasks, each with an owner agent and a clear done state." },
@@ -61,8 +63,9 @@ export function launchKitBrief(profile: ProfileInput): string {
     `1. document.write — title "${LAUNCH_KIT_TITLES.positioning}". Sections: Customer, Problem, Promise, Why now, Alternatives, One-line positioning statement. Under 350 words.`,
     `2. decision.record — the primary target customer segment (one segment, one sentence of rationale, and what would make you change it).`,
     `3. document.write — title "${LAUNCH_KIT_TITLES.brand}". Sections: Name check (does "${name}" work; two alternatives), 3 tagline options, Voice (3 adjectives with a do/don't each), Starting palette (3 hex colours with roles), Type direction.`,
-    `4. document.write — title "${LAUNCH_KIT_TITLES.landing}". Sections: Hero headline + subhead, 3 benefits (title + one line), Proof placeholder, Primary call to action, FAQ (3). Written to be pasted into a landing page as-is.`,
-    `5. task.create — ${LAUNCH_KIT_MIN_TASKS} week-one tasks. Each: an imperative title, a one-line done state, a priority, and the agent that should own it (engineering, marketing, sales, research or finance). Include at least one customer conversation and one measurable launch step.`,
+    `4. company.brand_update — commit the brief to the brand kit: tagline (your best option, under 160 characters), voice.tone (the 3 adjectives), voice.do and voice.dont (2–4 short phrases each), accent (one of ${SITE_ACCENTS.join(", ")}; the closest to your palette), font (one of ${SITE_FONTS.join(", ")}), radius (one of ${SITE_RADII.join(", ")}), dark (true only if the palette is dark-first), mark ("wordmark" or "monogram"). Decide every field; the site starter and every post reuse them.`,
+    `5. document.write — title "${LAUNCH_KIT_TITLES.landing}". Sections: Hero headline + subhead, 3 benefits (title + one line), Proof placeholder, Primary call to action, FAQ (3). Written to be pasted into a landing page as-is.`,
+    `6. task.create — ${LAUNCH_KIT_MIN_TASKS} week-one tasks. Each: an imperative title, a one-line done state, a priority, and the agent that should own it (engineering, marketing, sales, research or finance). Include at least one customer conversation and one measurable launch step.`,
     "",
     "Finish with a short report listing what was produced and the two biggest open questions for the founder.",
   ]
@@ -93,8 +96,17 @@ function documentIdFrom(output: unknown): string | null {
   return m?.[1] ?? null;
 }
 
+/**
+ * Whether a launch run was briefed to save the brand kit. Runs started before the brief had that step
+ * finished honestly without one, so their checklist must not hold a line they were never asked for.
+ * An unknown instruction (not a string) is treated as the current brief.
+ */
+export function launchKitAsksForKit(instruction: unknown): boolean {
+  return typeof instruction === "string" ? instruction.includes("company.brand_update") : true;
+}
+
 /** Derive the checklist from the run's tool ledger: a deliverable counts only when the tool call succeeded. */
-export function launchKitProgress(calls: readonly LaunchKitToolCall[]): LaunchKitDeliverable[] {
+export function launchKitProgress(calls: readonly LaunchKitToolCall[], options: { kit?: boolean } = {}): LaunchKitDeliverable[] {
   const ok = calls.filter((c) => c.status === "succeeded");
   const docs = ok.filter((c) => c.toolName === "document.write");
   const findDoc = (title: string) => {
@@ -102,9 +114,11 @@ export function launchKitProgress(calls: readonly LaunchKitToolCall[]): LaunchKi
     return docs.find((c) => str(field(c.input, "title"))?.toLowerCase() === want) ?? docs.find((c) => str(field(c.input, "title"))?.toLowerCase().includes(want.split(" ")[0]!));
   };
   const decision = ok.find((c) => c.toolName === "decision.record");
+  const kit = ok.filter((c) => c.toolName === "company.brand_update").at(-1);
   const tasks = ok.filter((c) => c.toolName === "task.create");
 
-  return LAUNCH_KIT_DELIVERABLES.map((d) => {
+  const deliverables = options.kit === false ? LAUNCH_KIT_DELIVERABLES.filter((d) => d.id !== "kit") : LAUNCH_KIT_DELIVERABLES;
+  return deliverables.map((d) => {
     let evidence: string | null = null;
     let documentId: string | null = null;
     if (d.id === "positioning" || d.id === "brand" || d.id === "landing") {
@@ -112,6 +126,12 @@ export function launchKitProgress(calls: readonly LaunchKitToolCall[]): LaunchKi
       if (call) {
         evidence = str(field(call.input, "title"));
         documentId = documentIdFrom(call.output);
+      }
+    } else if (d.id === "kit") {
+      if (kit) {
+        const tone = field(field(kit.input, "voice"), "tone");
+        const tones = Array.isArray(tone) ? tone.map(str).filter((t): t is string => t !== null) : [];
+        evidence = str(field(kit.input, "tagline")) ?? (tones.length ? tones.join(", ") : null) ?? "Saved";
       }
     } else if (d.id === "decision") {
       evidence = decision ? (str(field(decision.input, "title")) ?? str(field(decision.input, "decision")) ?? str(field(decision.input, "summary")) ?? "Recorded") : null;

@@ -4,7 +4,7 @@ import { ApplicationFailure } from "@temporalio/common";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { APPROVAL_SIGNAL, CANCEL_SIGNAL, type AgentActivities, type IterationOutcome } from "./types.js";
+import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type IterationOutcome } from "./types.js";
 
 const input = { runId: "run-1", scope: { organizationId: "org", companyId: "co" } };
 const ctx = { systemPrompt: "s", userPrompt: "u", toolNames: [], routingPolicy: {}, maxIterations: 10, budgetUsdPerRun: null };
@@ -119,9 +119,18 @@ describe("agentRunWorkflow", () => {
     expect((calls.finalize![0] as { error: string }).error).toBe("AI budget hit");
   }, 60_000);
 
-  it("cancels on signal", async () => {
+  it("cancels on signal while waiting for an approval", async () => {
+    // Signal once the workflow is actually parked on the approval, not after a fixed delay. On a loaded CI
+    // runner 500ms was not enough for the worker to get through `iterate`, so the cancel landed mid-activity:
+    // the handler cancelled a scope whose activity had already completed inside the same activation, the test
+    // server rejected the activation with ACTIVITY_UNKNOWN, and the retry took longer than the test budget.
+    // Cancelling mid-activity has its own test below, with an activity that observes the cancellation.
     const { result } = await run([{ kind: "needs_approval", approvalId: "appr-3", toolCallId: "tc", toolName: "x" }], async (handle) => {
-      await new Promise((r) => setTimeout(r, 500));
+      for (let i = 0; i < 200; i++) {
+        const status = await handle.query<{ phase: string }>(STATUS_QUERY);
+        if (status.phase === "waiting_approval") break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
       await handle.signal(CANCEL_SIGNAL, { reason: "stop" });
     });
     expect(result.status).toBe("cancelled");

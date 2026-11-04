@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LAUNCH_KIT_MIN_TASKS, LAUNCH_KIT_TITLES, launchKitBrief, launchKitProgress } from "./launch-kit.js";
+import { LAUNCH_KIT_MIN_TASKS, LAUNCH_KIT_TITLES, launchKitAsksForKit, launchKitBrief, launchKitProgress } from "./launch-kit.js";
 
 describe("launch kit brief", () => {
   it("carries the founder's own words and demands the exact deliverable titles", () => {
@@ -18,6 +18,8 @@ describe("launch kit brief", () => {
     expect(brief).toContain("no paid ads");
     for (const title of Object.values(LAUNCH_KIT_TITLES)) expect(brief).toContain(`title "${title}"`);
     expect(brief).toContain(`task.create — ${LAUNCH_KIT_MIN_TASKS} week-one tasks`);
+    expect(brief).toContain("company.brand_update");
+    expect(brief).toContain("indigo, violet, emerald, amber, rose, slate, cyan");
     expect(brief).not.toContain("null");
   });
 
@@ -46,6 +48,7 @@ describe("launch kit progress", () => {
     const by = Object.fromEntries(progress.map((p) => [p.id, p]));
     expect(by.positioning).toMatchObject({ status: "done", evidence: "Positioning", documentId: "doc_pos" });
     expect(by.brand).toMatchObject({ status: "pending", evidence: null });
+    expect(by.kit).toMatchObject({ status: "pending", evidence: null });
     expect(by.landing?.status).toBe("pending");
     expect(by.decision).toMatchObject({ status: "done", evidence: "Target customer: two-person agencies" });
     expect(by.tasks).toMatchObject({ status: "pending", evidence: `3 of ${LAUNCH_KIT_MIN_TASKS} created` });
@@ -56,11 +59,31 @@ describe("launch kit progress", () => {
       doc("Landing Page Copy — v1"),
       doc("Brand Brief"),
       doc("Positioning"),
+      { toolName: "company.brand_update", input: { accent: "emerald", voice: { tone: ["plain", "warm"] } }, output: null, status: "failed" },
+      { toolName: "company.brand_update", input: { tagline: "Books that close themselves", accent: "emerald" }, output: null, status: "succeeded" },
       { toolName: "decision.record", input: { decision: "SMBs" }, output: null, status: "succeeded" },
       ...Array.from({ length: LAUNCH_KIT_MIN_TASKS }, () => ({ toolName: "task.create", input: {}, output: null, status: "succeeded" })),
     ]);
     expect(progress.every((p) => p.status === "done")).toBe(true);
     expect(progress.find((p) => p.id === "tasks")?.evidence).toBe(`${LAUNCH_KIT_MIN_TASKS} created`);
+    expect(progress.find((p) => p.id === "kit")?.evidence).toBe("Books that close themselves");
+  });
+
+  it("describes a saved brand kit by its tone when it has no tagline, and ignores a failed save", () => {
+    const failed = launchKitProgress([{ toolName: "company.brand_update", input: { tagline: "Nope" }, output: null, status: "failed" }]);
+    expect(failed.find((p) => p.id === "kit")).toMatchObject({ status: "pending", evidence: null });
+    const toned = launchKitProgress([{ toolName: "company.brand_update", input: { voice: { tone: ["plain", "exact"] } }, output: null, status: "succeeded" }]);
+    expect(toned.find((p) => p.id === "kit")).toMatchObject({ status: "done", evidence: "plain, exact" });
+  });
+
+  it("leaves the brand kit line out of a run that was never briefed to save one", () => {
+    const oldBrief = "Launch kit for Acme. Deliverables: 1. document.write ... 5. task.create";
+    expect(launchKitAsksForKit(oldBrief)).toBe(false);
+    expect(launchKitAsksForKit(launchKitBrief({ name: "Acme" }))).toBe(true);
+    expect(launchKitAsksForKit(undefined)).toBe(true);
+    const items = launchKitProgress([], { kit: launchKitAsksForKit(oldBrief) });
+    expect(items.map((i) => i.id)).not.toContain("kit");
+    expect(launchKitProgress([]).map((i) => i.id)).toContain("kit");
   });
 
   it("is all pending with no ledger", () => {
