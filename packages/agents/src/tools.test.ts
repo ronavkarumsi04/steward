@@ -245,6 +245,18 @@ describe("document.brief", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("does not treat a URL that was merely searched for, with no results, as read", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const { ctx, upsert } = briefCtx([
+      { toolName: "web.fetch", input: { url: "https://foundable.app/pricing" }, output: { content: "…" } },
+      { toolName: "web.search", input: { query: "https://polsia.com/" }, output: { content: '<untrusted_content source="search:https://polsia.com/">No results.</untrusted_content>', data: [] } },
+    ]);
+    const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings }, ctx as never);
+    expect(result.ok).toBe(false);
+    expect(result.content).toContain("https://polsia.com");
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("numbers repeated sources once", () => {
     const md = renderBrief({ title: "T", question: "Q?", summary: "S", findings: [{ claim: "First claim here.", source: "https://a.example/x" }, { claim: "Second claim here.", source: "https://a.example/x/" }], writtenAt: "2026-11-03" });
     expect(md.match(/\[\^1\]/g)?.length).toBe(3);

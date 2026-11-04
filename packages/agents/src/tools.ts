@@ -212,8 +212,9 @@ function urlsReadByRun(calls: ReadonlyArray<{ toolName: string; input: unknown; 
     }
     if (c.toolName === "web.search") {
       if (Array.isArray(output.data)) for (const r of output.data) if (r && typeof r === "object" && typeof (r as { url?: unknown }).url === "string") seen.add(normaliseUrl((r as { url: string }).url));
-      // The ledger drops oversized `data`; the formatted result text still lists each URL on its own line.
-      if (typeof output.content === "string") for (const m of output.content.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []) seen.add(normaliseUrl(m));
+      // The ledger drops oversized `data`; the formatted result text still lists each result URL on its own
+      // indented line. Only those lines count — not the query echoed in the untrusted-content wrapper.
+      if (typeof output.content === "string") for (const m of output.content.matchAll(/^[ \t]+(https?:\/\/[^\s"'<>\\]+)[ \t]*$/gm)) seen.add(normaliseUrl(m[1]!));
     }
   }
   return seen;
