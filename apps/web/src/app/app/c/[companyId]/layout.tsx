@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { AUTONOMY_LABELS } from "@steward/schema";
 import { requireMe, serverApi, tryApi } from "@/lib/server";
-import type { CompanyOverview } from "@/lib/types";
+import type { CompanyOverview, Run } from "@/lib/types";
 import { CompanySidebar } from "@/components/company-sidebar";
 import { CompanyCommandPalette } from "@/components/company-command-palette";
 import { Icon } from "@/components/icons";
@@ -14,7 +14,11 @@ export default async function CompanyLayout({ children, params }: { children: Re
   const { companyId } = await params;
   const me = await requireMe(`/app/c/${companyId}`);
   const api = await serverApi();
-  const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
+  const [overview, active] = await Promise.all([
+    tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`)),
+    // Runs in flight, for the sidebar's count: a founder glancing at the nav sees whether anything is working.
+    tryApi(() => api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=executing,planning,building_context,verifying&limit=20`)),
+  ]);
   if (!overview) notFound();
   const { company, pendingApprovals } = overview;
   return (
@@ -41,7 +45,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
             </div>
             <CompanyCommandPalette companyId={company.id} />
             <div className="my-3 border-t border-line" />
-            <CompanySidebar companyId={company.id} pendingApprovals={pendingApprovals} />
+            <CompanySidebar companyId={company.id} pendingApprovals={pendingApprovals} activeRuns={active?.runs.length ?? 0} />
           </div>
         </aside>
         <main className="min-w-0 flex-1 rise-in">{children}</main>
