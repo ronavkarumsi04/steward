@@ -10,6 +10,17 @@ function tenantScope(scope: WorkflowScope): TenantScope {
   return { organizationId: scope.organizationId, companyId: scope.companyId, actor: { type: "system", component: "worker" } };
 }
 
+/**
+ * When this activity attempt must be over, from Temporal's own start-to-close timeout, measured from when the
+ * attempt was scheduled. Handed to the model gateway so a provider that stops answering is given up on and
+ * failed over inside the budget, instead of the attempt dying as "aborted" with the run none the wiser.
+ */
+function attemptDeadline(): number | undefined {
+  const info = Context.current().info;
+  if (!info.startToCloseTimeoutMs) return undefined;
+  return (info.currentAttemptScheduledTimestampMs || info.scheduledTimestampMs || Date.now()) + info.startToCloseTimeoutMs;
+}
+
 /** Keeps the activity alive for long tool executions; Temporal times out activities that stop heartbeating. */
 function heartbeatLoop(): () => void {
   const ctx = Context.current();
@@ -50,7 +61,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
       const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        const plan = await (await runtimeFor(input)).plan(input.runId, asRuntimeCtx(input.ctx), signal);
+        const plan = await (await runtimeFor(input)).plan(input.runId, asRuntimeCtx(input.ctx), signal, attemptDeadline());
         return { objective: plan.objective };
       } catch (e) {
         throw classify(e);
@@ -63,7 +74,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
       const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        return await (await runtimeFor(input)).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume, signal);
+        return await (await runtimeFor(input)).iterate(input.runId, asRuntimeCtx(input.ctx), input.resume, signal, attemptDeadline());
       } catch (e) {
         throw classify(e);
       } finally {
@@ -75,7 +86,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
       const signal = Context.current().cancellationSignal;
       const stop = heartbeatLoop();
       try {
-        return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText, signal);
+        return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText, signal, attemptDeadline());
       } finally {
         stop();
       }
