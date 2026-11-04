@@ -131,8 +131,6 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
-      <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
-
       {(outputs.length > 0 || resultSummary) && (
         <Card title="What this run produced" className="nb-left-green">
           {resultSummary && <p className="mb-3 text-sm text-fg-2">{resultSummary}</p>}
@@ -148,6 +146,9 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
               ))}
             </ul>
           )}
+
+      <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
+
         </Card>
       )}
 
