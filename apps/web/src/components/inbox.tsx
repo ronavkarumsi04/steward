@@ -17,9 +17,12 @@ export type InboxGroup = {
  * Built for a phone first — one column, the count up top, each card answerable where it stands — and it
  * reads the same on a desk. A decided card stays until the page is left, so the outcome can be read.
  */
-export function Inbox({ groups, manyOrgs }: { groups: InboxGroup[]; manyOrgs: boolean }) {
-  const [decided, setDecided] = useState<Set<string>>(() => new Set());
-  const waiting = groups.reduce((n, g) => n + g.approvals.filter((a) => !decided.has(a.id)).length, 0);
+export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGroup[]; manyOrgs: boolean; truncated?: boolean }) {
+  // The answered card, kept whole: the server list is pending-only, so after the refresh this is the only
+  // place its outcome (who decided, the note, whether the workflow took it) can still be read.
+  const [decided, setDecided] = useState<Array<{ approval: Approval; companyId: string }>>([]);
+  const isDecided = (id: string) => decided.some((d) => d.approval.id === id);
+  const waiting = groups.reduce((n, g) => n + g.approvals.filter((a) => !isDecided(a.id)).length, 0);
 
   return (
     <div className="mx-auto w-full max-w-[720px] px-3 py-5 sm:px-5 sm:py-8">
@@ -35,7 +38,18 @@ export function Inbox({ groups, manyOrgs }: { groups: InboxGroup[]; manyOrgs: bo
         </p>
       </header>
 
-      {groups.length === 0 ? (
+      {decided.length > 0 && (
+        <section aria-labelledby="inbox-decided" className="mb-7 space-y-3">
+          <h2 id="inbox-decided" className="nb-section-label">
+            JUST DECIDED
+          </h2>
+          {decided.map((d) => (
+            <ApprovalCard key={`decided-${d.approval.id}`} companyId={d.companyId} approval={d.approval} run={null} />
+          ))}
+        </section>
+      )}
+
+      {groups.length === 0 && decided.length === 0 ? (
         <section className="card nb-left-green p-5" aria-label="Inbox empty">
           <h2 className="text-lg font-semibold">Nothing is waiting on you.</h2>
           <p className="mt-1 text-sm text-muted">
@@ -58,12 +72,19 @@ export function Inbox({ groups, manyOrgs }: { groups: InboxGroup[]; manyOrgs: bo
                   All approvals
                 </Link>
               </div>
-              {g.approvals.map((a) => (
-                <ApprovalCard key={a.id} companyId={g.company.id} approval={a} run={null} onDecided={(d) => setDecided((prev) => new Set(prev).add(d.id))} />
-              ))}
+              {g.approvals
+                .filter((a) => !isDecided(a.id))
+                .map((a) => (
+                  <ApprovalCard key={a.id} companyId={g.company.id} approval={a} run={null} onDecided={(d) => setDecided((prev) => [{ approval: d, companyId: g.company.id }, ...prev])} />
+                ))}
             </section>
           ))}
         </div>
+      )}
+      {truncated && (
+        <p className="mt-6 text-sm text-muted" role="note">
+          Showing the newest 200 requests. Older ones are on each company's Approvals page.
+        </p>
       )}
       <p className="mt-8 text-xs leading-relaxed text-muted">
         Add Steward to your home screen to open this inbox like an app. The decision you make here is the same record the workspace shows.

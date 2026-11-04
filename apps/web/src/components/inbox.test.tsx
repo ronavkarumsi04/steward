@@ -51,6 +51,11 @@ describe("Inbox", () => {
     expect(html).toContain("/app/c/c1/approvals");
   });
 
+  it("says when the page is full and where the rest are", () => {
+    const html = renderToStaticMarkup(createElement(Inbox, { manyOrgs: false, truncated: true, groups: [{ orgName: "S", company: { id: "c1", name: "N" }, approvals: [approval("a1", "email.send")] }] }));
+    expect(html).toContain("Showing the newest 200 requests");
+  });
+
   it("says plainly when nothing is waiting", () => {
     const html = renderToStaticMarkup(createElement(Inbox, { manyOrgs: false, groups: [] }));
     expect(html).toContain("Nothing is waiting on you.");
