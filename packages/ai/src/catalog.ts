@@ -60,6 +60,7 @@ const s = (provider: string, seeds: Seed[]): ModelInfo[] =>
     tier: m.tier,
     deprecated: false,
     local: false,
+    curated: true,
     capabilities: {
       contextWindow: m.ctx,
       maxOutputTokens: m.out,
@@ -77,6 +78,10 @@ const s = (provider: string, seeds: Seed[]): ModelInfo[] =>
 
 /** Seed catalog. Live `listModels()` results are merged over these entries at runtime. */
 export const SEED_MODELS: ModelInfo[] = [
+  ...s("nvidia", [
+    { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash (NIM)", tier: "standard", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
+    { id: "deepseek-ai/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash (NIM)", tier: "economy", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
+  ]),
   ...s("openai", [
     { id: "gpt-5", name: "GPT-5", tier: "frontier", ctx: 400_000, out: 128_000, tools: true, json: true, vision: true, reasoning: true, in: 1.25, outp: 10, cached: 0.125 },
     { id: "gpt-5-mini", name: "GPT-5 mini", tier: "standard", ctx: 400_000, out: 128_000, tools: true, json: true, vision: true, reasoning: true, in: 0.25, outp: 2, cached: 0.025 },

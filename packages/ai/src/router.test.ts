@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SEED_MODELS } from "./catalog.js";
 import { estimateCost } from "./gateway.js";
+import type { ModelInfo } from "@steward/schema";
 import { planRoutes, type Candidate } from "./router.js";
 
 const model = (provider: string, id: string) => SEED_MODELS.find((m) => m.provider === provider && m.id === id)!;
@@ -30,6 +31,38 @@ describe("planRoutes", () => {
     expect(r.map((x) => x.model)).toEqual(["gpt-5", "claude-sonnet-4-5"]);
     const local = planRoutes({ fallbackChain: [], requirements: { preference: "balanced", localOnly: true } }, cands);
     expect(local).toHaveLength(0);
+  });
+});
+
+describe("planRoutes with live-listed models", () => {
+  const listed = (id: string): ModelInfo => ({
+    id,
+    provider: "nvidia",
+    displayName: id,
+    tier: "standard",
+    deprecated: false,
+    local: false,
+    capabilities: { contextWindow: 32_768, inputModalities: ["text"], outputModalities: ["text"], tools: true, structuredOutput: true, reasoning: false, streaming: true, vision: false },
+  });
+  const nim: Candidate[] = [
+    { credentialId: "n1", provider: "nvidia", model: listed("01-ai/yi-large"), priority: 100, healthy: true },
+    { credentialId: "n1", provider: "nvidia", model: listed("adept/fuyu-8b"), priority: 100, healthy: true },
+    { credentialId: "n1", provider: "nvidia", model: model("nvidia", "z-ai/glm-5.3-flash"), priority: 100, healthy: true },
+    { credentialId: "n1", provider: "nvidia", model: model("nvidia", "deepseek-ai/deepseek-v4.1-flash"), priority: 100, healthy: true },
+  ];
+  it("ranks curated seed models ahead of models only known from the live listing", () => {
+    for (const preference of ["balanced", "cost", "quality", "latency"] as const) {
+      const routes = planRoutes({ fallbackChain: [], requirements: { preference } }, nim).map((r) => r.model);
+      expect(routes.slice(0, 2).sort()).toEqual(["deepseek-ai/deepseek-v4.1-flash", "z-ai/glm-5.3-flash"]);
+      expect(routes).toHaveLength(4);
+    }
+  });
+  it("keeps the qualified default first for balanced routing", () => {
+    expect(planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, nim)[0]!.model).toBe("z-ai/glm-5.3-flash");
+  });
+  it("still prefers an unknown healthy model over a curated unhealthy one", () => {
+    const degraded = nim.map((c) => (c.model.curated ? { ...c, healthy: false } : c));
+    expect(planRoutes({ fallbackChain: [], requirements: { preference: "balanced" } }, degraded)[0]!.model).toBe("01-ai/yi-large");
   });
 });
 
