@@ -64,7 +64,7 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
 
   return (
     <nav
-      className="-mx-1 flex gap-0.5 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-col md:gap-4 md:overflow-visible md:px-0 md:pb-0"
+      className="-mx-1 flex gap-0.5 overflow-x-auto px-1 py-1 md:mx-0 md:flex-col md:gap-4 md:overflow-visible md:px-0 md:py-0"
       aria-label="Company"
     >
       {GROUPS.map(({ label: groupLabel, items }) => (
