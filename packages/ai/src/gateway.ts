@@ -126,6 +126,12 @@ export function estimateCost(model: ModelInfo | undefined, usage: Usage): { cost
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** The transport's own per-request ceiling (see `doFetch`); a deadline can only shorten an attempt, never extend it. */
+const ATTEMPT_CEILING_MS = 120_000;
+/** Kept back from the deadline so the caller can still record the outcome after the last attempt ends. */
+const DEADLINE_RESERVE_MS = 5_000;
+/** Below this an attempt is not started at all. */
+const MIN_ATTEMPT_MS = 10_000;
 
 /**
  * Provider-neutral entry point. Resolves credentials → catalog → route plan, executes with retries and fallback,
@@ -206,10 +212,27 @@ export class AIGateway {
     this.health.delete(credentialId);
   }
 
+  /**
+   * How long one attempt may take under a caller deadline: the remaining budget less what the caller needs
+   * afterwards to record the outcome, split across the routes still to try, never more than the transport's own ceiling. An attempt that could not
+   * get `MIN_ATTEMPT_MS` of real time is not started — a model given five seconds does not answer, it just
+   * burns the last of the budget and the run still ends as a timeout nobody can explain.
+   */
+  private attemptBudget(deadline: number | undefined, routesLeft: number): { timeoutMs: number; left: number } | null {
+    if (deadline === undefined) return null;
+    const left = deadline - this.now();
+    const usable = left - DEADLINE_RESERVE_MS;
+    // Share what is left across the routes still untried, so the first provider cannot spend the whole budget
+    // and leave the fallbacks nothing; a lone route still gets everything up to the transport ceiling.
+    const share = Math.max(MIN_ATTEMPT_MS, Math.floor(usable / Math.max(1, routesLeft)));
+    const timeoutMs = Math.min(ATTEMPT_CEILING_MS, share, usable);
+    return { timeoutMs: timeoutMs < MIN_ATTEMPT_MS ? 0 : timeoutMs, left };
+  }
+
   private async execute<T>(
-    req: { model?: string; signal?: AbortSignal },
+    req: { model?: string; signal?: AbortSignal; deadline?: number },
     opts: GatewayCallOptions,
-    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined) => Promise<ExecutionResult<T>>,
+    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined, attempt: { signal?: AbortSignal }) => Promise<ExecutionResult<T>>,
   ): Promise<T & { route: RouteChoice }> {
     const { routes, creds, candidates } = await this.plan(opts.policy);
     if (!routes.length) {
@@ -219,16 +242,30 @@ export class AIGateway {
     const maxAttempts = this.opts.maxAttemptsPerRoute ?? 2;
     let lastErr: ProviderError | undefined;
     const deadCreds = new Set<string>();
-    for (const route of routes) {
+    routes: for (const [routeIndex, route] of routes.entries()) {
       const cred = creds.get(route.credentialId);
       if (!cred || deadCreds.has(cred.id)) continue;
+      const routesLeft = routes.slice(routeIndex).filter((r) => !deadCreds.has(r.credentialId)).length;
       const model = candidates.find((c) => c.credentialId === route.credentialId && c.model.id === route.model)?.model;
       const adapter = this.adapterFor(cred);
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (req.signal?.aborted) throw new ProviderError("unknown", "aborted", route.provider, false);
+        const budget = this.attemptBudget(req.deadline, routesLeft);
+        if (budget && budget.timeoutMs === 0) {
+          lastErr = new ProviderError(
+            "timeout",
+            `${Math.max(0, Math.round(budget.left / 1000))}s left in the run's budget is not enough to ask ${route.provider}/${route.model}${lastErr ? ` after ${lastErr.provider} ${lastErr.code}` : ""}`,
+            "gateway",
+            true,
+          );
+          break routes;
+        }
+        const attemptController = budget ? new AbortController() : undefined;
+        const attemptTimer = attemptController && budget ? setTimeout(() => attemptController.abort(new Error(`timeout after ${budget.timeoutMs}ms of a ${Math.round((req.deadline! - this.now()) / 1000)}s budget`)), budget.timeoutMs) : undefined;
+        const attemptSignal = attemptController ? (req.signal ? AbortSignal.any([req.signal, attemptController.signal]) : attemptController.signal) : req.signal;
         const started = this.now();
         try {
-          const { result, usage, previousAttempts = [], latencyMs: resultLatencyMs } = await fn(adapter, route, model);
+          const { result, usage, previousAttempts = [], latencyMs: resultLatencyMs } = await fn(adapter, route, model, { signal: attemptSignal });
           for (const [index, previous] of previousAttempts.entries()) {
             const { costUsd, estimated } = estimateCost(model, previous.usage);
             await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: "ok", retries: attempt + index, routingReason: route.reason, context: opts.context });
@@ -255,7 +292,12 @@ export class AIGateway {
           this.markFailure(cred.id, err);
           if (err.code === "auth" || err.code === "quota") deadCreds.add(cred.id);
           if (!err.retryable || attempt === maxAttempts - 1) break;
+          // Under a deadline a provider that did not answer in its whole attempt budget is not asked again: the
+          // next route is the better bet, and a second silence would end the budget with no answer at all.
+          if (err.code === "timeout" && req.deadline !== undefined) break;
           await sleep(Math.min(err.retryAfterMs ?? 500 * 2 ** attempt, 20_000));
+        } finally {
+          if (attemptTimer) clearTimeout(attemptTimer);
         }
       }
     }
@@ -265,9 +307,9 @@ export class AIGateway {
   async chat(req: Omit<ChatRequest, "model"> & { model?: string }, opts: GatewayCallOptions): Promise<ChatResponse & { route: RouteChoice }> {
     const codec = new ToolNameCodec(req.tools);
     const encoded = codec.encodeRequest(req);
-    return this.execute(encoded, opts, async (adapter, route, model) => {
+    return this.execute(encoded, opts, async (adapter, route, model, attempt) => {
       const firstStarted = this.now();
-      const first = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model }));
+      const first = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model, signal: attempt.signal }));
       const firstLatencyMs = this.now() - firstStarted;
       const requestedMaxTokens = encoded.maxTokens;
       const reasoningTokens = first.usage.reasoningTokens ?? 0;
@@ -291,7 +333,7 @@ export class AIGateway {
       const retryStarted = this.now();
       let retry: ChatResponse;
       try {
-        retry = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model, maxTokens: retryMaxTokens }));
+        retry = codec.decodeResponse(await adapter.chat({ ...encoded, model: route.model, maxTokens: retryMaxTokens, signal: attempt.signal }));
       } catch (e) {
         const error = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
         const executionError = error as GatewayExecutionError;

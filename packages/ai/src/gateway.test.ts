@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelInfo } from "@steward/schema";
 import { AIGateway, type ResolvedCredential, type UsageRecord } from "./gateway.js";
-import type { ChatRequest, ChatResponse, ProviderAdapter } from "./types.js";
+import { ProviderError, type ChatRequest, type ChatResponse, type ProviderAdapter } from "./types.js";
 
 const model: ModelInfo = {
   id: "test-model",
@@ -206,5 +206,70 @@ describe("AIGateway reasoning-budget recovery", () => {
     expect(adapters.get("credential-1")!.chat).toHaveBeenCalledOnce();
     expect(adapters.get("credential-1")!.chat.mock.calls[0]?.[0].maxTokens).toBeUndefined();
     expect(records).toHaveLength(1);
+  });
+});
+
+
+describe("AIGateway caller deadlines", () => {
+  // A provider that never answers: it only ends when the attempt's own signal aborts, the way a real fetch does.
+  const hangingAdapter = (type: string) => {
+    const chat = vi.fn(
+      (request: ChatRequest) =>
+        new Promise<ChatResponse>((_, reject) => {
+          request.signal?.addEventListener("abort", () => reject(new ProviderError("timeout", `Request to ${type} timed out`, type, true)), { once: true });
+        }),
+    );
+    return { adapter: { type, info: {} as ProviderAdapter["info"], listModels: vi.fn(async () => [model]), chat, async *stream() {}, testConnection: vi.fn() } as unknown as ProviderAdapter, chat };
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("gives up on a provider that stays silent and fails over to the next route inside the budget", async () => {
+    vi.useFakeTimers();
+    const first = credential("silent", 10);
+    const second = credential("answers", 50);
+    const records: UsageRecord[] = [];
+    const gateway = new AIGateway({ loadCredentials: async () => [first, second], recordUsage: async (r) => void records.push(r), maxAttemptsPerRoute: 2 });
+    const silent = hangingAdapter(first.providerType);
+    const answering = {
+      adapter: { type: second.providerType, info: {} as ProviderAdapter["info"], listModels: vi.fn(async () => [model]), chat: vi.fn(async () => response({ text: "hello", finishReason: "stop", usage: { inputTokens: 5, outputTokens: 5 } })), async *stream() {}, testConnection: vi.fn() } as unknown as ProviderAdapter,
+    };
+    vi.spyOn(gateway, "adapterFor").mockImplementation((c) => (c.id === first.id ? silent.adapter : answering.adapter));
+
+    const pending = gateway.chat({ ...request(), deadline: Date.now() + 60_000 }, { policy });
+    await vi.advanceTimersByTimeAsync(56_000);
+    const result = await pending;
+
+    expect(result.text).toBe("hello");
+    expect(result.route.credentialId).toBe(second.id);
+    // One attempt, not two: a second silence from the same provider would have ended the budget with no answer.
+    expect(silent.chat).toHaveBeenCalledTimes(1);
+    // The silent route got its share of the budget (half of 55s), not all of it, so the fallback still had time.
+    expect(records.find((r) => r.credentialId === first.id)?.latencyMs).toBeGreaterThanOrEqual(27_000);
+    expect(records.find((r) => r.credentialId === first.id)?.latencyMs).toBeLessThan(30_000);
+    expect(records.find((r) => r.credentialId === first.id)).toMatchObject({ status: "error", errorCode: "timeout" });
+  });
+
+  it("does not start an attempt the remaining budget cannot hold", async () => {
+    const cred = credential("credential-1", 100);
+    const gateway = new AIGateway({ loadCredentials: async () => [cred], recordUsage: async () => {}, maxAttemptsPerRoute: 2 });
+    const silent = hangingAdapter(cred.providerType);
+    vi.spyOn(gateway, "adapterFor").mockImplementation(() => silent.adapter);
+
+    await expect(gateway.chat({ ...request(), deadline: Date.now() + 8_000 }, { policy })).rejects.toMatchObject({ code: "timeout", retryable: true, message: expect.stringContaining("not enough") });
+    expect(silent.chat).not.toHaveBeenCalled();
+  });
+
+  it("leaves attempts alone when the caller set no deadline", async () => {
+    const cred = credential("credential-1", 100);
+    const gateway = new AIGateway({ loadCredentials: async () => [cred], recordUsage: async () => {}, maxAttemptsPerRoute: 1 });
+    const chat = vi.fn(async (req: ChatRequest) => {
+      expect(req.signal).toBeUndefined();
+      return response({ text: "ok", finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1 } });
+    });
+    vi.spyOn(gateway, "adapterFor").mockImplementation(() => ({ type: cred.providerType, info: {} as ProviderAdapter["info"], listModels: vi.fn(async () => [model]), chat, async *stream() {}, testConnection: vi.fn() } as unknown as ProviderAdapter));
+    expect((await gateway.chat(request(), { policy })).text).toBe("ok");
   });
 });

@@ -33,6 +33,13 @@ export interface ChatRequest {
   stop?: string[];
   metadata?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Absolute time (epoch ms) by which the caller's own budget ends — for an agent run, the Temporal activity's
+   * start-to-close deadline. The gateway sizes every attempt to fit inside it and moves to the next route instead
+   * of letting one unresponsive provider spend the whole budget, so a hung model fails over rather than aborting
+   * the run.
+   */
+  deadline?: number;
 }
 
 export interface Usage {
