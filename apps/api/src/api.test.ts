@@ -2421,3 +2421,27 @@ describe("Overclock configuration and runtime", () => {
     } finally { await prod.pool.end(); }
   });
 });
+
+describe("launch kit", () => {
+  d("starts a Chief of Staff run from the company profile the moment a founder asks", async () => {
+    const { api, orgId } = await register();
+    await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, {
+      name: "Ledgerline",
+      autonomyLevel: 2,
+      profile: { name: "Ledgerline", description: "Bookkeeping that closes itself for two-person agencies", stage: "prototype", targetCustomers: ["design agencies"], constraints: ["no paid ads"] },
+    });
+    const companyId = co.body.company.id;
+    const started = await api.json<{ run: { id: string; agentId: string; trigger: { kind: string; instruction: string } } }>("POST", `/companies/${companyId}/launch-kit`, {});
+    const byTrigger = await api.json<{ runs: { id: string }[] }>("GET", `/companies/${companyId}/runs?trigger=launch&limit=1`);
+    expect(byTrigger.body.runs.map((r) => r.id)).toEqual([started.body.run.id]);
+    expect(started.status).toBe(201);
+    expect(started.body.run.trigger.kind).toBe("launch");
+    expect(started.body.run.trigger.instruction).toContain("Bookkeeping that closes itself");
+    expect(started.body.run.trigger.instruction).toContain('title "Positioning"');
+    const agents = await api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    expect(agents.body.agents.find((a) => a.id === started.body.run.agentId)?.kind).toBe("orchestrator");
+    const listed = await api.json<{ runs: Array<{ id: string; trigger: { kind: string } }> }>("GET", `/companies/${companyId}/runs`);
+    expect(listed.body.runs.find((r) => r.id === started.body.run.id)?.trigger.kind).toBe("launch");
+  });
+});

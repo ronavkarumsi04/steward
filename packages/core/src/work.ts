@@ -155,7 +155,7 @@ export class AgentService {
 }
 
 export interface RunTrigger {
-  kind: "user" | "schedule" | "task" | "event" | "chat" | "system" | "delegation";
+  kind: "user" | "schedule" | "task" | "event" | "chat" | "system" | "delegation" | "launch";
   instruction: string;
   parentRunId?: string;
   parentAgentId?: string;
@@ -176,11 +176,11 @@ export interface RunTrigger {
 export class RunService {
   constructor(private readonly db: Db) {}
 
-  list(scope: TenantScope, filter: { status?: RunStatus[]; agentId?: string; taskId?: string; projectId?: string; limit?: number } = {}) {
+  list(scope: TenantScope, filter: { status?: RunStatus[]; agentId?: string; taskId?: string; projectId?: string; trigger?: string; limit?: number } = {}) {
     return this.db
       .select()
       .from(agentRuns)
-      .where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, filter.status?.length ? inArray(agentRuns.status, filter.status) : undefined, filter.agentId ? eq(agentRuns.agentId, filter.agentId) : undefined, filter.taskId ? eq(agentRuns.taskId, filter.taskId) : undefined, filter.projectId ? eq(agentRuns.projectId, filter.projectId) : undefined))
+      .where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, filter.status?.length ? inArray(agentRuns.status, filter.status) : undefined, filter.agentId ? eq(agentRuns.agentId, filter.agentId) : undefined, filter.taskId ? eq(agentRuns.taskId, filter.taskId) : undefined, filter.projectId ? eq(agentRuns.projectId, filter.projectId) : undefined, filter.trigger ? sql`${agentRuns.trigger}->>'kind' = ${filter.trigger}` : undefined))
       .orderBy(desc(agentRuns.createdAt))
       .limit(filter.limit ?? 50);
   }
