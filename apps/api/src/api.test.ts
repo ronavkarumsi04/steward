@@ -586,6 +586,8 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     const approval = await svc.approvals.request(scope, { runId: run.body.run.id, action: "email.send", reason: "Send launch email", payload: { to: "x@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60, expiresInMs: 60_000 });
     const list = await api.json<{ approvals: Array<{ id: string; status: string }> }>("GET", `/companies/${companyId}/approvals?status=pending`);
     expect(list.body.approvals.map((a) => a.id)).toContain(approval.id);
+    const growth = await api.json<{ outbox: Array<{ id: string; action: string }> }>("GET", `/companies/${companyId}/growth`);
+    expect(growth.body.outbox.map((a) => a.id)).toContain(approval.id);
     const decided = await api.json<{ approval: { status: string } }>("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "denied", note: "Not yet" });
     expect(decided.status).toBe(200);
     expect(decided.body.approval.status).toBe("denied");
