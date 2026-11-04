@@ -23,8 +23,18 @@ const FONT_LABEL = { sans: "Sans", serif: "Serif", mono: "Mono" } as const;
 const RADIUS_LABEL = { sharp: "Sharp", soft: "Soft", round: "Round" } as const;
 const MARK_LABEL = { wordmark: "Wordmark", monogram: "Monogram" } as const;
 
-function words(raw: string, max: number): string[] {
-  return raw.split(/[,\n]/).map((w) => w.trim()).filter(Boolean).slice(0, max);
+function words(raw: string): string[] {
+  return raw.split(/[,\n]/).map((w) => w.trim()).filter(Boolean);
+}
+
+/** Why a kit cannot be saved as typed, in the founder's terms; null when it can. Mirrors the schema limits. */
+export function brandKitProblem(kit: BrandKit): string | null {
+  if (kit.voice.tone.length > 5) return `Up to five tone words — remove ${kit.voice.tone.length - 5}.`;
+  if (kit.voice.do.length > 8) return `Up to eight "do" lines — remove ${kit.voice.do.length - 8}.`;
+  if (kit.voice.dont.length > 8) return `Up to eight "don't" lines — remove ${kit.voice.dont.length - 8}.`;
+  const long = [...kit.voice.tone, ...kit.voice.do, ...kit.voice.dont].find((w) => w.length > 80);
+  if (long) return `"${long.slice(0, 24)}…" is over 80 characters.`;
+  return null;
 }
 
 /**
@@ -71,8 +81,14 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
     setKit((k) => ({ ...k, ...next }));
   }
 
+  const problem = brandKitProblem(kit);
+
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -110,7 +126,7 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
             <legend className="label">Accent</legend>
             <div className="flex flex-wrap gap-2">
               {SITE_ACCENTS.map((accent) => (
-                <label key={accent} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft">
+                <label key={accent} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
                   <input type="radio" name="accent" value={accent} checked={kit.accent === accent} onChange={() => patch({ accent })} className="sr-only" />
                   <span aria-hidden className="inline-block h-4 w-4" style={{ background: BRAND_ACCENT_HEX[accent] }} />
                   <span className="capitalize">{accent}</span>
@@ -162,15 +178,15 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
               <span className="label">Tone (up to five words)</span>
-              <input className="input" defaultValue={kit.voice.tone.join(", ")} onChange={(e) => patch({ voice: { ...kit.voice, tone: words(e.target.value, 5) } })} placeholder="plain, warm, exact" />
+              <input className="input" defaultValue={kit.voice.tone.join(", ")} onChange={(e) => patch({ voice: { ...kit.voice, tone: words(e.target.value) } })} placeholder="plain, warm, exact" />
             </label>
             <label className="block">
               <span className="label">Do (one per line)</span>
-              <textarea className="input min-h-20" defaultValue={kit.voice.do.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, do: words(e.target.value, 8) } })} placeholder="Name the number" />
+              <textarea className="input min-h-20" defaultValue={kit.voice.do.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, do: words(e.target.value) } })} placeholder="Name the number" />
             </label>
             <label className="block">
               <span className="label">Don&apos;t (one per line)</span>
-              <textarea className="input min-h-20" defaultValue={kit.voice.dont.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, dont: words(e.target.value, 8) } })} placeholder="Say &quot;leverage&quot;" />
+              <textarea className="input min-h-20" defaultValue={kit.voice.dont.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, dont: words(e.target.value) } })} placeholder="Say &quot;leverage&quot;" />
             </label>
           </div>
         </div>
@@ -180,9 +196,9 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
         </div>
       </div>
       <div className="flex items-center justify-end gap-3">
-        {error ? <span role="alert" className="text-sm text-danger">{error}</span> : null}
+        {error ? <span role="alert" className="text-sm text-danger">{error}</span> : problem ? <span className="text-sm text-danger">{problem}</span> : null}
         {saved ? <span role="status" className="text-sm text-muted">Brand kit saved. New sites, posts and copy use it from now on.</span> : null}
-        <button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save brand kit"}</button>
+        <button className="btn btn-primary" disabled={busy || problem !== null}>{busy ? "Saving…" : "Save brand kit"}</button>
       </div>
     </form>
   );
