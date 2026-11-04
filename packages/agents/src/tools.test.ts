@@ -170,7 +170,8 @@ describe("durable delegation", () => {
 
 describe("document.brief", () => {
   const scope: TenantScope = { organizationId: "org", companyId: "co", actor: { type: "system", component: "test" } };
-  function briefCtx(calls: Array<{ toolName: string; input: unknown; output: unknown }>) {
+  function briefCtx(calls: Array<{ toolName: string; input: unknown; output: unknown; status?: string }>) {
+    calls = calls.map((c) => ({ status: "succeeded", ...c }));
     const upsert = vi.fn(async (_scope: TenantScope, input: { title: string; content: string; folder?: string }) => ({ id: "doc_1", version: 1, ...input }));
     const addArtifact = vi.fn(async () => undefined);
     const ctx = {
@@ -198,7 +199,7 @@ describe("document.brief", () => {
     const tool = buildToolRegistry().get("document.brief")!;
     const { ctx, upsert, addArtifact } = briefCtx([
       { toolName: "web.fetch", input: { url: "https://foundable.app/pricing#plans" }, output: { content: "…" } },
-      { toolName: "web.search", input: { query: "polsia" }, output: { content: "1. Polsia\n   https://polsia.com/\n   AI that runs your company" } },
+      { toolName: "web.search", input: { query: "polsia" }, output: { content: "1. Polsia…", data: [{ title: "Polsia", url: "https://polsia.com/", snippet: "AI that runs your company" }] } },
     ]);
     const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings, nextSteps: ["Publish the rate card"] }, ctx as never);
     expect(result.ok).toBe(true);
@@ -210,6 +211,28 @@ describe("document.brief", () => {
     expect(written.content).toContain("> Max $200");
     expect(written.content).toContain("- Publish the rate card");
     expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ kind: "document", metadata: expect.objectContaining({ brief: true, findings: 2, sources: 2 }) }));
+  });
+
+  it("does not count a failed fetch, a link mentioned inside a page, or a search that returned nothing readable", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const { ctx, upsert } = briefCtx([
+      { toolName: "web.fetch", input: { url: "https://foundable.app/pricing" }, output: null, status: "failed" },
+      { toolName: "web.fetch", input: { url: "https://example.com/roundup" }, output: { content: "See https://polsia.com/ for more" } },
+    ]);
+    const result = await tool.execute({ title: "Competitors", question: "What do they charge?", summary: "x".repeat(40), findings }, ctx as never);
+    expect(result.ok).toBe(false);
+    expect(result.content).toContain("https://foundable.app/pricing");
+    expect(result.content).toContain("https://polsia.com");
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("accepts a fetched URL that ends in a parenthesis exactly as it was fetched", async () => {
+    const tool = buildToolRegistry().get("document.brief")!;
+    const url = "https://en.wikipedia.org/wiki/Steward_(office)";
+    const { ctx, upsert } = briefCtx([{ toolName: "web.fetch", input: { url }, output: { content: "…" } }]);
+    const result = await tool.execute({ title: "Stewards", question: "What is a steward?", summary: "x".repeat(40), findings: [{ claim: "A steward manages another's affairs.", source: url }, { claim: "The office is ancient.", source: `${url}#History` }] }, ctx as never);
+    expect(result.ok).toBe(true);
+    expect(upsert.mock.calls[0]![1].content).toContain(`[^1]: ${url}`);
   });
 
   it("numbers repeated sources once", () => {

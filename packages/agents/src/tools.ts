@@ -194,15 +194,19 @@ const documentWrite = defineTool({
   },
 });
 
-/** A brief's sources must be pages this run actually touched; a URL the agent never fetched or found is refused. */
-function urlsTouchedByRun(calls: ReadonlyArray<{ toolName: string; input: unknown; output: unknown }>): Set<string> {
+/**
+ * A brief's sources must be pages this run actually read: the target of a successful `web.fetch`, or a result
+ * `web.search` returned. Links merely mentioned inside a fetched page do not count — the agent has to open them.
+ */
+function urlsReadByRun(calls: ReadonlyArray<{ toolName: string; input: unknown; output: unknown; status: string }>): Set<string> {
   const seen = new Set<string>();
-  const pattern = /https?:\/\/[^\s"'<>)\]\\]+/g;
   for (const c of calls) {
-    if (!c.toolName.startsWith("web.")) continue;
-    for (const part of [c.input, c.output]) {
-      const text = typeof part === "string" ? part : JSON.stringify(part ?? "");
-      for (const m of text.match(pattern) ?? []) seen.add(normaliseUrl(m));
+    if (c.status !== "succeeded") continue;
+    const input = (c.input ?? {}) as Record<string, unknown>;
+    if (c.toolName === "web.fetch" && typeof input.url === "string") seen.add(normaliseUrl(input.url));
+    if (c.toolName === "web.search") {
+      const data = (c.output as { data?: unknown } | null)?.data;
+      if (Array.isArray(data)) for (const r of data) if (r && typeof r === "object" && typeof (r as { url?: unknown }).url === "string") seen.add(normaliseUrl((r as { url: string }).url));
     }
   }
   return seen;
@@ -278,7 +282,7 @@ const documentBrief = defineTool({
   execute: async (input, ctx) => {
     const s = svc(ctx);
     if (!ctx.runId) return fail("A brief can only be written from inside a run.");
-    const touched = urlsTouchedByRun(await s.runs.toolCallsFor(s.scope, ctx.runId));
+    const touched = urlsReadByRun(await s.runs.toolCallsFor(s.scope, ctx.runId));
     const unvisited = [...new Set(input.findings.map((f) => f.source).filter((u) => !touched.has(normaliseUrl(u))))];
     if (unvisited.length) {
       return fail(
