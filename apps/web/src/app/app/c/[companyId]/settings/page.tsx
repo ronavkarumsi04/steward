@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { RoutingPolicy } from "@steward/schema";
 import { serverApi } from "@/lib/server";
 import type { CompanyOverview, ProviderModel } from "@/lib/types";
@@ -5,6 +6,8 @@ import { SettingsPanel } from "@/components/settings";
 import { RoutingPanel } from "@/components/routing-panel";
 import { ROUTING_PURPOSES } from "@/lib/routing";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

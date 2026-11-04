@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { CodeBranchesRead, CodeTreeRead, CodeWorkspaceRead } from "@/lib/types";
 import { CodeWorkspace } from "@/components/code-workspace";
+
+export const metadata: Metadata = { title: "Code" };
 
 /**
  * The code IDE route.

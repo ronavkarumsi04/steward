@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { serverApi } from "@/lib/server";
 import type { Agent, Run } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { Card, Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Runs" };
 
 export default async function RunsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ status?: string; taskId?: string }> }) {
   const { companyId } = await params;
@@ -26,14 +29,15 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Intent</th><th>Agent</th><th>Status</th><th className="text-right">Cost</th><th className="text-right">Tokens</th><th className="text-right">Started</th></tr>
+                <tr><th>Intent</th><th>Agent</th><th>Status</th><th>Progress</th><th className="text-right">Cost</th><th className="text-right">Tokens</th><th className="text-right">Started</th></tr>
               </thead>
               <tbody>
                 {runs.map((r) => (
                   <tr key={r.id}>
-                    <td className="max-w-md truncate font-medium"><Link className="hover:text-accent" href={`/app/c/${companyId}/runs/${r.id}`}>{r.intent || "(no intent)"}</Link></td>
+                    <td className="max-w-md font-medium"><Link className="line-clamp-2 hover:text-accent" href={`/app/c/${companyId}/runs/${r.id}`} title={r.intent || undefined}>{r.intent || "(no intent)"}</Link></td>
                     <td className="text-muted">{name(r.agentId)}</td>
                     <td><StatusPill status={r.status} /></td>
+                    <td className="tnum whitespace-nowrap text-xs text-muted">{progress(r)}</td>
                     <td className="tnum text-right">{usd(r.costUsd)}</td>
                     <td className="tnum text-right text-muted">{(r.inputTokens + r.outputTokens).toLocaleString()}</td>
                     <td className="tnum text-right text-xs text-muted">{ago(r.createdAt)}</td>
@@ -46,6 +50,16 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
       </Card>
     </div>
   );
+}
+
+/** What a row has to show for itself: iterations done and wall time, so a long run and a stuck one read differently. */
+function progress(r: Run): string {
+  const iters = r.iterations ? `${r.iterations} ${r.iterations === 1 ? "step" : "steps"}` : "";
+  const start = r.startedAt ? Date.parse(r.startedAt) : NaN;
+  const end = r.finishedAt ? Date.parse(r.finishedAt) : Number.isNaN(start) ? NaN : Date.now();
+  const secs = Number.isNaN(start) || Number.isNaN(end) ? null : Math.max(0, Math.round((end - start) / 1000));
+  const dur = secs === null ? "" : secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  return [iters, dur ? (r.finishedAt ? dur : `${dur} so far`) : ""].filter(Boolean).join(" · ") || "—";
 }
 
 function FilterLinks({ companyId, current }: { companyId: string; current?: string }) {

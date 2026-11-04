@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { McpMarketplaceRead } from "@/lib/types";
 import { McpMarketplace } from "@/components/mcp-marketplace";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Marketplace" };
 
 /**
  * The marketplace route.

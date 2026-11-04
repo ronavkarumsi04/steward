@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireMe, serverApi } from "@/lib/server";
@@ -5,6 +6,8 @@ import type { Company } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { Empty, PageHeader, StatusPill } from "@/components/ui";
 import { AUTONOMY_LABELS } from "@steward/schema";
+
+export const metadata: Metadata = { title: "Companies" };
 
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ integrationError?: string; connected?: string }> }) {
   const sp = await searchParams;

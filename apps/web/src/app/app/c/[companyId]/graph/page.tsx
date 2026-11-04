@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { GraphRead } from "@/lib/types";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Graph" };
 
 /**
  * The graph route.

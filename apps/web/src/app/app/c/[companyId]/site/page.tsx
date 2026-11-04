@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { SiteStudioRead } from "@/lib/types";
 import { SiteStudio } from "@/components/site-studio";
+
+export const metadata: Metadata = { title: "Website" };
 
 /**
  * The site studio route. The server render fetches the document, the checklist, the catalog and the versions in

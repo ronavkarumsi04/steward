@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { serverApi } from "@/lib/server";
 import type { Agent, Goal, Task } from "@/lib/types";
 import { TaskBoard } from "@/components/task-board";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Tasks" };
 
 export default async function TasksPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

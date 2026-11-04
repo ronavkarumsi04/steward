@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { serverApi } from "@/lib/server";
 import type { Artifact, Decision, Document, Memory, Project } from "@/lib/types";
 import { KnowledgePanel } from "@/components/knowledge";
 import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Knowledge" };
 
 export default async function KnowledgePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

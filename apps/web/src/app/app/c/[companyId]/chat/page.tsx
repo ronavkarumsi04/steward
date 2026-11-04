@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { Empty } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Chat" };
 
 export default function ChatIndex() {
   return (

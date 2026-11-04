@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { serverApi } from "@/lib/server";
 import type { Project } from "@/lib/types";
 import { ProjectWorkspace } from "@/components/project-workspace";
+
+export const metadata: Metadata = { title: "Projects" };
 
 export default async function ProjectsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;

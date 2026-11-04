@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { requireMe, serverApi } from "@/lib/server";
 import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
 import { IntegrationsPanel } from "@/components/integrations-panel";
 import { OrgHeader } from "@/components/org-header";
+
+export const metadata: Metadata = { title: "Integrations" };
 
 export default async function IntegrationsPage({ params, searchParams }: { params: Promise<{ orgId: string }>; searchParams: Promise<{ connected?: string; error?: string }> }) {
   const { orgId } = await params;

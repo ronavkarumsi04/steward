@@ -3,7 +3,7 @@ import { GrowthPipeline } from "@/components/growth-pipeline";
 import { serverApi } from "@/lib/server";
 import type { GrowthSnapshot } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Growth · Steward" };
+export const metadata: Metadata = { title: "Growth" };
 
 export default async function GrowthPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
