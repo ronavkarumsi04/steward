@@ -7,7 +7,7 @@ async function main() {
   const { app, core } = runtime;
   const log = core.log;
 
-  const port = Number(process.env.API_PORT ?? new URL(core.config.apiUrl).port ?? 4000);
+  const port = Number(process.env.API_PORT || new URL(core.config.apiUrl).port || 4000);
   const server = serve({ fetch: app.fetch, port, hostname: process.env.API_HOST ?? "0.0.0.0" }, (info) => log.info({ port: info.port }, "steward api listening"));
 
   const shutdown = async () => {
