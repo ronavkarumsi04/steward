@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BrandKit } from "@steward/schema";
-import { BrandPreview } from "./brand-kit-settings";
+import { BrandPreview, brandKitProblem } from "./brand-kit-settings";
 
 describe("BrandPreview", () => {
   it("renders the site's real values: accent hex, font stack, radius and the monogram", () => {
@@ -21,5 +21,16 @@ describe("BrandPreview", () => {
     const html = renderToStaticMarkup(createElement(BrandPreview, { kit: BrandKit.parse({}), name: "Acme" }));
     expect(html).toContain("What this company does, in one line");
     expect(html).not.toContain(">AC<");
+  });
+});
+
+
+describe("brandKitProblem", () => {
+  const kit = BrandKit.parse({});
+  it("accepts the limits and names the overflow instead of trimming it silently", () => {
+    expect(brandKitProblem({ ...kit, voice: { tone: ["a", "b", "c", "d", "e"], do: [], dont: [] } })).toBeNull();
+    expect(brandKitProblem({ ...kit, voice: { tone: ["a", "b", "c", "d", "e", "f"], do: [], dont: [] } })).toBe("Up to five tone words — remove 1.");
+    expect(brandKitProblem({ ...kit, voice: { tone: [], do: Array.from({ length: 9 }, (_, i) => `d${i}`), dont: [] } })).toMatch(/eight "do" lines/);
+    expect(brandKitProblem({ ...kit, voice: { tone: ["x".repeat(81)], do: [], dont: [] } })).toMatch(/over 80 characters/);
   });
 });
