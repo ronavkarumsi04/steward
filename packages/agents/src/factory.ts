@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, PushService, pushConfigFromEnv, type ApprovalNotifier, type PushTransport, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -19,6 +19,10 @@ export interface AgentServiceFactoryOptions {
    */
   browser?: BrowserProvider;
   approvalSignal?: ApprovalSignal;
+  /** Tells people (push to their phones) that an approval is waiting; the API and worker both create approvals. */
+  approvalNotifier?: ApprovalNotifier;
+  /** Test seam: where pushes go instead of the real push services. */
+  pushTransport?: PushTransport;
   companionBridge?: CompanionBridge;
   runWorkflowLauncher?: RunWorkflowLauncher;
   env?: NodeJS.ProcessEnv;
@@ -27,6 +31,7 @@ export interface AgentServiceFactoryOptions {
 /** Builds the tenant-scoped service bundle a run needs. Shared services are constructed once; scope-bound ones per call. */
 export class AgentServiceFactory {
   readonly companies: CompanyService;
+  readonly push: PushService;
   readonly projects: ProjectService;
   readonly tasks: TaskService;
   readonly agents: AgentService;
@@ -75,7 +80,8 @@ export class AgentServiceFactory {
     this.tasks = new TaskService(db);
     this.agents = new AgentService(db);
     this.runs = new RunService(db);
-    this.approvals = new ApprovalService(db, o.approvalSignal);
+    this.push = new PushService(db, pushConfigFromEnv(o.env ?? process.env), o.pushTransport);
+    this.approvals = new ApprovalService(db, o.approvalSignal, o.approvalNotifier ?? this.push);
     this.budgets = new BudgetService(db);
     this.documents = new DocumentService(db);
     this.conversations = new ConversationService(db);

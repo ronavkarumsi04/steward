@@ -2,6 +2,11 @@ import { and, desc, eq, gt, lt, inArray } from "drizzle-orm";
 import { approvals, auditLog, emitEvent, scoped, type Db } from "@steward/db";
 import type { ApprovalRequest, ApprovalStatus, TenantScope } from "@steward/schema";
 
+/** Told, after the transaction commits, that a person is now being waited on. Best effort; never the record. */
+export interface ApprovalNotifier {
+  approvalRequested(input: { organizationId: string; companyId: string; approvalId: string; action: string; reason: string; risk: string }): Promise<void>;
+}
+
 export interface ApprovalSignal {
   /** Called after an approval is resolved so the durable workflow can resume. */
   notify(workflowId: string, approvalId: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown> }): Promise<void>;
@@ -12,7 +17,7 @@ export interface ApprovalSignal {
 export type ResolvedApproval = typeof approvals.$inferSelect & { signalDelivered: boolean | null };
 
 export class ApprovalService {
-  constructor(private readonly db: Db, private readonly signal?: ApprovalSignal) {}
+  constructor(private readonly db: Db, private readonly signal?: ApprovalSignal, private readonly notifier?: ApprovalNotifier) {}
 
   /** `actions` narrows to the tool calls named (e.g. the outbox's send tools) before the limit applies. */
   async list(scope: TenantScope, status?: ApprovalStatus, limit = 50, actions?: readonly string[]) {
@@ -50,7 +55,7 @@ export class ApprovalService {
   }
 
   async request(scope: TenantScope, req: ApprovalRequest & { runId?: string; taskId?: string; agentId?: string; workflowId?: string; expiresInMs?: number }) {
-    return this.db.transaction(async (tx) => {
+    const created = await this.db.transaction(async (tx) => {
       const [a] = await tx
         .insert(approvals)
         .values({
@@ -74,6 +79,12 @@ export class ApprovalService {
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "approval.requested", actor: scope.actor, payload: { approvalId: a!.id, action: req.action, risk: req.risk, dimension: req.dimension, estimatedCostUsd: req.estimatedCostUsd, affectedSystem: req.affectedSystem }, correlation: { runId: req.runId ?? "", taskId: req.taskId ?? "" } });
       return a!;
     });
+    if (this.notifier) {
+      await this.notifier
+        .approvalRequested({ organizationId: scope.organizationId, companyId: scope.companyId!, approvalId: created.id, action: req.action, reason: req.reason, risk: req.risk })
+        .catch(() => undefined);
+    }
+    return created;
   }
 
   /**
