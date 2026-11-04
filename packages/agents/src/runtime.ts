@@ -250,7 +250,7 @@ export class AgentRuntime {
 
   // ---------- 2. Plan ----------
 
-  async plan(runId: string, ctx: RunContextBundle, signal?: AbortSignal): Promise<Plan> {
+  async plan(runId: string, ctx: RunContextBundle, signal?: AbortSignal, deadline?: number): Promise<Plan> {
     const { run, agent } = await this.loadRun(runId);
     if (run.plan && Object.keys(run.plan).length) return Plan.parse(run.plan);
     const actor = this.actor(agent.id, runId);
@@ -265,6 +265,7 @@ export class AgentRuntime {
           ],
           responseFormat: { type: "json_schema", name: "plan", schema: PLAN_SCHEMA as unknown as Record<string, unknown> },
           ...(signal ? { signal } : {}),
+          ...(deadline ? { deadline } : {}),
           ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.planning) : { temperature: 0.2, maxTokens: 1500 }),
         },
@@ -314,7 +315,7 @@ export class AgentRuntime {
     return { messages, iterations, pending };
   }
 
-  async iterate(runId: string, ctx: RunContextBundle, resume?: ApprovalResumption, signal?: AbortSignal): Promise<IterationOutcome> {
+  async iterate(runId: string, ctx: RunContextBundle, resume?: ApprovalResumption, signal?: AbortSignal, deadline?: number): Promise<IterationOutcome> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     const scope = { ...this.scope, actor };
@@ -393,7 +394,7 @@ export class AgentRuntime {
     let toolCalls: ToolCall[] = [];
     try {
       const res = await this.s.gateway.chat(
-        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }), ...(signal ? { signal } : {}) },
+        { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }), ...(signal ? { signal } : {}), ...(deadline ? { deadline } : {}) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
       signal?.throwIfAborted();
@@ -533,7 +534,7 @@ export class AgentRuntime {
 
   // ---------- 4. Verify ----------
 
-  async verify(runId: string, ctx: RunContextBundle, finalText: string, signal?: AbortSignal): Promise<Verification> {
+  async verify(runId: string, ctx: RunContextBundle, finalText: string, signal?: AbortSignal, deadline?: number): Promise<Verification> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "verifying");
@@ -550,6 +551,7 @@ export class AgentRuntime {
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
           ...(signal ? { signal } : {}),
+          ...(deadline ? { deadline } : {}),
           ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}),
           ...(ctx.overclock ? phaseRequest(ctx.overclock.review) : { temperature: 0, maxTokens: 800 }),
         },
