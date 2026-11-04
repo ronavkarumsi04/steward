@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { AgentServiceFactory } from "@steward/agents";
 import { StripeClient } from "@steward/integrations";
-import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, type TenantScope } from "@steward/schema";
+import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, launchKitBrief, type TenantScope } from "@steward/schema";
 import { runWorkflowId, type WorkflowClient } from "@steward/workflows";
 import { HttpError, companyScope, orgScope, roleAtLeast, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
@@ -26,7 +26,10 @@ async function requireProject(services: AgentServiceFactory, scope: TenantScope,
  * that was interrupted. If Temporal is down the row is left queued with its workflow id recorded, and the caller
  * is told the work is pending — rather than the run existing in the database while nothing will ever run it.
  */
-export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event"; sourceSignalId?: string }) {
+/** Tool calls that send something to someone outside the company; their approvals are the outbox. */
+const OUTBOX_ACTIONS = ["email.send", "social.publish", "sms.send"] as const;
+
+export async function launchRun(services: AgentServiceFactory, workflows: WorkflowClient | null, scope: TenantScope, input: { agentId: string; taskId?: string | null; projectId?: string | null; conversationId?: string | null; instruction: string; kind: "user" | "chat" | "task" | "event" | "launch"; sourceSignalId?: string }) {
   if (!workflows) throw new HttpError(503, "workflows_unavailable", "Temporal is not connected; runs cannot start");
   const company = await services.companies.get(scope);
   if (!company || company.status !== "active") throw new HttpError(409, "company_inactive", "Company is paused or archived");
@@ -127,7 +130,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   });
 
   // ---- runs ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), trigger: z.string().max(40).optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ runs: await c.get("deps").services.runs.list(scope, query) });
   });
@@ -135,6 +138,18 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const scope = await companyScope(c, param(c, "companyId"), "member");
     const deps = c.get("deps");
     return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { ...body, kind: "user" }) }, 201);
+  });
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/launch-kit", tag: "runs", summary: "Start the first-run launch kit: positioning, brand brief, landing copy, target-customer decision and week-one tasks from the company profile" }, async (c) => {
+    const scope = await companyScope(c, param(c, "companyId"), "member");
+    const deps = c.get("deps");
+    const [company, profile, agents] = await Promise.all([deps.services.companies.get(scope), deps.services.companies.profile(scope), deps.services.agents.list(scope)]);
+    if (!company) throw new HttpError(404, "not_found");
+    // Only the orchestrator's allowlist covers every deliverable (documents, a decision and task.create); a specialist would stall the kit.
+    const chief = agents.find((a) => a.kind === "orchestrator" && a.enabled);
+    if (!chief) throw new HttpError(409, "no_agent", "Enable the Chief of Staff before starting the launch kit");
+    const current = profile?.profile;
+    const instruction = launchKitBrief({ ...(current ?? {}), name: current?.name || company.name });
+    return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { agentId: chief.id, instruction, kind: "launch" }) }, 201);
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, AI/model calls, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
@@ -239,8 +254,8 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/growth", tag: "growth", summary: "Lead pipeline and recent outbound activity", query: z.object({ stage: z.enum(LEAD_STAGES).optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const growth = c.get("deps").services.growth;
-    const [leads, outbound, campaigns] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope)]);
-    return c.json({ leads, outbound, campaigns });
+    const [leads, outbound, campaigns, outbox] = await Promise.all([growth.listLeads(scope, { stage: query.stage, limit: query.limit }), growth.recentOutbound(scope, 30), growth.listCampaigns(scope), c.get("deps").services.approvals.list(scope, "pending", 100, OUTBOX_ACTIONS)]);
+    return c.json({ leads, outbound, campaigns, outbox });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/leads", tag: "growth", summary: "Create a lead/contact in the company pipeline", body: z.object({ title: z.string().min(1).max(300), stage: z.enum(LEAD_STAGES).optional(), valueUsd: z.number().nonnegative().max(100_000_000).optional(), notes: z.string().max(8000).optional(), email: z.string().email().optional(), name: z.string().max(200).optional(), company: z.string().max(200).optional(), source: z.string().max(100).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");

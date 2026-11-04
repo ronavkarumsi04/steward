@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 import { SITE_BLOCK_CATALOG, fileForSlug, renderPageHtml, type SiteDraftInput } from "@steward/core";
-import { ID, SITE_HOME_SLUG, type TenantScope } from "@steward/schema";
+import { ID, SITE_HOME_SLUG, type TenantScope, BrandKit, brandKitDecided } from "@steward/schema";
 import { HttpError, companyScope, param, type ApiDeps, type AppEnv } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 import { launcherFor } from "./work.js";
@@ -66,7 +66,7 @@ export function registerSiteRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
       site: existing ? { id: existing.id, name: existing.name, theme: existing.theme, revision: existing.updatedAt.toISOString() } : null,
       model,
       /** What a company with no site yet would start from, so the studio can offer it as a first draft. */
-      starter: words ? deps.services.sites.starter(words.name, words.tagline) : null,
+      starter: words ? deps.services.sites.starter(words.name, words.tagline, words.brand) : null,
       problems,
       catalog: SITE_BLOCK_CATALOG,
       versions: versions.map((row) => ({ id: row.id, ...versionInventory(row) })),
@@ -173,9 +173,14 @@ export function registerSiteRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
 }
 
 /** The name and tagline a starter is built from, so a fresh company starts from its own words. */
-async function companyWords(deps: ApiDeps, scope: TenantScope): Promise<{ name: string; tagline: string }> {
+async function companyWords(deps: ApiDeps, scope: TenantScope): Promise<{ name: string; tagline: string; brand: BrandKit | undefined }> {
   const [company, stored] = await Promise.all([deps.services.companies.get(scope), deps.services.companies.profile(scope)]);
-  return { name: company?.name ?? "Your company", tagline: stored?.profile.tagline || stored?.profile.description || "" };
+  const brand = BrandKit.safeParse(stored?.profile.brand ?? {});
+  return {
+    name: company?.name ?? "Your company",
+    tagline: stored?.profile.tagline || stored?.profile.description || "",
+    brand: brand.success && brandKitDecided(brand.data) ? brand.data : undefined,
+  };
 }
 
 /** Files as the studio shows them: what a host would receive, and how big it is. */

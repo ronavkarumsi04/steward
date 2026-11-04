@@ -93,6 +93,10 @@ export function planRoutes(policy: RoutingPolicy, candidates: Candidate[]): Rout
       default:
         s = -tier * 20 + cost * 2 + latency * 5;
     }
+    // Models we only know from a provider's live listing have guessed capabilities and no pricing, so
+    // they all tie; without this they would be tried in listing (alphabetical) order ahead of the
+    // models Steward has actually qualified. Still above unhealthy routes: unknown beats known-broken.
+    if (!c.model.curated) s += 1_000;
     if (!c.healthy) s += 10_000;
     return s + c.priority / 1000;
   };

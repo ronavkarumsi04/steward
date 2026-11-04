@@ -610,6 +610,8 @@ export interface GrowthSnapshot {
   leads: Lead[];
   outbound: OutboundActivity[];
   campaigns: Campaign[];
+  /** Pending approvals for email.send / social.publish / sms.send: what is written and waiting on a person. */
+  outbox: Approval[];
 }
 
 /**
