@@ -128,32 +128,32 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     <div className="space-y-5">
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
-      <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
-      <Card title="Controls" className="nb-left-red">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex-1 text-sm">
-            <div className="font-medium">Outbound pause</div>
-            <p className="text-muted">Stops every externally-visible action (email, social, deploys, payments) immediately. In-flight runs pause at their next tool call. Agents can still think, research and draft.</p>
-          </div>
-          <button className={`btn ${company.outboundPaused ? "btn-primary" : "btn-danger"}`} disabled={!isAdmin} onClick={() => run(company.outboundPaused ? "Outbound actions resumed" : "Outbound actions paused", () => browserApi.patch(base, { outboundPaused: !company.outboundPaused }))}>
-            {company.outboundPaused ? "Resume outbound actions" : "Pause all outbound actions"}
-          </button>
+      {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
+      <form onSubmit={saveProfile} id="profile" className="card nb-left-green scroll-mt-20 space-y-3">
+        <h2 className="font-semibold">Company profile</h2>
+        <p className="text-sm text-muted">This is what every agent reads first. Keep it accurate; agents update it too as they learn.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div><label className="block"><span className="label">Name</span><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></label></div>
+          <div><label className="block"><span className="label">Tagline</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">Description</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Website</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
+          <div><label className="block"><span className="label">Stage</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s}>{s}</option>)}</select></label></div>
+          <div><label className="block"><span className="label">Business model</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Value proposition</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
+          <div><label className="block"><span className="label">Target customers (one per line)</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Channels (one per line)</span><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Constraints — things agents must never do</span><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">Tech stack</span><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">Brand voice</span><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></label></div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
-          <div className="flex-1 text-sm">
-            <div className="font-medium">Company status: <StatusPill status={company.status} /></div>
-            <p className="text-muted">Paused companies do not start new runs or fire schedules. Archiving hides the company but keeps every record.</p>
-          </div>
-          {company.status === "active" ? (
-            <button className="btn" disabled={!isAdmin} onClick={() => run("Company paused", () => browserApi.patch(base, { status: "paused" }))}>Pause company</button>
-          ) : (
-            <button className="btn btn-primary" disabled={!isAdmin} onClick={() => run("Company active", () => browserApi.patch(base, { status: "active" }))}>Activate company</button>
-          )}
-          {company.status !== "archived" && <button className="btn btn-danger" disabled={!isAdmin} onClick={() => confirm("Archive this company? Agents stop and it disappears from the list.") && run("Company archived", () => browserApi.patch(base, { status: "archived" }))}>Archive</button>}
-        </div>
-      </Card>
+        <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
+      </form>
 
-      <form onSubmit={saveCompany} className="card nb-left-blue space-y-3">
+      <div id="brand-kit" className="scroll-mt-20">
+        <BrandKitSettings company={company} profile={profile} />
+      </div>
+
+      <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue scroll-mt-20 space-y-3">
         <h2 className="font-semibold">Autonomy &amp; schedule</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div><label className="block"><span className="label">Company name</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
@@ -176,29 +176,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>Save</button></div>
       </form>
 
-      <form onSubmit={saveProfile} className="card nb-left-green space-y-3">
-        <h2 className="font-semibold">Company profile</h2>
-        <p className="text-sm text-muted">This is what every agent reads first. Keep it accurate; agents update it too as they learn.</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="block"><span className="label">Name</span><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></label></div>
-          <div><label className="block"><span className="label">Tagline</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
-          <div className="md:col-span-2"><label className="block"><span className="label">Description</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Website</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
-          <div><label className="block"><span className="label">Stage</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s}>{s}</option>)}</select></label></div>
-          <div><label className="block"><span className="label">Business model</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Value proposition</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Target customers (one per line)</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Channels (one per line)</span><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Constraints — things agents must never do</span><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Tech stack</span><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></label></div>
-          <div className="md:col-span-2"><label className="block"><span className="label">Brand voice</span><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></label></div>
-        </div>
-        <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
-      </form>
-
-      <BrandKitSettings company={company} profile={profile} />
-
-      <Card title="Policies" className="nb-left-yellow">
+      <Card title="Policies" id="policies" className="nb-left-yellow scroll-mt-20">
         <p className="mb-3 text-sm text-muted">Per-dimension rules evaluated before every tool call. <b>deny</b> blocks outright, <b>approve</b> always asks you, <b>allow</b> lets the agent proceed up to the chosen risk level and within the limits.</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
@@ -218,7 +196,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <Card title="Budgets" className="nb-left-orange">
+      <Card title="Budgets" id="budgets" className="nb-left-orange scroll-mt-20">
         {budgets.length === 0 ? <Empty>No budgets set — agents cannot spend until a budget exists.</Empty> : (
           <table className="mb-4 w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">Category</th><th>Period</th><th>Limit</th><th>Spent</th><th>Reserved</th><th>Remaining</th><th>Hard stop</th></tr></thead>
@@ -262,6 +240,34 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           <button className="btn btn-primary">Add</button>
         </form>
       </Card>
+
+      <Card title="Controls" id="controls" className="nb-left-red scroll-mt-20">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 text-sm">
+            <div className="font-medium">Outbound pause</div>
+            <p className="text-muted">Stops every externally-visible action (email, social, deploys, payments) immediately. In-flight runs pause at their next tool call. Agents can still think, research and draft.</p>
+          </div>
+          <button className={`btn ${company.outboundPaused ? "btn-primary" : "btn-danger"}`} disabled={!isAdmin} onClick={() => run(company.outboundPaused ? "Outbound actions resumed" : "Outbound actions paused", () => browserApi.patch(base, { outboundPaused: !company.outboundPaused }))}>
+            {company.outboundPaused ? "Resume outbound actions" : "Pause all outbound actions"}
+          </button>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+          <div className="flex-1 text-sm">
+            <div className="font-medium">Company status: <StatusPill status={company.status} /></div>
+            <p className="text-muted">Paused companies do not start new runs or fire schedules. Archiving hides the company but keeps every record.</p>
+          </div>
+          {company.status === "active" ? (
+            <button className="btn" disabled={!isAdmin} onClick={() => run("Company paused", () => browserApi.patch(base, { status: "paused" }))}>Pause company</button>
+          ) : (
+            <button className="btn btn-primary" disabled={!isAdmin} onClick={() => run("Company active", () => browserApi.patch(base, { status: "active" }))}>Activate company</button>
+          )}
+          {company.status !== "archived" && <button className="btn btn-danger" disabled={!isAdmin} onClick={() => confirm("Archive this company? Agents stop and it disappears from the list.") && run("Company archived", () => browserApi.patch(base, { status: "archived" }))}>Archive</button>}
+        </div>
+      </Card>
+
+      <div id="overclock" className="scroll-mt-20">
+        <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
+      </div>
     </div>
   );
 }
