@@ -8,12 +8,37 @@ import { modelAttempts } from "@/lib/run-inspection";
 import { useLiveEvents } from "@/lib/use-events";
 import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
+import { Icon } from "./icons";
 import { RunTimeline } from "./run-timeline";
 import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
 /** Run inspector: re-fetches whenever a correlated event arrives so it stays live without polling. */
+/** Where a founder's eye should land: what this run produced, from the tool ledger, not from the step titles. */
+function produced(toolCalls: RunDetail["toolCalls"]): { label: string; href: string }[] {
+  const title = (input: unknown) => {
+    const t = input && typeof input === "object" ? (input as { title?: unknown }).title : undefined;
+    return typeof t === "string" && t.trim() ? t.trim() : null;
+  };
+  const items: { label: string; href: string }[] = [];
+  let tasks = 0;
+  for (const t of toolCalls) {
+    if (t.status !== "succeeded") continue;
+    const name = t.toolName;
+    if (name === "document.write" || name === "document.brief" || name === "document.sheet" || name === "document.deck") {
+      const kind = name === "document.brief" ? "Brief" : name === "document.sheet" ? "Sheet" : name === "document.deck" ? "Deck" : "Document";
+      items.push({ label: `${kind}: ${title(t.input) ?? "untitled"}`, href: "knowledge?tab=documents" });
+    } else if (name === "decision.record") items.push({ label: `Decision: ${title(t.input) ?? "recorded"}`, href: "knowledge?tab=decisions" });
+    else if (name === "task.create") tasks += 1;
+    else if (name === "company.brand_update") items.push({ label: "Brand kit updated", href: "settings#brand-kit" });
+    else if (name === "image.generate") items.push({ label: `Picture: ${title(t.input) ?? "generated"}`, href: "knowledge?tab=pictures" });
+    else if (name.startsWith("outbox.") || name === "email.draft" || name === "social.draft") items.push({ label: "Draft waiting in the Outbox", href: "growth#outbox" });
+  }
+  if (tasks) items.push({ label: `${tasks} ${tasks === 1 ? "task" : "tasks"} created`, href: "tasks" });
+  return items;
+}
+
 export function RunDetailView({ companyId, initial, agents, observedAt }: { companyId: string; initial: RunDetail; agents: Agent[]; observedAt: number }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -73,13 +98,22 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
     return counted && counted.of > 1 ? `attempt ${counted.attempt} of ${counted.of} · ` : "";
   };
   const callsForStep = (stepId: string) => aiCalls.filter((call) => call.stepId === stepId);
+  const outputs = produced(toolCalls);
+  const resultSummary = run.result && typeof (run.result as { summary?: unknown }).summary === "string" ? String((run.result as { summary: string }).summary) : null;
+  const longBrief = (run.intent ?? "").length > 240;
 
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-muted"><Link href={`/app/c/${companyId}/runs`} className="hover:text-fg">Runs</Link> / <span className="mono">{run.id.slice(0, 8)}</span></div>
-          <h1 className="mt-1 text-xl font-semibold">{run.intent || "Run"}</h1>
+          <h1 className={`mt-1 text-xl font-semibold ${longBrief ? "line-clamp-3" : ""}`}>{run.intent || "Run"}</h1>
+          {longBrief && (
+            <details className="mt-1 text-sm">
+              <summary className="cursor-pointer text-xs text-muted">Full brief</summary>
+              <p className="mt-2 whitespace-pre-wrap text-fg-2">{run.intent}</p>
+            </details>
+          )}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
             <StatusPill status={run.status} />
             <span>{agent?.name ?? "agent"} ({agent?.kind})</span>
@@ -98,6 +132,24 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
       {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
       <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
+
+      {(outputs.length > 0 || resultSummary) && (
+        <Card title="What this run produced" className="nb-left-green">
+          {resultSummary && <p className="mb-3 text-sm text-fg-2">{resultSummary}</p>}
+          {outputs.length > 0 && (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {outputs.map((o, i) => (
+                <li key={`${o.label}-${i}`}>
+                  <Link href={`/app/c/${companyId}/${o.href}`} className="nb-panel-flat nb-accent-green flex items-center justify-between gap-2 border px-3 py-2 text-sm hover:nb-accent-yellow">
+                    <span className="truncate">{o.label}</span>
+                    <Icon.ChevronRight size={14} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       {pending.length > 0 && (
         <Card title="Waiting for your approval" className="nb-left-yellow">
