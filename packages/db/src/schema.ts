@@ -78,6 +78,21 @@ export const organizations = pgTable("organizations", {
   updatedAt: updatedAt(),
 }, (t) => [uniqueIndex("org_slug_idx").on(t.slug)]);
 
+/**
+ * A phone (or desk browser) that asked to be told when something is waiting on its person. One row per browser
+ * push endpoint; a push the endpoint rejects for good (404/410) deletes the row, so the list stays honest.
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: id(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent").notNull().default(""),
+  createdAt: createdAt(),
+  lastUsedAt: ts("last_used_at"),
+}, (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint), index("push_subscriptions_user_idx").on(t.userId)]);
+
 export const memberships = pgTable("memberships", {
   organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

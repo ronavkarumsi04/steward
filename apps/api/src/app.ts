@@ -18,6 +18,7 @@ import { registerReactionRoutes } from "./routes/reactions.js";
 import { registerSiteRoutes } from "./routes/site.js";
 import { registerCodeRoutes } from "./routes/code.js";
 import { registerBrowserRoutes } from "./routes/browser.js";
+import { registerPushRoutes } from "./routes/push.js";
 import { registerWorkflowRoutes } from "./routes/workflows.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerGraphRoutes } from "./routes/graph.js";
@@ -110,6 +111,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   registerSiteRoutes(v1, registry);
   registerCodeRoutes(v1, registry);
   registerBrowserRoutes(v1, registry);
+  registerPushRoutes(v1, registry);
   registerWorkflowRoutes(v1, registry);
   registerMcpRoutes(v1, registry);
   registerGraphRoutes(v1, registry);

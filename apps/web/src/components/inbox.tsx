@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Approval } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
 import { Icon } from "./icons";
+import { PushToggle } from "./push-toggle";
 
 export type InboxGroup = {
   orgName: string;
@@ -37,6 +38,7 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
           {waiting === 0 ? "Nothing pending" : waiting === 1 ? "1 request" : `${waiting} requests`}
         </p>
       </header>
+      <PushToggle />
 
       {decided.length > 0 && (
         <section aria-labelledby="inbox-decided" className="mb-7 space-y-3">

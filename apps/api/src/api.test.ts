@@ -2475,3 +2475,67 @@ describe("launch kit", () => {
     expect(listed.body.runs.find((r) => r.id === started.body.run.id)?.trigger.kind).toBe("launch");
   });
 });
+
+describe("push notifications", () => {
+  it("registers a device, tells it when an approval is requested, and drops endpoints the push service has forgotten", async () => {
+    if (!available) return;
+    const delivered: Array<{ endpoint: string; payload: Record<string, unknown> }> = [];
+    const transport = {
+      async send(sub: { endpoint: string }, payload: string) {
+        if (sub.endpoint.endsWith("/gone")) throw Object.assign(new Error("gone"), { statusCode: 410 });
+        delivered.push({ endpoint: sub.endpoint, payload: JSON.parse(payload) });
+        return { statusCode: 201 };
+      },
+    };
+    const pushServices = new AgentServiceFactory({ core, env: { ...ENV, VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", APP_URL: "https://steward.test" }, companionBridge: new CompanionHub(), pushTransport: transport });
+    const pushApp = createApp({ core, auth: new AuthService(core.db), mailer, services: pushServices, workflows: fakeTemporal(), companionHub: new CompanionHub(), env: ENV }, null).app;
+    const founder = await register("Pager");
+    const api = client(founder.token, "", () => pushApp);
+
+    const before = await api.json<{ enabled: boolean; publicKey: string; subscriptions: unknown[] }>("GET", "/me/push");
+    expect(before.body).toMatchObject({ enabled: true, publicKey: "pub", subscriptions: [] });
+
+    const phone = { endpoint: `https://push.example/${uniq()}/phone`, keys: { p256dh: "p".repeat(20), auth: "a".repeat(12) } };
+    const dead = { endpoint: `https://push.example/${uniq()}/gone`, keys: { p256dh: "p".repeat(20), auth: "a".repeat(12) } };
+    expect((await api.json("POST", "/me/push/subscriptions", phone)).status).toBe(201);
+    expect((await api.json("POST", "/me/push/subscriptions", dead)).status).toBe(201);
+    // Registering the same endpoint again is an update, not a second phone.
+    expect((await api.json("POST", "/me/push/subscriptions", phone)).status).toBe(201);
+    expect((await api.json<{ subscriptions: unknown[] }>("GET", "/me/push")).body.subscriptions).toHaveLength(2);
+
+    const test = await api.json<{ sent: number; removed: number }>("POST", "/me/push/test");
+    expect(test.body).toEqual({ sent: 1, removed: 1 });
+    expect(delivered[0]!.payload).toMatchObject({ title: "Steward is set up on this device", url: "https://steward.test/app/inbox" });
+    expect((await api.json<{ subscriptions: unknown[] }>("GET", "/me/push")).body.subscriptions).toHaveLength(1);
+
+    // An approval requested in one of the person's companies reaches the phone with the company's name on it.
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Pager Co ${uniq()}`, autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const scope = { organizationId: founder.orgId, companyId: co.body.company.id, actor: { type: "system" as const, component: "test" } };
+    const approval = await pushServices.approvals.request(scope, { action: "email.send", reason: "First outreach to 12 leads", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [] });
+    const ping = delivered.find((d) => d.payload.tag === `approval:${approval.id}`);
+    expect(ping?.payload).toMatchObject({ title: expect.stringContaining("Pager Co"), body: expect.stringContaining("Email send · HIGH risk — First outreach"), url: "https://steward.test/app/inbox" });
+
+    // A viewer in the organization is not paged; a stranger never is.
+    const stranger = await register("Bystander");
+    const strangerApi = client(stranger.token, "", () => pushApp);
+    await strangerApi.json("POST", "/me/push/subscriptions", { endpoint: `https://push.example/${uniq()}/stranger`, keys: phone.keys });
+    const count = delivered.length;
+    await pushServices.approvals.request(scope, { action: "social.publish", reason: "Launch post", payload: {}, risk: "MEDIUM", dimension: "social_publish", affectedSystem: "x", alternatives: [] });
+    expect(delivered.slice(count).map((d) => d.endpoint)).toEqual([phone.endpoint]);
+
+    expect((await api.json<{ removed: boolean }>("DELETE", "/me/push/subscriptions", { endpoint: phone.endpoint })).body.removed).toBe(true);
+    const noDevice = await api.json<{ error: { code: string } }>("POST", "/me/push/test");
+    expect(noDevice.status).toBe(409);
+    expect(noDevice.body.error.code).toBe("no_subscription");
+  });
+
+  it("says plainly when the deployment has no VAPID keys", async () => {
+    if (!available) return;
+    const founder = await register("Unpaged");
+    const state = await founder.api.json<{ enabled: boolean; publicKey: string | null }>("GET", "/me/push");
+    expect(state.body).toMatchObject({ enabled: false, publicKey: null });
+    const refused = await founder.api.json<{ error: { code: string } }>("POST", "/me/push/subscriptions", { endpoint: "https://push.example/x", keys: { p256dh: "p".repeat(20), auth: "a".repeat(12) } });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("push_unavailable");
+  });
+});
