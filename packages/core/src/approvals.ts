@@ -31,6 +31,19 @@ export class ApprovalService {
       .limit(limit);
   }
 
+  /**
+   * Every company's requests in one organization, newest first: the founder's inbox. The scope carries
+   * no company on purpose; `scoped` still pins the organization.
+   */
+  async listForOrganization(scope: TenantScope, status?: ApprovalStatus, limit = 100) {
+    return this.db
+      .select()
+      .from(approvals)
+      .where(scoped(scope, { organizationId: approvals.organizationId }, status ? eq(approvals.status, status) : undefined))
+      .orderBy(desc(approvals.createdAt))
+      .limit(limit);
+  }
+
   async get(scope: TenantScope, id: string) {
     const [a] = await this.db.select().from(approvals).where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id))).limit(1);
     return a ?? null;

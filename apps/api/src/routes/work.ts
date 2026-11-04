@@ -6,7 +6,7 @@ import type { AgentServiceFactory } from "@steward/agents";
 import { StripeClient } from "@steward/integrations";
 import { AgentKind, ApprovalStatus, ID, MemoryKind, RunStatus, TaskPriority, TaskStatus, launchKitBrief, type TenantScope } from "@steward/schema";
 import { runWorkflowId, type WorkflowClient } from "@steward/workflows";
-import { HttpError, companyScope, roleAtLeast, type AppEnv, type Ctx, param } from "../context.js";
+import { HttpError, companyScope, orgScope, roleAtLeast, type AppEnv, type Ctx, param } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 import { CAMPAIGN_CHANNELS, CAMPAIGN_STATUSES, DOCUMENT_KINDS, LEAD_STAGES, PROJECT_STATUSES, type EventBus, type ReactionLauncher } from "@steward/core";
 
@@ -232,6 +232,10 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals", tag: "approvals", summary: "List approvals", query: z.object({ status: ApprovalStatus.optional(), limit }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ approvals: await c.get("deps").services.approvals.list(scope, query.status, query.limit) });
+  });
+  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/approvals", tag: "approvals", summary: "Approvals across every company in the organization: the inbox", query: z.object({ status: ApprovalStatus.optional(), limit }) }, async (c, { query }) => {
+    const scope = orgScope(c, param(c, "orgId"));
+    return c.json({ approvals: await c.get("deps").services.approvals.listForOrganization(scope, query.status, query.limit) });
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals/:id", tag: "approvals", summary: "Approval detail" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));
