@@ -79,6 +79,11 @@ const s = (provider: string, seeds: Seed[]): ModelInfo[] =>
 /** Seed catalog. Live `listModels()` results are merged over these entries at runtime. */
 export const SEED_MODELS: ModelInfo[] = [
   ...s("nvidia", [
+    // Qualified 2026-11-04 against the live endpoint: tool calls, json_object and plain text all answered; GLM and
+    // DeepSeek below hung for 15 hours that day, so NVIDIA's own Nemotron models lead and those two are fallbacks.
+    { id: "nvidia/nemotron-3-ultra-550b-a55b", name: "Nemotron 3 Ultra 550B (NIM)", tier: "premium", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
+    { id: "nvidia/nemotron-3.5-super-vl-120b-a12b", name: "Nemotron 3.5 Super VL 120B (NIM)", tier: "standard", ctx: 128_000, out: 32_768, tools: true, json: true, vision: true, reasoning: true, in: 0, outp: 0 },
+    { id: "nvidia/nemotron-3.5-lightning-30b-a3b", name: "Nemotron 3.5 Lightning 30B (NIM)", tier: "economy", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
     { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash (NIM)", tier: "standard", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
     { id: "deepseek-ai/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash (NIM)", tier: "economy", ctx: 128_000, out: 32_768, tools: true, json: true, reasoning: true, in: 0, outp: 0 },
   ]),
