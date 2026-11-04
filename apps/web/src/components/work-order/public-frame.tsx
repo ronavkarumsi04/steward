@@ -7,10 +7,11 @@ import { Pad } from "@/components/work-order/pad";
 import s from "@/components/work-order/work-order.module.css";
 
 /** Where a visitor can go from a public page: the sign-up form while sign-up is open, otherwise the workspace door. */
-export async function publicEntry(): Promise<{ href: string; label: string; open: boolean }> {
+export async function publicEntry(): Promise<{ href: string; label: string; open: boolean; state: "open" | "closed" | "unknown" }> {
   const auth = await getAuthConfig();
-  const open = auth?.signupOpen === true;
-  return open ? { href: "/register", label: "Create your company", open } : { href: "/login", label: "Enter workspace", open };
+  // `null` is an outage, not a closed door: say so rather than claim access is by invitation.
+  const state = auth === null ? "unknown" : auth.signupOpen === true ? "open" : "closed";
+  return state === "open" ? { href: "/register", label: "Create your company", open: true, state } : { href: "/login", label: "Enter workspace", open: false, state };
 }
 
 /** The pad's binding and footer around any public page that is not the landing itself. */

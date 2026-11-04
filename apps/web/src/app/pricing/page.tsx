@@ -114,9 +114,13 @@ export default async function Pricing() {
             <>
               <Link href={entry.href}>{entry.label}</Link> to start on the hosted beta.
             </>
-          ) : (
+          ) : entry.state === "closed" ? (
             <>
               The hosted beta is by invitation right now; <Link href={entry.href}>{entry.label.toLowerCase()}</Link> if you have one.
+            </>
+          ) : (
+            <>
+              We couldn't check hosted access just now; <Link href={entry.href}>{entry.label.toLowerCase()}</Link> still works.
             </>
           )}
         </p>
