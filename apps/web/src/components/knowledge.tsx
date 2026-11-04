@@ -10,7 +10,8 @@ import { DeckView, SheetView } from "./deliverables";
 import { PicturesPanel, imageSrc } from "./pictures";
 import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
 
-type Tab = "playbooks" | "documents" | "decisions" | "memory" | "artifacts" | "pictures";
+const TAB_IDS = ["playbooks", "documents", "decisions", "memory", "artifacts", "pictures"] as const;
+type Tab = (typeof TAB_IDS)[number];
 
 const AGENT_ROLES = [
   ["orchestrator", "Chief of Staff"],
@@ -37,9 +38,16 @@ const blankDocument = (kind: Document["kind"]): Document => ({
   updatedAt: "",
 });
 
-export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean }) {
+export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks, initialTab }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean; initialTab?: string }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("playbooks");
+  // Open on the tab the link asked for, else the first one that has something in it, so a company with
+  // three documents and no playbooks does not open on an empty pane.
+  const [tab, setTab] = useState<Tab>(() => {
+    if (initialTab && (TAB_IDS as readonly string[]).includes(initialTab)) return initialTab as Tab;
+    if (documents.length) return "documents";
+    if (decisions.length) return "decisions";
+    return "playbooks";
+  });
   const [pictures, setPictures] = useState<ImageView[] | null>(null);
   const [open, setOpen] = useState<Document | null>(null);
   const [history, setHistory] = useState<DocumentVersion[] | null>(null);

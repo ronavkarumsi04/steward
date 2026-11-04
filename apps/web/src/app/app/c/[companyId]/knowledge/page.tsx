@@ -6,8 +6,9 @@ import { PageHeader } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Knowledge" };
 
-export default async function KnowledgePage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function KnowledgePage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { companyId } = await params;
+  const { tab } = await searchParams;
   const api = await serverApi();
   const [{ documents }, { decisions }, { memories, pending, canManage }, { artifacts }, { projects }, { role }] = await Promise.all([
     api.get<{ documents: Document[] }>(`/companies/${companyId}/documents`),
@@ -20,7 +21,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ comp
   return (
     <div>
       <PageHeader eyebrow="Memory" title="Knowledge" description="Founder playbooks, documents, decisions, memories and artifacts that keep Steward consistent across runs." />
-      <KnowledgePanel companyId={companyId} documents={documents} decisions={decisions} memories={memories} pending={pending} canManageMemories={canManage} artifacts={artifacts} projects={projects} canManagePlaybooks={role === "owner" || role === "admin"} />
+      <KnowledgePanel companyId={companyId} initialTab={tab} documents={documents} decisions={decisions} memories={memories} pending={pending} canManageMemories={canManage} artifacts={artifacts} projects={projects} canManagePlaybooks={role === "owner" || role === "admin"} />
     </div>
   );
 }
