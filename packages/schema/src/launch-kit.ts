@@ -96,8 +96,17 @@ function documentIdFrom(output: unknown): string | null {
   return m?.[1] ?? null;
 }
 
+/**
+ * Whether a launch run was briefed to save the brand kit. Runs started before the brief had that step
+ * finished honestly without one, so their checklist must not hold a line they were never asked for.
+ * An unknown instruction (not a string) is treated as the current brief.
+ */
+export function launchKitAsksForKit(instruction: unknown): boolean {
+  return typeof instruction === "string" ? instruction.includes("company.brand_update") : true;
+}
+
 /** Derive the checklist from the run's tool ledger: a deliverable counts only when the tool call succeeded. */
-export function launchKitProgress(calls: readonly LaunchKitToolCall[]): LaunchKitDeliverable[] {
+export function launchKitProgress(calls: readonly LaunchKitToolCall[], options: { kit?: boolean } = {}): LaunchKitDeliverable[] {
   const ok = calls.filter((c) => c.status === "succeeded");
   const docs = ok.filter((c) => c.toolName === "document.write");
   const findDoc = (title: string) => {
@@ -108,7 +117,8 @@ export function launchKitProgress(calls: readonly LaunchKitToolCall[]): LaunchKi
   const kit = ok.filter((c) => c.toolName === "company.brand_update").at(-1);
   const tasks = ok.filter((c) => c.toolName === "task.create");
 
-  return LAUNCH_KIT_DELIVERABLES.map((d) => {
+  const deliverables = options.kit === false ? LAUNCH_KIT_DELIVERABLES.filter((d) => d.id !== "kit") : LAUNCH_KIT_DELIVERABLES;
+  return deliverables.map((d) => {
     let evidence: string | null = null;
     let documentId: string | null = null;
     if (d.id === "positioning" || d.id === "brand" || d.id === "landing") {

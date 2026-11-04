@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { launchKitProgress, type LaunchKitDeliverable } from "@steward/schema";
+import { launchKitAsksForKit, launchKitProgress, type LaunchKitDeliverable } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Run, RunDetail } from "@/lib/types";
 import { Icon } from "./icons";
@@ -78,7 +78,8 @@ export function LaunchKit({ companyId, initial }: { companyId: string; initial: 
     };
   }, [companyId, run.id]);
 
-  const items = useMemo(() => launchKitProgress(detail?.toolCalls ?? []), [detail]);
+  const asksForKit = launchKitAsksForKit(run.trigger?.instruction);
+  const items = useMemo(() => launchKitProgress(detail?.toolCalls ?? [], { kit: asksForKit }), [detail, asksForKit]);
   const done = items.filter((i) => i.status === "done").length;
   const finished = !active;
   const complete = done === items.length;
