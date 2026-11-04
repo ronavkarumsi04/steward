@@ -4,7 +4,9 @@
 
 ## World
 
-Public surfaces (landing, sign-in/up, invite, password reset, legal) are a pad of triplicate carbonless work orders. The `.paper` class in `src/app/globals.css` scopes the world's tokens; it is always light stock. The authenticated workspace keeps its previous system until its own redesign.
+Public surfaces (landing, sign-in/up, invite, password reset, legal) are a pad of triplicate carbonless work orders. The `.paper` class in `src/app/globals.css` scopes the world's tokens for those pages; it is always light stock.
+
+The authenticated workspace uses the same world through the `:root` tokens: paper ground `#f1eee5`, sheet panels `#fbfaf5`, ink `#17181c`, carbon-blue accent `#2b3990`, canary for the selected nav row and warnings, square corners, no resting shadows, Archivo and Plex Mono. The top bar is the pad's binding strip (`.binding-bar`, always dark ink). Dark mode is a night-shift carbon: `#111216` ground, `#191a20` panels, `#eeebe2` ink and `#a9b6ff` carbon accent. Section accents are a 2px top rule, never a side tab.
 
 ## Tokens (`.paper`)
 
