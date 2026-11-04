@@ -35,7 +35,7 @@ export function LaunchKitStart({ companyId }: { companyId: string }) {
     <section className="nb-panel-flat nb-accent-blue p-5" aria-labelledby="launch-kit-start">
       <div className="eyebrow">Launch kit</div>
       <h2 id="launch-kit-start" className="mt-1 text-lg font-semibold">The launch kit has not started</h2>
-      <p className="mt-1 text-sm text-muted">Positioning, brand brief, landing copy, a target-customer decision and five week-one tasks, from your idea.</p>
+      <p className="mt-1 text-sm text-muted">Positioning, brand brief and kit, landing copy, a target-customer decision and five week-one tasks, from your idea.</p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button type="button" className="btn btn-primary btn-sm" onClick={() => void start()} disabled={busy}>{busy ? "Starting…" : "Start the launch kit"}</button>
         {error && <span role="alert" className="text-sm text-danger">{error}</span>}
@@ -107,7 +107,7 @@ export function LaunchKit({ companyId, initial }: { companyId: string; initial: 
           </h2>
           <p className="mt-1 max-w-prose text-sm text-muted">
             {complete
-              ? "Positioning, brand, landing copy, a recorded decision and your first week of work orders — every line below is backed by a tool call you can inspect."
+              ? "Positioning, brand brief and kit, landing copy, a recorded decision and your first week of work orders — every line below is backed by a tool call you can inspect."
               : active
                 ? "The Chief of Staff is working from your brief. Each line turns on the moment the artefact actually exists."
                 : `The run ended as ${run.status.replace(/_/g, " ")} with ${done} of ${items.length} deliverables produced. Open the run to see why, or start it again.`}
