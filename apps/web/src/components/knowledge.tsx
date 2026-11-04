@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Artifact, Decision, Document, DocumentVersion, Memory, MemoryRevision, Project } from "@/lib/types";
+import type { Artifact, Decision, Document, DocumentVersion, ImageView, Memory, MemoryRevision, Project } from "@/lib/types";
 import { Card, Empty, Json, Ago } from "./ui";
 import { DeckView, SheetView } from "./deliverables";
+import { PicturesPanel, imageSrc } from "./pictures";
 import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
 
-type Tab = "playbooks" | "documents" | "decisions" | "memory" | "artifacts";
+type Tab = "playbooks" | "documents" | "decisions" | "memory" | "artifacts" | "pictures";
 
 const AGENT_ROLES = [
   ["orchestrator", "Chief of Staff"],
@@ -39,6 +40,7 @@ const blankDocument = (kind: Document["kind"]): Document => ({
 export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("playbooks");
+  const [pictures, setPictures] = useState<ImageView[] | null>(null);
   const [open, setOpen] = useState<Document | null>(null);
   const [history, setHistory] = useState<DocumentVersion[] | null>(null);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
@@ -210,6 +212,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
     ["decisions", "Decisions", decisions.length],
     ["memory", "Memory", memories.length],
     ["artifacts", "Artifacts", artifacts.length],
+    ["pictures", "Pictures", pictures?.length ?? 0],
   ];
 
   const versionHistory = open?.id && historyFor === open.id && history ? (
@@ -388,8 +391,9 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
         </Card>
       )}
 
+      {tab === "pictures" && <PicturesPanel companyId={companyId} pictures={pictures} onLoaded={setPictures} />}
       {tab === "artifacts" && (
-        <Card title="Artifacts" className="nb-left-green">{artifacts.length === 0 ? <Empty>No artifacts. Reports, PRs, deployments and files produced by runs appear here.</Empty> : <ul className="divide-y divide-line text-sm">{artifacts.map((a) => <li key={a.id} className="py-2"><div className="flex items-center justify-between gap-2"><span>{a.title}</span><span className="pill text-muted">{a.kind}</span></div><div className="text-xs text-muted"><Ago iso={a.createdAt} />{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>{a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}</li>)}</ul>}</Card>
+        <Card title="Artifacts" className="nb-left-green">{artifacts.length === 0 ? <Empty>No artifacts. Reports, PRs, deployments and files produced by runs appear here.</Empty> : <ul className="divide-y divide-line text-sm">{artifacts.map((a) => <li key={a.id} className="py-2"><div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2">{a.kind === "image" && typeof a.metadata.imageId === "string" && <img src={imageSrc(companyId, a.metadata.imageId)} alt="" width={40} height={40} className="h-10 w-10 shrink-0 border border-line object-cover" />}{a.title}</span><span className="pill text-muted">{a.kind}</span></div><div className="text-xs text-muted"><Ago iso={a.createdAt} />{a.runId && <> · <Link className="text-accent" href={`/app/c/${companyId}/runs/${a.runId}`}>run</Link></>}{a.url && <> · <a className="text-accent" href={a.url} target="_blank" rel="noreferrer">open</a></>}</div>{a.content && <details className="mt-1 text-xs"><summary className="cursor-pointer text-muted">content</summary><Json value={a.content} /></details>}</li>)}</ul>}</Card>
       )}
     </div>
   );

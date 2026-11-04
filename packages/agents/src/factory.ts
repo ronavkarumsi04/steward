@@ -1,5 +1,5 @@
 import type { CompanionBridge } from "@steward/ai";
-import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
+import { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanionService, CompanyService, ConversationService, DocumentService, EventService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ImageService, ProjectService, ReactionService, RunService, SignalService, SiteService, TaskService, WorkflowService, oauthClientFromEnv, type ApprovalSignal, type CoreContext } from "@steward/core";
 import type { BrowserProvider } from "@steward/browser";
 import { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -38,6 +38,7 @@ export class AgentServiceFactory {
   readonly integrations: IntegrationService;
   readonly growth: GrowthService;
   readonly providers: ProviderCredentialService;
+  readonly images: ImageService;
   readonly events: EventService;
   readonly signals: SignalService;
   readonly reactions: ReactionService;
@@ -82,6 +83,7 @@ export class AgentServiceFactory {
     this.integrations = new IntegrationService(db, crypto, { apiUrl: config.apiUrl, oauthClient: (p) => oauthClientFromEnv(p, this.env) });
     this.growth = new GrowthService(db);
     this.providers = new ProviderCredentialService(db, crypto, this.o.core.log);
+    this.images = new ImageService(db);
     this.events = new EventService(db);
     this.signals = new SignalService(db);
     this.reactions = new ReactionService(db);
@@ -114,6 +116,7 @@ export class AgentServiceFactory {
       integrations: this.integrations,
       growth: this.growth,
       providers: this.providers,
+      images: this.images,
       events: this.events,
       reactions: this.reactions,
       sites: this.sites,

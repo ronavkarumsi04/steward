@@ -371,3 +371,57 @@ describe("document.sheet and document.deck", () => {
     expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ metadata: expect.objectContaining({ deck: true, slides: 3 }) }));
   });
 });
+
+describe("image.generate", () => {
+  const scope: TenantScope = { organizationId: "org", companyId: "co", actor: { type: "system", component: "test" } };
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9]);
+  function imgCtx(creds: Array<{ providerType: string; apiKey?: string; priority?: number }>) {
+    const create = vi.fn(async (_s: TenantScope, input: { purpose: string; prompt: string; width: number; height: number; mimeType: string; data: Buffer; seed: number; model: string }) => ({ id: "img_1", runId: "run_1", purpose: input.purpose, prompt: input.prompt, model: input.model, seed: input.seed, mimeType: input.mimeType, width: input.width, height: input.height, bytes: input.data.byteLength, createdAt: "2026-11-04T00:00:00Z" }));
+    const addArtifact = vi.fn(async () => undefined);
+    const ctx = { runId: "run_1", taskId: null, services: { steward: { scope, runs: { addArtifact }, images: { create }, providers: { resolveForGateway: async () => creds.map((c, i) => ({ id: `cred_${i}`, providerType: c.providerType, priority: c.priority ?? 100, enabled: true, credential: { apiKey: c.apiKey } })) } } } };
+    return { ctx, create, addArtifact };
+  }
+
+  it("refuses plainly when the company has no NVIDIA credential", async () => {
+    const tool = buildToolRegistry().get("image.generate")!;
+    const { ctx, create } = imgCtx([{ providerType: "openai", apiKey: "sk" }]);
+    const result = await tool.execute({ prompt: "a flat blue square logo on white" }, ctx as never);
+    expect(result.ok).toBe(false);
+    expect(result.content).toContain("No NVIDIA credential");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("makes the picture with the highest-priority NVIDIA key, stores it and records an image artifact", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", (async (_url: string | URL | Request, init?: RequestInit) => {
+      seen.push(new Headers(init?.headers).get("authorization") ?? "");
+      return new Response(JSON.stringify({ artifacts: [{ base64: PNG.toString("base64") }] }), { status: 200 });
+    }) as typeof fetch);
+    try {
+      const tool = buildToolRegistry().get("image.generate")!;
+      const { ctx, create, addArtifact } = imgCtx([{ providerType: "nvidia", apiKey: "nvapi-org", priority: 100 }, { providerType: "nvidia", apiKey: "nvapi-company", priority: 50 }]);
+      const result = await tool.execute({ prompt: "launch post hero, blue carbon paper, bold type", purpose: "picture", aspect: "wide", seed: 3 }, ctx as never);
+      expect(result.ok).toBe(true);
+      expect(seen).toEqual(["Bearer nvapi-company"]);
+      expect(create.mock.calls[0]![1]).toMatchObject({ purpose: "picture", width: 1344, height: 768, mimeType: "image/png", seed: 3 });
+      expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ kind: "image", url: "/v1/companies/co/images/img_1", mimeType: "image/png", metadata: expect.objectContaining({ imageId: "img_1", width: 1344 }) }));
+      expect(result.content).toContain("/v1/companies/co/images/img_1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("tells the run the model failed instead of storing a placeholder", async () => {
+    vi.stubGlobal("fetch", (async () => new Response("upstream busy", { status: 503 })) as typeof fetch);
+    try {
+      const tool = buildToolRegistry().get("image.generate")!;
+      const { ctx, create } = imgCtx([{ providerType: "nvidia", apiKey: "nvapi" }]);
+      const result = await tool.execute({ prompt: "a flat blue square logo on white", purpose: "logo" }, ctx as never);
+      expect(result.ok).toBe(false);
+      expect(result.content).toContain("did not return a picture");
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

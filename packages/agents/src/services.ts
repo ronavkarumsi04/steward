@@ -1,5 +1,5 @@
 import type { AIGateway } from "@steward/ai";
-import type { AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
+import type { ImageService, AgentService, ApprovalService, BrowserService, BudgetService, CodeService, CompanyService, ConversationService, DocumentService, GraphService, IntegrationService, GrowthService, McpService, ProviderCredentialService, ProjectService, ReactionService, RunService, SiteService, TaskService, EventService, WorkflowService } from "@steward/core";
 import type { Db } from "@steward/db";
 import type { MemoryService } from "@steward/memory";
 import type { SandboxProvider } from "@steward/sandbox";
@@ -28,6 +28,8 @@ export interface AgentServices {
   integrations: IntegrationService;
   growth: GrowthService;
   providers: ProviderCredentialService;
+  /** The pictures a company keeps: post images, heroes, logo candidates. */
+  images: ImageService;
   events: EventService;
   /** The rules that decide which recorded events wake an agent, and the ledger of what they did. */
   reactions: ReactionService;

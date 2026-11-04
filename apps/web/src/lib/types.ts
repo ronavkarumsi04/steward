@@ -315,6 +315,21 @@ export interface ToolCall {
   durationMs: number | null;
   createdAt: string;
 }
+/** A picture the company keeps; its bytes live at /api/v1/companies/:companyId/images/:id. */
+export interface ImageView {
+  id: string;
+  runId: string | null;
+  purpose: "picture" | "logo";
+  prompt: string;
+  model: string;
+  seed: number;
+  mimeType: string;
+  width: number;
+  height: number;
+  bytes: number;
+  createdAt: string;
+}
+
 export interface Artifact {
   id: string;
   runId: string | null;
