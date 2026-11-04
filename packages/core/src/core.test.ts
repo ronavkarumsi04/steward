@@ -271,7 +271,8 @@ describe("core services (postgres)", () => {
     try {
       expect(await svc.test({ organizationId: "other-org", actor: scope.actor }, saved.id)).toBeNull();
       expect(f).not.toHaveBeenCalled();
-      expect(await svc.test(scope, saved.id)).toEqual({ ok: true, models: 1, verification: "catalog_only" });
+      // 1 live-listed model + the seeded GLM entry the mocked catalog omitted (DeepSeek merges onto its seed).
+      expect(await svc.test(scope, saved.id)).toEqual({ ok: true, models: 2, verification: "catalog_only" });
       const row = (await pool.query("select status, last_verified_at from provider_credentials where id=$1", [saved.id])).rows[0];
       expect(row).toEqual({ status: "catalog_only", last_verified_at: null });
       expect(JSON.stringify(await svc.list(scope))).not.toContain("invalid-nim-fixture");
