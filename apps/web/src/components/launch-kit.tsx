@@ -164,7 +164,7 @@ export function LaunchKit({ companyId, initial }: { companyId: string; initial: 
 
 function Deliverable({ item, index, active, base }: { item: LaunchKitDeliverable; index: number; active: boolean; base: string }) {
   const done = item.status === "done";
-  const href = item.id === "tasks" ? `${base}/tasks` : item.id === "decision" ? `${base}/knowledge` : `${base}/knowledge`;
+  const href = item.id === "tasks" ? `${base}/tasks` : item.id === "kit" ? `${base}/settings#brand-kit-heading` : `${base}/knowledge`;
   return (
     <li className="flex items-start gap-3 px-3 py-2.5">
       <span
