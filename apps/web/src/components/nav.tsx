@@ -32,7 +32,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-bg shadow-e1">
+    <header className="binding-bar sticky top-0 z-[var(--z-nav)]">
       <div className="mx-auto flex min-h-16 max-w-[1440px] flex-wrap items-center py-2 justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Link
@@ -83,7 +83,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
             <span className="sr-only sm:hidden">Account and privacy</span>
           </Link>
           <ThemeToggle />
-          <button className="btn btn-sm border border-fg shadow-e1" onClick={logout} disabled={busy}>
+          <button className="btn btn-sm" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
             Sign out
           </button>
