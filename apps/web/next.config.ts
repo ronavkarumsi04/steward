@@ -56,12 +56,11 @@ const nextConfig: NextConfig = {
     // Same-origin proxy to the API so cookies are first-party and CSRF Origin checks hold.
     const destination = embeddedApi ? "/embedded-api/v1/:path*" : `${apiUrl}/v1/:path*`;
     const routes = [{ source: "/api/v1/:path*", destination }];
-    // `/health` lives at the API root rather than under /v1: expose it on the hosted origin so an
-    // uptime monitor has something to poll, and only when this deployment serves the API itself.
-    if (embeddedApi) {
-      routes.push({ source: "/health", destination: "/embedded-api/health" });
-      routes.push({ source: "/ready", destination: "/embedded-api/ready" });
-    }
+    // `/health` and `/ready` live at the API root rather than under /v1: expose them on the hosted
+    // origin so uptime monitors and `pnpm hosted:check` can poll whichever API this deployment uses.
+    const apiRoot = embeddedApi ? "/embedded-api" : apiUrl;
+    routes.push({ source: "/health", destination: `${apiRoot}/health` });
+    routes.push({ source: "/ready", destination: `${apiRoot}/ready` });
     return routes;
   },
   async headers() {
