@@ -41,6 +41,9 @@ const KIND: Record<TimelineKind, { label: string; edge: string }> = {
   artifact: { label: "artifact", edge: "nb-left-green" },
 };
 
+/** Past this many rows the list is folded by default: the verdict and totals above already say what happened. */
+const FOLD_ABOVE = 15;
+
 export function RunTimeline({ detail, companyId, observedAt }: { detail: RunDetail; companyId: string; observedAt: number }) {
   const inspection = inspectRun(detail, { now: observedAt, companyId });
   const { verdict, timeline, totals } = inspection;
@@ -123,6 +126,10 @@ export function RunTimeline({ detail, companyId, observedAt }: { detail: RunDeta
             </Empty>
           </div>
         ) : (
+          <details open={timeline.length <= FOLD_ABOVE} className="mt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-fg">
+              {timeline.length <= FOLD_ABOVE ? "Rows" : `Show all ${timeline.length} rows`}
+            </summary>
           <ol id="timeline" aria-label="Run timeline" className="mt-3 space-y-1.5">
             {timeline.map((entry, index) => (
               <TimelineRow
@@ -135,6 +142,7 @@ export function RunTimeline({ detail, companyId, observedAt }: { detail: RunDeta
               />
             ))}
           </ol>
+          </details>
         )}
       </div>
     </section>
