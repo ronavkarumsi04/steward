@@ -28,7 +28,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (available && sbx) await sbx.destroy();
-});
+}, 60_000);
 
 describe("LocalDockerSandboxProvider", () => {
   d("runs commands as the unprivileged sandbox user with dropped capabilities", async () => {

@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel } from "@steward/schema";
+import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
+import { BrandKitSettings } from "./brand-kit-settings";
 import { Card, Empty, StatusPill, usd } from "./ui";
 
 const DIMENSIONS: Array<{ id: PolicyDimension; label: string }> = [
@@ -65,7 +66,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const body: CompanyProfile = {
-      ...(profile ?? { name: company.name, tagline: "", description: "", stage: "idea", businessModel: "", targetCustomers: [], valueProposition: "", products: [], competitors: [], channels: [], brandVoice: "", goals: [], constraints: [], techStack: [] }),
+      ...(profile ?? { name: company.name, tagline: "", description: "", stage: "idea", businessModel: "", targetCustomers: [], valueProposition: "", products: [], competitors: [], channels: [], brandVoice: "", goals: [], constraints: [], techStack: [], brand: emptyBrandKit() }),
       name: String(fd.get("pname") || company.name),
       tagline: String(fd.get("tagline") ?? ""),
       description: String(fd.get("description") ?? ""),
@@ -194,6 +195,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
         <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
       </form>
+
+      <BrandKitSettings company={company} profile={profile} />
 
       <Card title="Policies" className="nb-left-yellow">
         <p className="mb-3 text-sm text-muted">Per-dimension rules evaluated before every tool call. <b>deny</b> blocks outright, <b>approve</b> always asks you, <b>allow</b> lets the agent proceed up to the chosen risk level and within the limits.</p>

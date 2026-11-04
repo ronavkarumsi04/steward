@@ -55,16 +55,21 @@ export type SiteFont = (typeof SITE_FONTS)[number];
 export const SITE_RADII = ["sharp", "soft", "round"] as const;
 export type SiteRadius = (typeof SITE_RADII)[number];
 
+export const SITE_MARKS = ["wordmark", "monogram"] as const;
+export type SiteMark = (typeof SITE_MARKS)[number];
+
 export const SiteTheme = z.object({
   accent: z.enum(SITE_ACCENTS).default("indigo"),
   font: z.enum(SITE_FONTS).default("sans"),
   radius: z.enum(SITE_RADII).default("soft"),
   /** A dark site and a light site are two houses, and a founder is allowed to want either. */
   dark: z.boolean().default(false),
+  /** How the header names the company: its wordmark, or a monogram badge before it (from the brand kit). */
+  mark: z.enum(SITE_MARKS).default("wordmark"),
 });
 export type SiteTheme = z.infer<typeof SiteTheme>;
 
-export const DEFAULT_SITE_THEME: SiteTheme = { accent: "indigo", font: "sans", radius: "soft", dark: false };
+export const DEFAULT_SITE_THEME: SiteTheme = { accent: "indigo", font: "sans", radius: "soft", dark: false, mark: "wordmark" };
 
 /** A call to action: the words a visitor reads and where they land. */
 const siteAction = z.object({ label: line(40), href: linkTarget });

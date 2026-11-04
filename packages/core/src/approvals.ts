@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt, inArray } from "drizzle-orm";
 import { approvals, auditLog, emitEvent, scoped, type Db } from "@steward/db";
 import type { ApprovalRequest, ApprovalStatus, TenantScope } from "@steward/schema";
 
@@ -14,11 +14,19 @@ export type ResolvedApproval = typeof approvals.$inferSelect & { signalDelivered
 export class ApprovalService {
   constructor(private readonly db: Db, private readonly signal?: ApprovalSignal) {}
 
-  async list(scope: TenantScope, status?: ApprovalStatus, limit = 50) {
+  /** `actions` narrows to the tool calls named (e.g. the outbox's send tools) before the limit applies. */
+  async list(scope: TenantScope, status?: ApprovalStatus, limit = 50, actions?: readonly string[]) {
     return this.db
       .select()
       .from(approvals)
-      .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, status ? eq(approvals.status, status) : undefined))
+      .where(
+        scoped(
+          scope,
+          { organizationId: approvals.organizationId, companyId: approvals.companyId },
+          status ? eq(approvals.status, status) : undefined,
+          actions && actions.length ? inArray(approvals.action, [...actions]) : undefined,
+        ),
+      )
       .orderBy(desc(approvals.createdAt))
       .limit(limit);
   }
