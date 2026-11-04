@@ -279,7 +279,7 @@ export default async function Landing() {
               ))}
             </tbody>
           </table>
-          <p className={s.ledgerNote}>Hosted beta: accounts, organizations and workspaces are live. Hosted agent execution is still being brought online.</p>
+          <p className={s.ledgerNote}>Hosted beta: accounts, organizations, workspaces and agent execution are live on our infrastructure. Bring your own model key; the first qualified default is NVIDIA's free tier.</p>
         </section>
 
         <section id="conditions" className={s.leaf} aria-labelledby="conditions-title">

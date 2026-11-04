@@ -1,12 +1,21 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { getAuthConfig } from "@/lib/server";
 import { StewardMark } from "@/components/brand";
 import { Icon } from "@/components/icons";
 import { Pad } from "@/components/work-order/pad";
 import s from "@/components/work-order/work-order.module.css";
 
+/** Where a visitor can go from a public page: the sign-up form while sign-up is open, otherwise the workspace door. */
+export async function publicEntry(): Promise<{ href: string; label: string; open: boolean }> {
+  const auth = await getAuthConfig();
+  const open = auth?.signupOpen === true;
+  return open ? { href: "/register", label: "Create your company", open } : { href: "/login", label: "Enter workspace", open };
+}
+
 /** The pad's binding and footer around any public page that is not the landing itself. */
-export function PublicFrame({ current, children }: { current: "pricing" | "compare"; children: ReactNode }) {
+export async function PublicFrame({ current, children }: { current: "pricing" | "compare"; children: ReactNode }) {
+  const entry = await publicEntry();
   return (
     <Pad className={`paper ${s.home}`}>
       <a className={s.skip} href="#main">
@@ -30,8 +39,8 @@ export function PublicFrame({ current, children }: { current: "pricing" | "compa
             <Link href="/login" className={s.navSignIn}>
               Sign in
             </Link>
-            <Link href="/register" className={s.navCta}>
-              Create your company
+            <Link href={entry.href} className={s.navCta}>
+              {entry.label}
             </Link>
           </div>
         </nav>

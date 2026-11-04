@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { PublicFrame } from "@/components/work-order/public-frame";
+import { PublicFrame, publicEntry } from "@/components/work-order/public-frame";
 import s from "@/components/work-order/work-order.module.css";
 
 export const metadata: Metadata = {
@@ -72,7 +72,8 @@ const CONDITIONS: [string, string][] = [
   ["Honest comparison", "Competitor figures on this page come from their public pricing pages and are dated. Tell us if they move."],
 ];
 
-export default function Pricing() {
+export default async function Pricing() {
+  const entry = await publicEntry();
   return (
     <PublicFrame current="pricing">
       <section className={`${s.leaf} ${s.first} rise-in`} aria-labelledby="pricing-title">
@@ -109,7 +110,15 @@ export default function Pricing() {
         </div>
         <p className={s.ledgerNote}>
           Hollow bullets are commitments about what paid hosting will keep, not features that exist today.{" "}
-          <Link href="/register">Create your company</Link> to start on the hosted beta.
+          {entry.open ? (
+            <>
+              <Link href={entry.href}>{entry.label}</Link> to start on the hosted beta.
+            </>
+          ) : (
+            <>
+              The hosted beta is by invitation right now; <Link href={entry.href}>{entry.label.toLowerCase()}</Link> if you have one.
+            </>
+          )}
         </p>
       </section>
 

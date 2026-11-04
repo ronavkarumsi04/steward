@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { PublicFrame } from "@/components/work-order/public-frame";
+import { PublicFrame, publicEntry } from "@/components/work-order/public-frame";
 import s from "@/components/work-order/work-order.module.css";
 
 export const metadata: Metadata = {
@@ -43,7 +43,8 @@ const ROWS: { item: string; detail?: string; cells: [Cell, Cell, Cell] }[] = [
   { item: "Price", cells: [yes("$0 in beta; models at list price"), part("$0 to $200 a month in credits"), none("No public price list")] },
 ];
 
-export default function Compare() {
+export default async function Compare() {
+  const entry = await publicEntry();
   return (
     <PublicFrame current="compare">
       <section className={`${s.leaf} ${s.first} rise-in`} aria-labelledby="compare-title">
@@ -135,7 +136,7 @@ export default function Compare() {
           </li>
         </ol>
         <p className={s.imprint}>
-          <span className={s.fieldLabel}>Rates</span> Free in beta, your own keys. <Link href="/pricing">See the rate card</Link> or <Link href="/register">create your company</Link>.
+          <span className={s.fieldLabel}>Rates</span> Free in beta, your own keys. <Link href="/pricing">See the rate card</Link> or <Link href={entry.href}>{entry.label.toLowerCase()}</Link>.
         </p>
       </section>
     </PublicFrame>
