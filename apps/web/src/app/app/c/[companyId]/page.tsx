@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
@@ -24,6 +25,14 @@ import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
  */
 const ARRIVAL = workspaceArrival();
 const delay = (index: number) => ({ "--enter-delay": `${ARRIVAL.delayMs(index)}ms` }) as CSSProperties;
+
+/** The tab reads as the company, the way every other workspace tab reads as its page. */
+export async function generateMetadata({ params }: { params: Promise<{ companyId: string }> }): Promise<Metadata> {
+  const { companyId } = await params;
+  const api = await serverApi();
+  const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
+  return { title: overview?.company.name ?? "Company" };
+}
 
 export default async function CompanyOverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
