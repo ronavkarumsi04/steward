@@ -33,7 +33,7 @@ const ROWS: { item: string; detail?: string; cells: [Cell, Cell, Cell] }[] = [
   { item: "Code changes on your own GitHub", detail: "Diff sessions, pull requests, a sandbox that runs the tests.", cells: [yes(), none(), part("Claims to ship code")] },
   { item: "Watched browser automation", detail: "A real browser you can see, with a closed set of actions.", cells: [yes(), none(), none()] },
   { item: "Outreach drafted and queued", detail: "Email, X and LinkedIn posts, texts.", cells: [yes("Outbox with Send, Don't send, Edit"), yes("Outreach, posts with pictures"), yes("Tweets, replies, deals")] },
-  { item: "Pictures, decks and spreadsheets", cells: [notYet(), yes(), none()] },
+  { item: "Pictures, decks and spreadsheets", cells: [part("Decks and sheets, typed and totalled; pictures next"), yes(), none()] },
   { item: "Text your agent by SMS", cells: [notYet(), yes("Pro plan phone number"), none()] },
   { item: "Workflows and reactions", detail: "Scheduled and event-driven runs you can read and edit.", cells: [yes(), part("Runs alone on paid plans"), yes("Autonomous by default")] },
   { item: "Integrations", cells: [yes("MCP marketplace with allowlists and risk levels"), part("Gmail, Calendar, Sheets, Slack, Notion, HubSpot, Stripe"), none()] },
@@ -115,7 +115,7 @@ export default async function Compare() {
           <h2 id="honest-title" className={s.h2}>
             Where they are ahead, <span>today.</span>
           </h2>
-          <p className={s.sectionLede}>Four lines read Not yet on our side. They are on the board, in this order.</p>
+          <p className={s.sectionLede}>Three lines read Not yet and one Partly on our side. They are on the board, in this order.</p>
         </div>
         <ol className={s.conditions}>
           <li>
@@ -123,8 +123,8 @@ export default async function Compare() {
             <p>Approvals and a chat with your Chief of Staff from your phone, starting with a mobile-first approvals screen.</p>
           </li>
           <li>
-            <h3 className={s.h3}>Pictures, decks and spreadsheets</h3>
-            <p>Deliverables beyond documents and sites: research briefs with sources, then decks and sheets.</p>
+            <h3 className={s.h3}>Pictures</h3>
+            <p>Research briefs with sources, decks and sheets are in; generated pictures for posts and decks are next.</p>
           </li>
           <li>
             <h3 className={s.h3}>Logo generation</h3>

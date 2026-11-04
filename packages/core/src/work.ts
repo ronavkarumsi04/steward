@@ -337,7 +337,7 @@ export class RunService {
   }
 }
 
-export const DOCUMENT_KINDS = ["document", "playbook"] as const;
+export const DOCUMENT_KINDS = ["document", "playbook", "sheet", "deck"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 export class DocumentService {

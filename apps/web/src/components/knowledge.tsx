@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Artifact, Decision, Document, DocumentVersion, Memory, MemoryRevision, Project } from "@/lib/types";
 import { Card, Empty, Json, Ago } from "./ui";
+import { DeckView, SheetView } from "./deliverables";
 import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
 
 type Tab = "playbooks" | "documents" | "decisions" | "memory" | "artifacts";
@@ -273,8 +274,22 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
               {versionHistory}
             </form>
           )}
-          {regularDocuments.length === 0 ? <Empty>No documents yet. Agents write plans, research briefs and specs here; you can too.</Empty> : (
-            <ul className="divide-y divide-line text-sm">{regularDocuments.map((d) => <li key={d.id} className="flex items-center justify-between gap-2 py-2"><button className="min-w-0 flex-1 truncate text-left hover:text-accent" disabled={busy === d.id} onClick={() => openDocument(d)}><span className="mono text-xs text-muted">{d.folder}</span> {d.title}</button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}</ul>
+          {open && (open.kind === "deck" || open.kind === "sheet") && (
+            <div className="mb-4 card-inset nb-left-blue space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold">{open.title} <span className="pill text-muted">{open.kind === "deck" ? "Deck" : "Sheet"}</span></h3>
+                <div className="flex gap-2">
+                  {open.id && <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => loadHistory(open.id)}>History</button>}
+                  <button type="button" className="btn btn-sm" onClick={() => window.print()}>Print</button>
+                  <button type="button" className="btn btn-sm" onClick={() => { setOpen(null); setHistory(null); }}>Close</button>
+                </div>
+              </div>
+              {open.kind === "deck" ? <DeckView doc={open} /> : <SheetView doc={open} />}
+              {versionHistory}
+            </div>
+          )}
+          {regularDocuments.length === 0 ? <Empty>No documents yet. Agents write plans, research briefs, decks and sheets here; you can too.</Empty> : (
+            <ul className="divide-y divide-line text-sm">{regularDocuments.map((d) => <li key={d.id} className="flex items-center justify-between gap-2 py-2"><button className="min-w-0 flex-1 truncate text-left hover:text-accent" disabled={busy === d.id} onClick={() => openDocument(d)}><span className="mono text-xs text-muted">{d.folder}</span> {d.title}{d.kind === "deck" || d.kind === "sheet" ? <span className="pill ml-2 text-muted">{d.kind === "deck" ? "Deck" : "Sheet"}</span> : null}</button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}</ul>
           )}
         </Card>
       )}

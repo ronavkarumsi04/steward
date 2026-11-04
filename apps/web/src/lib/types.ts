@@ -402,7 +402,7 @@ export interface Document {
   content?: string;
   format: string;
   folder: string;
-  kind: "document" | "playbook";
+  kind: "document" | "playbook" | "sheet" | "deck";
   projectId: string | null;
   agentKinds: string[];
   version: number;
@@ -416,7 +416,7 @@ export interface DocumentVersion {
   content: string;
   format: string;
   folder: string;
-  kind: "document" | "playbook";
+  kind: "document" | "playbook" | "sheet" | "deck";
   projectId: string | null;
   agentKinds: string[];
   createdBy: Record<string, unknown>;

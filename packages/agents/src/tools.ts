@@ -307,6 +307,143 @@ const documentBrief = defineTool({
   },
 });
 
+export const SHEET_FOLDER = "/sheets";
+export const DECK_FOLDER = "/decks";
+
+const SheetColumn = z.object({
+  name: z.string().min(1).max(60),
+  type: z.enum(["text", "number", "money", "percent", "date"]).default("text"),
+});
+type SheetColumn = z.infer<typeof SheetColumn>;
+type SheetCell = string | number | null;
+
+function sheetCellProblem(col: SheetColumn, cell: SheetCell, row: number): string | null {
+  if (cell === null || cell === "") return null;
+  if (col.type === "text") return typeof cell === "string" || typeof cell === "number" ? null : `row ${row}, "${col.name}": not text`;
+  if (col.type === "date") {
+    return typeof cell === "string" && /^\d{4}-\d{2}-\d{2}$/.test(cell) && !Number.isNaN(Date.parse(cell)) ? null : `row ${row}, "${col.name}": "${String(cell)}" is not a YYYY-MM-DD date`;
+  }
+  const n = typeof cell === "number" ? cell : Number(String(cell).replace(/[$,%\s]/g, ""));
+  return Number.isFinite(n) ? null : `row ${row}, "${col.name}": "${String(cell)}" is not a number`;
+}
+
+function sheetNumber(cell: SheetCell): number | null {
+  if (cell === null || cell === "") return null;
+  const n = typeof cell === "number" ? cell : Number(String(cell).replace(/[$,%\s]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatSheetCell(col: SheetColumn, cell: SheetCell): string {
+  if (cell === null || cell === "") return "";
+  if (col.type === "text" || col.type === "date") return String(cell).replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
+  const n = sheetNumber(cell);
+  if (n === null) return String(cell);
+  if (col.type === "money") return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (col.type === "percent") return `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+/** A sheet as Markdown: a table, right-aligned numeric columns, and a totals row when any column can be summed. */
+export function renderSheet(input: { title: string; columns: SheetColumn[]; rows: SheetCell[][]; note?: string; writtenAt?: string }): string {
+  const align = input.columns.map((c) => (c.type === "text" || c.type === "date" ? "---" : "---:"));
+  const header = `| ${input.columns.map((c) => c.name.replace(/\|/g, "\\|")).join(" | ")} |`;
+  const body = input.rows.map((r) => `| ${input.columns.map((c, i) => formatSheetCell(c, r[i] ?? null)).join(" | ")} |`);
+  const summable = input.columns.map((c) => c.type === "number" || c.type === "money");
+  const totals = summable.some(Boolean)
+    ? `| ${input.columns
+        .map((c, i) => {
+          if (!summable[i]) return i === 0 ? "**Total**" : "";
+          const sum = input.rows.reduce((acc, r) => acc + (sheetNumber(r[i] ?? null) ?? 0), 0);
+          return `**${formatSheetCell(c, sum)}**`;
+        })
+        .join(" | ")} |`
+    : null;
+  const lines = [
+    `# ${input.title.trim()}`,
+    "",
+    `**Written.** ${input.writtenAt ?? new Date().toISOString().slice(0, 10)} · ${input.rows.length} row${input.rows.length === 1 ? "" : "s"}, ${input.columns.length} columns.`,
+    "",
+  ];
+  if (input.note?.trim()) lines.push(input.note.trim(), "");
+  lines.push(header, `| ${align.join(" | ")} |`, ...body);
+  if (totals) lines.push(totals);
+  lines.push("");
+  return lines.join("\n");
+}
+
+const documentSheet = defineTool({
+  name: "document.sheet",
+  description:
+    "Write a spreadsheet: named, typed columns (text, number, money, percent, date) and rows of cells. Numbers and money are totalled for you. Use it for budgets, forecasts, pricing tables, pipelines and any list the founder would otherwise open in a spreadsheet; the same title overwrites the previous version.",
+  input: z.object({
+    title: z.string().min(3).max(200),
+    columns: z.array(SheetColumn).min(2).max(12),
+    rows: z.array(z.array(z.union([z.string().max(400), z.number(), z.null()]))).min(1).max(500),
+    note: z.string().max(1000).optional(),
+  }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const problems: string[] = [];
+    input.rows.forEach((r, ri) => {
+      if (r.length !== input.columns.length) problems.push(`row ${ri + 1} has ${r.length} cells, not ${input.columns.length}`);
+      else input.columns.forEach((c, ci) => { const p = sheetCellProblem(c, r[ci] ?? null, ri + 1); if (p) problems.push(p); });
+    });
+    if (problems.length) return fail(`Refused: ${problems.length} cell${problems.length === 1 ? "" : "s"} do not fit the columns (${problems.slice(0, 3).join("; ")}${problems.length > 3 ? "; …" : ""}). Fix the cells or the column types.`);
+    const content = renderSheet(input);
+    const existing = await s.documents.findByTitle(s.scope, input.title, SHEET_FOLDER, "sheet");
+    const d = await s.documents.upsert(s.scope, { id: existing?.id, title: input.title, content, folder: SHEET_FOLDER, kind: "sheet" });
+    if (!d) return fail("Failed to write the sheet.");
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title: input.title, metadata: { documentId: d.id, version: d.version, sheet: true, rows: input.rows.length, columns: input.columns.length } });
+    return { ok: true, content: `Wrote sheet "${input.title}" (v${d.version}, id ${d.id}): ${input.rows.length} rows × ${input.columns.length} columns.`, data: { id: d.id, version: d.version, rows: input.rows.length } };
+  },
+});
+
+const DeckSlide = z.object({
+  heading: z.string().min(2).max(80),
+  bullets: z.array(z.string().min(1).max(160)).max(6).default([]),
+  note: z.string().max(400).optional(),
+});
+
+/** A deck as Markdown: one `---`-separated section per slide, speaker notes as block quotes. */
+export function renderDeck(input: { title: string; audience?: string; slides: z.infer<typeof DeckSlide>[]; writtenAt?: string }): string {
+  const lines = [
+    `# ${input.title.trim()}`,
+    "",
+    `**Written.** ${input.writtenAt ?? new Date().toISOString().slice(0, 10)} · ${input.slides.length} slides${input.audience ? ` · for ${input.audience.trim()}` : ""}.`,
+    "",
+  ];
+  input.slides.forEach((slide, i) => {
+    lines.push("---", "", `## ${i + 1}. ${slide.heading.trim()}`, "");
+    if (slide.bullets.length) lines.push(...slide.bullets.map((b) => `- ${b.trim()}`), "");
+    if (slide.note?.trim()) lines.push(`> ${slide.note.trim()}`, "");
+  });
+  return lines.join("\n");
+}
+
+const documentDeck = defineTool({
+  name: "document.deck",
+  description:
+    "Write a slide deck: a title, who it is for, and 3–30 slides each with a heading, up to six short bullets and an optional speaker note. Use it for pitches, plans and reviews the founder will present; the same title overwrites the previous version.",
+  input: z.object({
+    title: z.string().min(3).max(200),
+    audience: z.string().max(120).optional(),
+    slides: z.array(DeckSlide).min(3).max(30),
+  }),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const content = renderDeck(input);
+    const existing = await s.documents.findByTitle(s.scope, input.title, DECK_FOLDER, "deck");
+    const d = await s.documents.upsert(s.scope, { id: existing?.id, title: input.title, content, folder: DECK_FOLDER, kind: "deck" });
+    if (!d) return fail("Failed to write the deck.");
+    await s.runs.addArtifact(s.scope, { runId: ctx.runId, taskId: ctx.taskId, kind: "document", title: input.title, metadata: { documentId: d.id, version: d.version, deck: true, slides: input.slides.length } });
+    return { ok: true, content: `Wrote deck "${input.title}" (v${d.version}, id ${d.id}): ${input.slides.length} slides.`, data: { id: d.id, version: d.version, slides: input.slides.length } };
+  },
+});
+
 const decisionRecord = defineTool({
   name: "decision.record",
   description: "Record a significant business decision and its rationale in the decision log.",
@@ -1368,7 +1505,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, documentBrief, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, companyBrandUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, documentBrief, documentSheet, documentDeck, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, companyBrandUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
