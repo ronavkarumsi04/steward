@@ -252,6 +252,16 @@ describe("AIGateway caller deadlines", () => {
     expect(records.find((r) => r.credentialId === first.id)).toMatchObject({ status: "error", errorCode: "timeout" });
   });
 
+  it("shares the budget over a few routes, not a provider's whole listing", () => {
+    const gateway = new AIGateway({ loadCredentials: async () => [], recordUsage: async () => {} });
+    const budget = (routesLeft: number) => (gateway as unknown as { attemptBudget: (d: number, n: number) => { timeoutMs: number } }).attemptBudget(Date.now() + 300_000, routesLeft).timeoutMs;
+    // 295s usable over three routes: a long planning prompt gets its ~98s whether 3 or 90 routes remain.
+    expect(budget(90)).toBe(budget(3));
+    expect(budget(90)).toBeGreaterThanOrEqual(95_000);
+    expect(budget(90)).toBeLessThanOrEqual(100_000);
+    expect(budget(1)).toBe(120_000);
+  });
+
   it("does not start an attempt the remaining budget cannot hold", async () => {
     const cred = credential("credential-1", 100);
     const gateway = new AIGateway({ loadCredentials: async () => [cred], recordUsage: async () => {}, maxAttemptsPerRoute: 2 });

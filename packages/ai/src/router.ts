@@ -55,6 +55,14 @@ function estimatedCostPerMTok(m: ModelInfo): number {
  * Produces an ordered list of routes: explicit selection first, then fallback chain, then requirement-driven ranking.
  * Unhealthy candidates are demoted, never removed (they can recover).
  */
+/**
+ * Under a deadline the gateway shares the budget across this many routes, so beyond this many healthy
+ * qualified routes a provider's listing-only models add nothing but ten-second timeouts and 404s; a
+ * ninety-model NIM listing once ran a launch kit through all of them and ended on an unqualified model's
+ * malformed plan. With fewer qualified routes the listing stays as the last resort it was meant to be.
+ */
+export const ROUTE_SHARE_CAP = 3;
+
 export function planRoutes(policy: RoutingPolicy, candidates: Candidate[]): RouteChoice[] {
   const req = policy.requirements;
   const out: RouteChoice[] = [];
@@ -70,10 +78,12 @@ export function planRoutes(policy: RoutingPolicy, candidates: Candidate[]): Rout
   if (policy.explicit) for (const c of find(policy.explicit.provider, policy.explicit.model)) push(c, "explicit selection");
   for (const f of policy.fallbackChain) for (const c of find(f.provider, f.model)) push(c, "fallback chain");
 
-  const eligible = candidates
+  const meeting = candidates
     .map((c) => ({ c, why: meetsRequirements(c.model, req) }))
     .filter((x) => x.why === null)
     .map((x) => x.c);
+  const qualified = meeting.filter((c) => c.model.curated && c.healthy).length;
+  const eligible = qualified >= ROUTE_SHARE_CAP ? meeting.filter((c) => c.model.curated) : meeting;
 
   const score = (c: Candidate): number => {
     const tier = TIER_ORDER[c.model.tier];
