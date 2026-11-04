@@ -6,15 +6,15 @@ import {
   SiteModel as SiteModelSchema,
   SITE_HOME_SLUG,
   SITE_MAX_PAGES,
-  type SiteAccent,
   type SiteBlock,
   type SiteBlockKind,
-  type SiteFont,
   type SiteModel,
-  type SiteRadius,
   type SiteTheme,
   type TenantScope,
-} from "@steward/schema";
+  type BrandKit,
+  BRAND_ACCENT_HEX,
+  BRAND_FONT_STACK,
+  BRAND_RADIUS_CSS, monogram } from "@steward/schema";
 import { RunService, type RunTrigger } from "./work.js";
 
 /**
@@ -303,13 +303,9 @@ export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
 
-const ACCENT_HEX: Record<SiteAccent, string> = { indigo: "#4f46e5", violet: "#7c3aed", emerald: "#059669", amber: "#d97706", rose: "#e11d48", slate: "#475569", cyan: "#0891b2" };
-const FONT_STACK: Record<SiteFont, string> = {
-  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-  serif: "Georgia, 'Iowan Old Style', 'Times New Roman', serif",
-  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
-};
-const RADIUS: Record<SiteRadius, string> = { sharp: "0", soft: "10px", round: "999px" };
+const ACCENT_HEX = BRAND_ACCENT_HEX;
+const FONT_STACK = BRAND_FONT_STACK;
+const RADIUS = BRAND_RADIUS_CSS;
 
 /**
  * The stylesheet every page carries inline, so a bundle is a set of files that works when opened from disk and
@@ -330,6 +326,7 @@ export function renderSiteCss(theme: SiteTheme): string {
     `header.site-head{border-bottom:1px solid var(--line);padding:1.25rem 0}`,
     `header.site-head .wrap{display:flex;flex-wrap:wrap;gap:1rem;align-items:baseline;justify-content:space-between}`,
     `.brand{font-weight:700;text-decoration:none;color:var(--ink)}`,
+    `.brand .mark{display:inline-grid;place-items:center;width:2em;height:2em;margin-right:.5em;background:var(--accent);color:#fff;border-radius:var(--radius);font-size:.75em;letter-spacing:.05em;vertical-align:middle}`,
     `nav.pages{display:flex;flex-wrap:wrap;gap:1.25rem;font-size:.9375rem}`,
     `nav.pages a{text-decoration:none;color:var(--muted)}`,
     `nav.pages a[aria-current="page"]{color:var(--ink);font-weight:600}`,
@@ -436,7 +433,7 @@ export function renderPageHtml(model: SiteModel, slug: string): string {
     "</head>",
     "<body>",
     '<header class="site-head"><div class="wrap">',
-    `<a class="brand" href="${escapeHtml(hrefForSlug(SITE_HOME_SLUG))}">${escapeHtml(model.name)}</a>`,
+    `<a class="brand" href="${escapeHtml(hrefForSlug(SITE_HOME_SLUG))}">${model.theme.mark === "monogram" ? `<span class="mark" aria-hidden="true">${escapeHtml(monogram(model.name))}</span>` : ""}${escapeHtml(model.name)}</a>`,
     `<nav class="pages" aria-label="Pages">${nav}</nav>`,
     "</div></header>",
     '<main class="wrap">',
@@ -597,18 +594,25 @@ export class SiteService {
     return this.db.transaction(async (tx) => this.writeDraft(tx, scope, model, "site.updated"));
   }
 
-  /** The starting point for a company that has never had a site: its own name and the profile's tagline. */
-  starter(companyName: string, tagline: string): SiteDraftInput {
+  /**
+   * The starting point for a company that has never had a site: its own name, the profile's tagline and, when the
+   * company has a brand kit, that kit's palette and type, so the first draft already looks like the company.
+   */
+  starter(companyName: string, tagline: string, brand?: BrandKit): SiteDraftInput {
+    // A tagline set in the brand kit is a deliberate decision; the profile's free-text one is the fallback.
+    const line = brand?.tagline || tagline || "";
     return {
       name: companyName.slice(0, 80),
-      theme: { accent: "indigo", font: "sans", radius: "soft", dark: false },
+      theme: brand
+        ? { accent: brand.accent, font: brand.font, radius: brand.radius, dark: brand.dark, mark: brand.mark }
+        : { accent: "indigo", font: "sans", radius: "soft", dark: false, mark: "wordmark" },
       pages: [
         {
           slug: SITE_HOME_SLUG,
           title: companyName.slice(0, 120),
-          description: tagline.slice(0, 300),
+          description: line.slice(0, 300),
           blocks: [
-            { kind: "hero", heading: tagline.slice(0, 120) || "What this company does, in one line", subheading: "", action: { label: "Get in touch", href: "/contact" } },
+            { kind: "hero", heading: line.slice(0, 120) || "What this company does, in one line", subheading: "", action: { label: "Get in touch", href: "/contact" } },
             { kind: "text", heading: "Why it exists", paragraphs: [""] },
           ],
         },

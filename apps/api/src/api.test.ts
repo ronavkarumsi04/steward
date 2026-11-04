@@ -445,6 +445,31 @@ describe("project workspace", () => {
   });
 });
 
+describe("brand kit", () => {
+  d("defaults on profiles saved before it existed and round-trips once decided", async () => {
+    const a = await register("BrandA");
+    const co = await a.api.json<{ company: { id: string } }>("POST", `/orgs/${a.orgId}/companies`, { name: "Northwind Analytics", autonomyLevel: 2, profile: { description: "Weekly numbers", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const before = await a.api.json<{ profile: { profile: { brand: { accent: string; voice: { tone: string[] } } } } | null }>("GET", `/companies/${companyId}`);
+    expect(before.body.profile?.profile.brand).toMatchObject({ accent: "indigo", voice: { tone: [] } });
+
+    const put = await a.api.json<{ profile: { profile: { name: string } } }>("PUT", `/companies/${companyId}/profile`, {
+      name: "Northwind Analytics",
+      tagline: "Numbers, weekly.",
+      brand: { tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram", voice: { tone: ["plain", "exact"], do: ["name the number"], dont: ["say leverage"] } },
+    });
+    expect(put.status).toBe(200);
+    const after = await a.api.json<{ profile: { profile: { brand: Record<string, unknown> } } }>("GET", `/companies/${companyId}`);
+    expect(after.body.profile.profile.brand).toMatchObject({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram", voice: { tone: ["plain", "exact"] } });
+
+    const studio = await a.api.json<{ starter: { theme: Record<string, unknown>; pages: Array<{ blocks: Array<{ kind: string; heading?: string }> }> } | null }>("GET", `/companies/${companyId}/site`);
+    expect(studio.body.starter?.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram" });
+
+    const bad = await a.api.call("PUT", `/companies/${companyId}/profile`, { name: "Northwind Analytics", brand: { accent: "neon" } });
+    expect(bad.status).toBe(422);
+  });
+});
+
 describe("growth pipeline", () => {
   d("persists real leads, updates stages, and preserves tenant isolation", async () => {
     const a = await register("GrowthA");
@@ -561,6 +586,11 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     const approval = await svc.approvals.request(scope, { runId: run.body.run.id, action: "email.send", reason: "Send launch email", payload: { to: "x@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60, expiresInMs: 60_000 });
     const list = await api.json<{ approvals: Array<{ id: string; status: string }> }>("GET", `/companies/${companyId}/approvals?status=pending`);
     expect(list.body.approvals.map((a) => a.id)).toContain(approval.id);
+    const inbox = await api.json<{ approvals: Array<{ id: string; companyId: string }> }>("GET", `/orgs/${orgId}/approvals?status=pending`);
+    expect(inbox.body.approvals.map((a) => a.id)).toContain(approval.id);
+    expect(inbox.body.approvals.find((a) => a.id === approval.id)?.companyId).toBe(companyId);
+    const growth = await api.json<{ outbox: Array<{ id: string; action: string }> }>("GET", `/companies/${companyId}/growth`);
+    expect(growth.body.outbox.map((a) => a.id)).toContain(approval.id);
     const decided = await api.json<{ approval: { status: string } }>("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "denied", note: "Not yet" });
     expect(decided.status).toBe(200);
     expect(decided.body.approval.status).toBe("denied");
@@ -2419,5 +2449,29 @@ describe("Overclock configuration and runtime", () => {
       const b = await missing.json() as { error: { code: string; message: string } };
       expect({ code: a.error.code, message: a.error.message }).toEqual({ code: b.error.code, message: b.error.message });
     } finally { await prod.pool.end(); }
+  });
+});
+
+describe("launch kit", () => {
+  d("starts a Chief of Staff run from the company profile the moment a founder asks", async () => {
+    const { api, orgId } = await register();
+    await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, {
+      name: "Ledgerline",
+      autonomyLevel: 2,
+      profile: { name: "Ledgerline", description: "Bookkeeping that closes itself for two-person agencies", stage: "prototype", targetCustomers: ["design agencies"], constraints: ["no paid ads"] },
+    });
+    const companyId = co.body.company.id;
+    const started = await api.json<{ run: { id: string; agentId: string; trigger: { kind: string; instruction: string } } }>("POST", `/companies/${companyId}/launch-kit`, {});
+    const byTrigger = await api.json<{ runs: { id: string }[] }>("GET", `/companies/${companyId}/runs?trigger=launch&limit=1`);
+    expect(byTrigger.body.runs.map((r) => r.id)).toEqual([started.body.run.id]);
+    expect(started.status).toBe(201);
+    expect(started.body.run.trigger.kind).toBe("launch");
+    expect(started.body.run.trigger.instruction).toContain("Bookkeeping that closes itself");
+    expect(started.body.run.trigger.instruction).toContain('title "Positioning"');
+    const agents = await api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `/companies/${companyId}/agents`);
+    expect(agents.body.agents.find((a) => a.id === started.body.run.agentId)?.kind).toBe("orchestrator");
+    const listed = await api.json<{ runs: Array<{ id: string; trigger: { kind: string } }> }>("GET", `/companies/${companyId}/runs`);
+    expect(listed.body.runs.find((r) => r.id === started.body.run.id)?.trigger.kind).toBe("launch");
   });
 });

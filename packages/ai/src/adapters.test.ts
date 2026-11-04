@@ -56,7 +56,8 @@ describe("adapters over mocked fetch", () => {
     const f = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ data: [{ id: "deepseek-ai/deepseek-v4.1-flash" }] })));
     vi.stubGlobal("fetch", f);
     const result = await new OpenAICompatibleAdapter({ apiKey: "invalid-key" }, "nvidia").testConnection();
-    expect(result).toEqual({ ok: true, models: 1, verification: "catalog_only" });
+    // One live model plus the seeded GLM entry the listing did not mention (DeepSeek merges onto its seed).
+    expect(result).toEqual({ ok: true, models: 2, verification: "catalog_only" });
     expect(f).toHaveBeenCalledOnce();
     expect(f.mock.calls[0]?.[0]).toBe("https://integrate.api.nvidia.com/v1/models");
     // Discovery must not silently generate tokens or execute tools to change that verdict.

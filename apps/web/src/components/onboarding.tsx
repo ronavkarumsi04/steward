@@ -45,6 +45,9 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
           constraints: split(constraints),
         },
       });
+      // The first-run promise: the Chief of Staff starts on the launch kit before the founder sees the workspace.
+      // A failure here (no provider yet, Temporal down) must not strand the company — the overview offers a retry.
+      await browserApi.post(`/companies/${company.id}/launch-kit`, {}).catch(() => undefined);
       router.replace(`/app/c/${company.id}`);
       router.refresh();
     } catch (e) {

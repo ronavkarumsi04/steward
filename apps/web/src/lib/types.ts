@@ -330,6 +330,8 @@ export interface Artifact {
 }
 export interface Approval {
   id: string;
+  /** Set on every stored row; optional only so fixtures and older surfaces keep type-checking. */
+  companyId?: string;
   runId: string | null;
   taskId: string | null;
   agentId: string | null;
@@ -608,6 +610,8 @@ export interface GrowthSnapshot {
   leads: Lead[];
   outbound: OutboundActivity[];
   campaigns: Campaign[];
+  /** Pending approvals for email.send / social.publish / sms.send: what is written and waiting on a person. */
+  outbox: Approval[];
 }
 
 /**

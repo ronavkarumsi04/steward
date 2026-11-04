@@ -3,6 +3,52 @@ import { DisabledBrowserProvider, NO_BROWSER_REASON } from "@steward/browser";
 import type { TenantScope } from "@steward/schema";
 import { BRIEF_FOLDER, buildToolRegistry, DEFAULT_TOOL_ALLOWLIST, renderBrief } from "./tools.js";
 
+describe("company.brand_update", () => {
+  const scope = { organizationId: "org-1", companyId: "co-1", actor: { type: "system" } } as unknown as TenantScope;
+  const ctx = (steward: Record<string, unknown>) => ({ scope, runId: "run-1", agentId: "agent-1", services: { steward: { scope, ...steward } }, log: () => undefined });
+
+  it("is a low-risk internal tool the marketer may use", () => {
+    const registry = buildToolRegistry();
+    expect(registry.get("company.brand_update")?.manifest).toMatchObject({ risk: "LOW", sideEffects: "internal" });
+    expect(DEFAULT_TOOL_ALLOWLIST.marketing).toContain("company.brand_update");
+  });
+
+  it("merges the kit into the stored profile and saves a new version attributed to the agent", async () => {
+    const saveProfile = vi.fn(async () => ({ version: 3 }));
+    const tool = buildToolRegistry().get("company.brand_update")!;
+    const result = await tool.execute(
+      { accent: "emerald", voice: { tone: ["plain", "exact"] } },
+      ctx({
+        companies: {
+          get: async () => ({ id: "co-1", name: "Northwind Analytics" }),
+          profile: async () => ({ version: 2, profile: { name: "Northwind", tagline: "Numbers, weekly.", brand: { font: "serif", voice: { do: ["name the number"] } } } }),
+          saveProfile,
+        },
+      }) as never,
+    );
+    expect(result.ok).toBe(true);
+    expect(saveProfile).toHaveBeenCalledTimes(1);
+    const [, saved, source, actor] = saveProfile.mock.calls[0] as unknown as [unknown, { name: string; tagline: string; brand: Record<string, unknown> }, string, { type: string; agentId?: string }];
+    expect(source).toBe("agent");
+    expect(actor).toMatchObject({ type: "agent", agentId: "agent-1", runId: "run-1" });
+    expect(saved.name).toBe("Northwind");
+    expect(saved.tagline).toBe("Numbers, weekly.");
+    expect(saved.brand).toMatchObject({ accent: "emerald", font: "serif", voice: { tone: ["plain", "exact"], do: ["name the number"], dont: [] } });
+    expect(result.content).toContain("Tone: plain, exact.");
+  });
+
+  it("refuses an invalid kit instead of saving it", async () => {
+    const saveProfile = vi.fn();
+    const tool = buildToolRegistry().get("company.brand_update")!;
+    const result = await tool.execute(
+      { accent: "neon" },
+      ctx({ companies: { get: async () => ({ id: "co-1", name: "Northwind" }), profile: async () => null, saveProfile } }) as never,
+    );
+    expect(result.ok).toBe(false);
+    expect(saveProfile).not.toHaveBeenCalled();
+  });
+});
+
 describe("operator capability surface", () => {
   it("exposes launch and payment-path tools with policy dimensions", () => {
     const registry = buildToolRegistry();

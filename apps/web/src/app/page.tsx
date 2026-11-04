@@ -112,6 +112,8 @@ export default async function Landing() {
             <a href="#how">How it works</a>
             <a href="#workspace">The workspace</a>
             <a href="#conditions">Conditions</a>
+            <Link href="/pricing">Pricing</Link>
+            <Link href="/compare">Compare</Link>
           </div>
           <div className={s.navActions}>
             <Link href="/login" className={s.navSignIn}>
@@ -277,7 +279,7 @@ export default async function Landing() {
               ))}
             </tbody>
           </table>
-          <p className={s.ledgerNote}>Hosted beta: accounts, organizations and workspaces are live. Hosted agent execution is still being brought online.</p>
+          <p className={s.ledgerNote}>Hosted beta: accounts, organizations, workspaces and agent execution are live on our infrastructure. Bring your own model key; the first qualified default is NVIDIA's free tier.</p>
         </section>
 
         <section id="conditions" className={s.leaf} aria-labelledby="conditions-title">
@@ -320,6 +322,8 @@ export default async function Landing() {
       <footer className={s.footer}>
         <span>Form STW-1 · © 2026 Steward. All rights reserved.</span>
         <nav aria-label="Footer">
+          <Link href="/pricing">Pricing</Link>
+          <Link href="/compare">Compare</Link>
           <Link href="/legal">Trust &amp; legal</Link>
           <Link href="/legal/terms">Terms</Link>
           <Link href="/legal/privacy">Privacy</Link>
