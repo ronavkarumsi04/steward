@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DisabledBrowserProvider, NO_BROWSER_REASON } from "@steward/browser";
 import type { TenantScope } from "@steward/schema";
-import { BRIEF_FOLDER, buildToolRegistry, DEFAULT_TOOL_ALLOWLIST, renderBrief } from "./tools.js";
+import { BRIEF_FOLDER, buildToolRegistry, DECK_FOLDER, DEFAULT_TOOL_ALLOWLIST, renderBrief, renderDeck, renderSheet, SHEET_FOLDER } from "./tools.js";
 
 describe("company.brand_update", () => {
   const scope = { organizationId: "org-1", companyId: "co-1", actor: { type: "system" } } as unknown as TenantScope;
@@ -308,5 +308,66 @@ describe("document.brief", () => {
     expect(md.match(/\[\^1\]/g)?.length).toBe(3);
     expect(md).not.toContain("[^2]");
     expect(md).toContain("**Written.** 2026-11-03");
+  });
+});
+
+
+describe("document.sheet and document.deck", () => {
+  const scope: TenantScope = { organizationId: "org", companyId: "co", actor: { type: "system", component: "test" } };
+  function docCtx() {
+    const upsert = vi.fn(async (_scope: TenantScope, input: { title: string; content: string; folder?: string; kind?: string }) => ({ id: "doc_2", version: 1, ...input }));
+    const addArtifact = vi.fn(async () => undefined);
+    const ctx = { runId: "run_1", taskId: null, services: { steward: { scope, runs: { toolCallsFor: async () => [], addArtifact }, documents: { findByTitle: async () => null, upsert } } } };
+    return { ctx, upsert, addArtifact };
+  }
+  const columns = [{ name: "Item", type: "text" as const }, { name: "Month", type: "date" as const }, { name: "Cost", type: "money" as const }, { name: "Share", type: "percent" as const }];
+
+  it("renders typed cells and totals only the summable columns", () => {
+    const md = renderSheet({ title: "Budget", columns, rows: [["Hosting", "2026-01-01", 12.5, 25], ["Domain", "2026-02-01", "$7.50", "75%"]], writtenAt: "2026-11-04" });
+    expect(md).toContain("| Item | Month | Cost | Share |");
+    expect(md).toContain("| --- | --- | ---: | ---: |");
+    expect(md).toContain("| Hosting | 2026-01-01 | $12.50 | 25% |");
+    expect(md).toContain("| Domain | 2026-02-01 | $7.50 | 75% |");
+    expect(md).toContain("| **Total** |  | **$20.00** |  |");
+  });
+
+  it("refuses cells that do not fit their column instead of writing a wrong sheet", async () => {
+    const tool = buildToolRegistry().get("document.sheet")!;
+    const { ctx, upsert } = docCtx();
+    const result = await tool.execute({ title: "Budget", columns, rows: [["Hosting", "January", "twelve", 25], ["Domain"]] }, ctx as never);
+    expect(result.ok).toBe(false);
+    expect(result.content).toContain('row 1, "Month"');
+    expect(result.content).toContain('row 1, "Cost"');
+    expect(result.content).toContain("row 2 has 1 cells");
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("writes a sheet into /sheets as kind sheet and records the artifact", async () => {
+    const tool = buildToolRegistry().get("document.sheet")!;
+    const { ctx, upsert, addArtifact } = docCtx();
+    const result = await tool.execute({ title: "Budget", columns, rows: [["Hosting", "2026-01-01", 12.5, 25]] }, ctx as never);
+    expect(result.ok).toBe(true);
+    expect(upsert.mock.calls[0]![1]).toMatchObject({ folder: SHEET_FOLDER, kind: "sheet" });
+    expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ kind: "document", metadata: expect.objectContaining({ sheet: true, rows: 1, columns: 4 }) }));
+  });
+
+  it("renders a deck one slide per --- section with speaker notes, and writes it as kind deck", async () => {
+    const slides = [
+      { heading: "The problem", bullets: ["Founders drown in ops"], note: "Open with the story." },
+      { heading: "The product", bullets: ["Agents that ask first"] },
+      { heading: "The ask", bullets: [] },
+    ];
+    const md = renderDeck({ title: "Seed pitch", audience: "angels", slides, writtenAt: "2026-11-04" });
+    expect(md.split("\n---\n")).toHaveLength(4);
+    expect(md).toContain("## 1. The problem");
+    expect(md).toContain("- Founders drown in ops");
+    expect(md).toContain("> Open with the story.");
+    expect(md).toContain("3 slides · for angels");
+    const tool = buildToolRegistry().get("document.deck")!;
+    const { ctx, upsert, addArtifact } = docCtx();
+    const result = await tool.execute({ title: "Seed pitch", audience: "angels", slides }, ctx as never);
+    expect(result.ok).toBe(true);
+    expect(upsert.mock.calls[0]![1]).toMatchObject({ folder: DECK_FOLDER, kind: "deck" });
+    expect(addArtifact).toHaveBeenCalledWith(scope, expect.objectContaining({ metadata: expect.objectContaining({ deck: true, slides: 3 }) }));
   });
 });
