@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { outboundMessages, suppressionList } from "@steward/db";
 import { BrowserAction, BrowserRefusal, describeAction, type PageSnapshot } from "@steward/browser";
-import { BranchName, CompanyProfile, RepoRef } from "@steward/schema";
+import { BranchName, CompanyProfile, RepoRef, BrandKit, brandVoiceBrief } from "@steward/schema";
 import { GitHubClient, VercelProvider, RenderProvider, StripeClient, SlackClient, TwilioClient, XClient, LinkedInClient, emailProviderFor, idempotencyKey, type DeployProvider } from "@steward/integrations";
 import { BrowserError, ENTITY_TYPES, GRAPH_NODE_KINDS, GRAPH_RELATION_IDS, GraphError, PrivacyService, type BrowserSessionView } from "@steward/core";
 import { ToolRegistry, defineTool, untrusted, webFetchTool, webSearchTool, type ToolContext, type ToolDefinition } from "@steward/tools";
@@ -391,6 +391,27 @@ const companyProfileUpdate = defineTool({
     if (!parsed.success) return fail(`Invalid profile: ${parsed.error.message}`);
     const v = await s.companies.saveProfile(s.scope, parsed.data, "agent", ctx.agentId ? { type: "agent", agentId: ctx.agentId, runId: ctx.runId } : s.scope.actor);
     return { ok: true, content: `Saved profile version ${v.version}.` };
+  },
+});
+
+const companyBrandUpdate = defineTool({
+  name: "company.brand_update",
+  description:
+    "Set the company's brand kit: tagline, voice (up to five tone words, phrases to use and avoid), accent colour, type, corner radius, light or dark, and mark. Every site, post, deck and email reuses it. Saves a new profile version attributed to the agent.",
+  input: BrandKit.partial(),
+  risk: "LOW",
+  sideEffects: "internal",
+  execute: async (input, ctx) => {
+    const s = svc(ctx);
+    const stored = await s.companies.profile(s.scope);
+    const company = await s.companies.get(s.scope);
+    if (!company) return fail("No company.");
+    const current = CompanyProfile.safeParse(stored?.profile ?? { name: company.name });
+    if (!current.success) return fail(`The stored profile is invalid: ${current.error.message}`);
+    const merged = BrandKit.safeParse({ ...current.data.brand, ...input, voice: { ...current.data.brand.voice, ...(input.voice ?? {}) } });
+    if (!merged.success) return fail(`Invalid brand kit: ${merged.error.message}`);
+    const v = await s.companies.saveProfile(s.scope, { ...current.data, brand: merged.data }, "agent", ctx.agentId ? { type: "agent", agentId: ctx.agentId, runId: ctx.runId } : s.scope.actor);
+    return { ok: true, content: `Saved brand kit in profile version ${v.version}:\n${brandVoiceBrief(merged.data, current.data.name)}`, data: merged.data };
   },
 });
 
@@ -1234,7 +1255,7 @@ const browserFinish = defineTool({
 
 export function buildToolRegistry(): ToolRegistry {
   const reg = new ToolRegistry();
-  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
+  const all: ToolDefinition[] = [memorySearch, memorySave, memoryCorrect, knowledgeAbout, knowledgeRecord, documentRead, documentList, documentWrite, decisionRecord, projectList, projectCreate, projectUpdate, taskList, taskCreate, delegateRun, taskUpdate, goalList, companyProfileTool, companyProfileUpdate, companyBrandUpdate, campaignList, campaignCreate, campaignUpdate, leadList, leadCreate, leadUpdate, webSearchTool, webFetchTool, browserOpen, browserAct, browserRead, browserFinish, emailSend, smsSend, slackPost, socialPublish, githubRepos, githubRead, githubCommit, githubPr, githubIssue, sandboxExec, sandboxWrite, sandboxRead, sandboxGitPush, deployList, deployCreateProject, deployCreate, deployListDomains, deployAddDomain, deployVerifyDomain, deployStatus, stripeSummary, stripeCreateOffer] as unknown as ToolDefinition[];
   for (const t of all) reg.register(t);
   return reg;
 }
@@ -1252,7 +1273,7 @@ export const DEFAULT_TOOL_ALLOWLIST: Record<string, string[]> = {
   orchestrator: ["memory.*", "knowledge.*", "document.*", "decision.*", "project.*", "task.*", "delegate.run", "goal.*", "company.*", "campaign.list", "lead.list", "web.*", "browser.*", "slack.post"],
   research: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "web.*", "browser.*"],
   engineering: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "web.*", "browser.*", "github.*", "sandbox.*", "deploy.*"],
-  marketing: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
+  marketing: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "company.brand_update", "campaign.*", "lead.*", "web.*", "browser.*", "social.publish", "email.send"],
   sales: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "campaign.list", "lead.*", "web.*", "browser.*", "email.send"],
   support: ["memory.*", "knowledge.*", "document.*", "task.update", "company.profile", "email.send", "slack.post"],
   finance: ["memory.*", "knowledge.*", "document.*", "task.update", "goal.list", "company.profile", "stripe.*", "web.*"],

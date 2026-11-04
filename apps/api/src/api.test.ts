@@ -445,6 +445,31 @@ describe("project workspace", () => {
   });
 });
 
+describe("brand kit", () => {
+  d("defaults on profiles saved before it existed and round-trips once decided", async () => {
+    const a = await register("BrandA");
+    const co = await a.api.json<{ company: { id: string } }>("POST", `/orgs/${a.orgId}/companies`, { name: "Northwind Analytics", autonomyLevel: 2, profile: { description: "Weekly numbers", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const before = await a.api.json<{ profile: { profile: { brand: { accent: string; voice: { tone: string[] } } } } | null }>("GET", `/companies/${companyId}`);
+    expect(before.body.profile?.profile.brand).toMatchObject({ accent: "indigo", voice: { tone: [] } });
+
+    const put = await a.api.json<{ profile: { profile: { name: string } } }>("PUT", `/companies/${companyId}/profile`, {
+      name: "Northwind Analytics",
+      tagline: "Numbers, weekly.",
+      brand: { tagline: "Numbers, weekly.", accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram", voice: { tone: ["plain", "exact"], do: ["name the number"], dont: ["say leverage"] } },
+    });
+    expect(put.status).toBe(200);
+    const after = await a.api.json<{ profile: { profile: { brand: Record<string, unknown> } } }>("GET", `/companies/${companyId}`);
+    expect(after.body.profile.profile.brand).toMatchObject({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram", voice: { tone: ["plain", "exact"] } });
+
+    const studio = await a.api.json<{ starter: { theme: Record<string, unknown>; pages: Array<{ blocks: Array<{ kind: string; heading?: string }> }> } | null }>("GET", `/companies/${companyId}/site`);
+    expect(studio.body.starter?.theme).toEqual({ accent: "emerald", font: "serif", radius: "sharp", dark: true, mark: "monogram" });
+
+    const bad = await a.api.call("PUT", `/companies/${companyId}/profile`, { name: "Northwind Analytics", brand: { accent: "neon" } });
+    expect(bad.status).toBe(422);
+  });
+});
+
 describe("growth pipeline", () => {
   d("persists real leads, updates stages, and preserves tenant isolation", async () => {
     const a = await register("GrowthA");
