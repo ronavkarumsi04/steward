@@ -1106,3 +1106,23 @@
   color-scheme: dark;
   background: var(--bg); color: var(--fg); border-bottom: 1px solid #000;
 }
+
+/* Printing a deck or sheet prints the deliverable, not the workspace around it. */
+@media print {
+  body:has(#print-sheet) * {
+    visibility: hidden;
+  }
+  body:has(#print-sheet) #print-sheet,
+  body:has(#print-sheet) #print-sheet * {
+    visibility: visible;
+  }
+  body:has(#print-sheet) #print-sheet {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+    background: #fff;
+    color: #000;
+  }
+}

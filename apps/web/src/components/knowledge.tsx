@@ -278,8 +278,8 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
             </form>
           )}
           {open && (open.kind === "deck" || open.kind === "sheet") && (
-            <div className="mb-4 card-inset nb-left-blue space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div id="print-sheet" className="mb-4 card-inset nb-left-blue space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
                 <h3 className="font-semibold">{open.title} <span className="pill text-muted">{open.kind === "deck" ? "Deck" : "Sheet"}</span></h3>
                 <div className="flex gap-2">
                   {open.id && <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => loadHistory(open.id)}>History</button>}
@@ -287,8 +287,9 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
                   <button type="button" className="btn btn-sm" onClick={() => { setOpen(null); setHistory(null); }}>Close</button>
                 </div>
               </div>
+              <h2 className="hidden text-xl font-bold print:block">{open.title}</h2>
               {open.kind === "deck" ? <DeckView doc={open} /> : <SheetView doc={open} />}
-              {versionHistory}
+              <div className="print:hidden">{versionHistory}</div>
             </div>
           )}
           {regularDocuments.length === 0 ? <Empty>No documents yet. Agents write plans, research briefs, decks and sheets here; you can too.</Empty> : (
