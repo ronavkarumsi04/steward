@@ -2475,3 +2475,37 @@ describe("launch kit", () => {
     expect(listed.body.runs.find((r) => r.id === started.body.run.id)?.trigger.kind).toBe("launch");
   });
 });
+
+describe("pictures", () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+
+  it("lists a company's pictures, serves the bytes as an image, and keeps them from other organizations", async () => {
+    if (!available) return;
+    const founder = await register("Painter");
+    const co = await founder.api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Pictures ${uniq()}`, autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
+    const companyId = co.body.company.id;
+    const scope = { organizationId: founder.orgId, companyId, actor: { type: "system" as const, component: "test" } };
+    const made = await services.images.create(scope, { purpose: "logo", prompt: "flat blue mark", model: "flux", seed: 3, mimeType: "image/png", width: 1024, height: 1024, data: PNG });
+
+    const list = await founder.api.json<{ images: Array<{ id: string; purpose: string; bytes: number; prompt: string }> }>("GET", `/companies/${companyId}/images`);
+    expect(list.status).toBe(200);
+    expect(list.body.images).toEqual([expect.objectContaining({ id: made.id, purpose: "logo", bytes: PNG.byteLength, prompt: "flat blue mark" })]);
+    const onlyPictures = await founder.api.json<{ images: unknown[] }>("GET", `/companies/${companyId}/images?purpose=picture`);
+    expect(onlyPictures.body.images).toEqual([]);
+
+    const res = await founder.api.call("GET", `/companies/${companyId}/images/${made.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await res.arrayBuffer()).equals(PNG)).toBe(true);
+
+    const stranger = await register("Stranger");
+    const denied = await stranger.api.call("GET", `/companies/${companyId}/images/${made.id}`);
+    expect(denied.status).toBe(404);
+
+    // Asking for a picture without an NVIDIA credential is refused with the reason, not a placeholder.
+    const refused = await founder.api.json<{ error: { code: string } }>("POST", `/companies/${companyId}/images`, { prompt: "a flat blue square logo on white", purpose: "logo" });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("no_image_provider");
+  });
+});
