@@ -96,9 +96,9 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
         <textarea name="description" className="input md:col-span-6" placeholder="Description / acceptance criteria (optional)" rows={2} />
       </form>
       {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
-      <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-6 xl:overflow-visible">
+      <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 2xl:grid 2xl:grid-cols-6 2xl:overflow-visible">
         {columns.map((col) => (
-          <section key={col.status} className="card-inset nb-left-purple w-[17rem] shrink-0 snap-start p-2 xl:w-auto" data-column={col.status}>
+          <section key={col.status} className="card-inset nb-left-purple w-[17rem] shrink-0 snap-start p-2 2xl:w-auto" data-column={col.status}>
             <h3 className="mb-2 flex items-center justify-between px-1.5 pt-0.5 text-xs font-medium text-muted">
               <span className="eyebrow">{col.label}</span>
               <span className="tnum">{col.tasks.length}</span>
