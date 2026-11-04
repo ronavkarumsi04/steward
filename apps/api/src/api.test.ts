@@ -2511,7 +2511,7 @@ describe("push notifications", () => {
     // An approval requested in one of the person's companies reaches the phone with the company's name on it.
     const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${founder.orgId}/companies`, { name: `Pager Co ${uniq()}`, autonomyLevel: 2, profile: { description: "x", stage: "idea" } });
     const scope = { organizationId: founder.orgId, companyId: co.body.company.id, actor: { type: "system" as const, component: "test" } };
-    const approval = await pushServices.approvals.request(scope, { action: "email.send", reason: "First outreach to 12 leads", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [] });
+    const approval = await pushServices.approvals.request(scope, { action: "email.send", reason: "First outreach to 12 leads", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 3600 });
     const ping = delivered.find((d) => d.payload.tag === `approval:${approval.id}`);
     expect(ping?.payload).toMatchObject({ title: expect.stringContaining("Pager Co"), body: expect.stringContaining("Email send · HIGH risk — First outreach"), url: "https://steward.test/app/inbox" });
 
@@ -2520,7 +2520,7 @@ describe("push notifications", () => {
     const strangerApi = client(stranger.token, "", () => pushApp);
     await strangerApi.json("POST", "/me/push/subscriptions", { endpoint: `https://push.example/${uniq()}/stranger`, keys: phone.keys });
     const count = delivered.length;
-    await pushServices.approvals.request(scope, { action: "social.publish", reason: "Launch post", payload: {}, risk: "MEDIUM", dimension: "social_publish", affectedSystem: "x", alternatives: [] });
+    await pushServices.approvals.request(scope, { action: "social.publish", reason: "Launch post", payload: {}, risk: "MEDIUM", dimension: "social_publish", affectedSystem: "x", alternatives: [], expiresInSeconds: 3600 });
     expect(delivered.slice(count).map((d) => d.endpoint)).toEqual([phone.endpoint]);
 
     expect((await api.json<{ removed: boolean }>("DELETE", "/me/push/subscriptions", { endpoint: phone.endpoint })).body.removed).toBe(true);
