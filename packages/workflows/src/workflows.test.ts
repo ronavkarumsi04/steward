@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { Context } from "@temporalio/activity";
 import { ApplicationFailure } from "@temporalio/common";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
-import { Worker } from "@temporalio/worker";
+import { Worker, bundleWorkflowCode, type WorkflowBundle } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { APPROVAL_SIGNAL, CANCEL_SIGNAL, type AgentActivities, type IterationOutcome } from "./types.js";
 
@@ -36,7 +36,11 @@ function mockActivities(script: IterationOutcome[], calls: Record<string, unknow
 
 describe("agentRunWorkflow", () => {
   let env: TestWorkflowEnvironment;
+  let bundle: WorkflowBundle;
   beforeAll(async () => {
+    // Bundle the workflow code once: `Worker.create({ workflowsPath })` re-runs webpack for every worker,
+    // which on a loaded CI runner cost tens of seconds per test and pushed "cancels on signal" past 60s.
+    bundle = await bundleWorkflowCode({ workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)) });
     const path = process.env.TEMPORAL_TEST_SERVER_PATH?.trim();
     // Managed/offline environments can run a pre-downloaded official test server instead of the Rust
     // downloader (which does not use the environment's required HTTP proxy). Failure still fails the suite.
@@ -55,16 +59,19 @@ describe("agentRunWorkflow", () => {
     const calls: Record<string, unknown[]> = {};
     const activities = mockActivities(script, calls, verify);
     if (plan) activities.plan = plan;
+    // One task queue per run: if a test times out, its still-registered worker must not make the
+    // next Worker.create fail with "overlapping worker task types on the same task queue".
+    const taskQueue = `test-${Math.random().toString(36).slice(2)}`;
     const worker = await Worker.create({
       connection: env.nativeConnection,
-      taskQueue: "test",
-      workflowsPath: fileURLToPath(new URL("./workflows.ts", import.meta.url)),
+      taskQueue,
+      workflowBundle: bundle,
       activities,
       defaultHeartbeatThrottleInterval: "5 seconds",
       maxHeartbeatThrottleInterval: "5 seconds",
     });
     const result = await worker.runUntil(async () => {
-      const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue: "test", workflowId: `wf-${Math.random()}`, args: [input] });
+      const handle = await env.client.workflow.start("agentRunWorkflow", { taskQueue, workflowId: `wf-${Math.random()}`, args: [input] });
       if (drive) await drive(handle);
       return handle.result();
     });

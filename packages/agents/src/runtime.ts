@@ -64,6 +64,80 @@ export interface ApprovalResumption {
 
 const MAX_TOOL_OUTPUT_CHARS = 24_000;
 
+/** Per-call and total caps on what the verifier reads back from the tool ledger; the whole budget is
+ *  shared so a chatty early tool cannot push a later, decisive one out of the prompt. */
+const VERIFY_CALL_CHARS = 700;
+const VERIFY_LEDGER_CHARS = 9_000;
+
+type LedgerStep = { id: string; kind: string; title: string; status: string; error: string | null };
+type LedgerCall = { stepId: string | null; toolName: string; input: unknown; output: unknown; status: string };
+
+/**
+ * The verifier used to see only "title → status" per tool step, so a run that wrote the requested
+ * document could still be judged "unmet" because the reviewer never saw the document's title or body.
+ * This renders each recorded tool call with its input and output (secrets were redacted at record
+ * time), plus any approval step, so artefacts are judged on what the system actually stored.
+ */
+export function verificationEvidence(steps: readonly LedgerStep[], calls: readonly LedgerCall[]): string {
+  const compact = (v: unknown, max: number) => {
+    if (v === null || v === undefined) return "";
+    const text = typeof v === "string" ? v : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
+    return text.length > max ? `${text.slice(0, max)}… (${text.length - max} more chars)` : text;
+  };
+  const outputOf = (o: unknown) => {
+    if (o && typeof o === "object" && "content" in o && typeof (o as { content: unknown }).content === "string") return (o as { content: string }).content;
+    return o;
+  };
+  // Tool output is data a third party may have written (a fetched page, an email). It is fenced here, after
+  // truncation, so a cut can never remove the closing marker and promote the page's text to instructions.
+  const fence = (text: string) => `<untrusted_content source="tool output">${text.replace(/<\/?untrusted_content[^>]*>/g, "")}</untrusted_content>`;
+  // Reads (fetches, searches, listings) are the bulk of a ledger and the least decisive part of it; the
+  // calls that changed something, and approvals, are what a verdict rests on, so they are the last to go.
+  const isRead = (tool: string) =>
+    /^web\.|^browser\.(open|read)$|\.(list|get|read|search|recall|status|summary|about|profile)$|\.(read|list)_[a-z_]+$/.test(tool);
+  const lines: { text: string; read: boolean }[] = [];
+  const byStep = new Map(calls.map((c) => [c.stepId, c] as const));
+  for (const s of steps) {
+    if (s.kind !== "tool_call" && s.kind !== "approval") continue;
+    // An approved call is recorded against its approval step, so the approval and the call it unlocked read as one line.
+    const c = byStep.get(s.id);
+    const head = s.kind === "approval" ? `- approval: ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}` : null;
+    if (!c) {
+      lines.push({ text: head ?? `- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`, read: false });
+      continue;
+    }
+    const half = Math.floor(VERIFY_CALL_CHARS / 2);
+    const out = compact(outputOf(c.output), half);
+    const call = `${c.toolName}(${compact(c.input, half)}) → ${c.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""} → ${out ? fence(out) : "(no output)"}`;
+    lines.push({ text: head ? `${head}; ${call}` : `- ${call}`, read: !head && isRead(c.toolName) });
+  }
+  // Fit the budget: every write and approval first, then reads newest-first; within a class the latest survive.
+  const keep = new Set<number>();
+  let total = 0;
+  for (const pass of [false, true]) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
+      if (line.read !== pass || total + line.text.length + 1 > VERIFY_LEDGER_CHARS) continue;
+      keep.add(i);
+      total += line.text.length + 1;
+    }
+  }
+  const out: string[] = [];
+  let dropped = 0;
+  const flush = () => {
+    if (dropped) out.push(`- … ${dropped} call(s) omitted for length`);
+    dropped = 0;
+  };
+  lines.forEach((line, i) => {
+    if (keep.has(i)) {
+      flush();
+      out.push(line.text);
+    } else dropped++;
+  });
+  flush();
+  return out.join("\n");
+}
+
 /**
  * How many times an approver may keep editing a payload and pushing the same tool call back into a fresh
  * approval before the runtime refuses. Bounded so a looping editor (or a buggy client) cannot spin a run.
@@ -466,13 +540,13 @@ export class AgentRuntime {
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "verification", title: "Verify against success criteria" });
     try {
       const plan = run.plan ? Plan.safeParse(run.plan) : null;
-      const steps = await this.s.runs.steps(this.scope, runId);
-      const toolSummary = steps.filter((s) => s.kind === "tool_call" || s.kind === "approval").map((s) => `- ${s.title} → ${s.status}${s.error ? ` (${s.error.slice(0, 120)})` : ""}`).join("\n");
+      const [steps, calls] = await Promise.all([this.s.runs.steps(this.scope, runId), this.s.runs.toolCallsFor(this.scope, runId)]);
+      const evidence = verificationEvidence(steps, calls);
       const res = await this.s.gateway.chat(
         {
           messages: [
-            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet." },
-            { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool activity:\n${toolSummary || "(none)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
+            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details." },
+            { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool ledger (input → status → output):\n${evidence || "(no tools were called)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
           ...(signal ? { signal } : {}),

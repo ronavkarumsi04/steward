@@ -20,8 +20,17 @@ import { createCompany, networkSettled, register, watchErrors } from "./session"
  * that says how long the memory has, confirming it into permanence, and a memory that lapsed.
  */
 
-/** A fresh company through the real onboarding, and the base path its pages live under. */
+/**
+ * A fresh company through the real onboarding, and the base path its pages live under.
+ *
+ * Creation also starts the launch-kit run, and a run's outcome is allowed to earn a place in memory — which would
+ * put rows in a store these tests need to start empty. Answering that one request here, with no run, keeps the
+ * company silent without changing how it is created (an aborted request would count as a network failure).
+ */
 async function company(page: Page, name: string): Promise<{ id: string; base: string }> {
+  await page.route(/\/companies\/[^/]+\/launch-kit$/, (route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ run: null }) }),
+  );
   const id = await createCompany(page, name);
   return { id, base: `/app/c/${id}` };
 }
