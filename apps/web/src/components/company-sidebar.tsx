@@ -4,12 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
 
+/**
+ * Grouped by when a founder reaches for them, not by what the code calls them: the things that change
+ * during a day first, then the work surfaces, then the business, then what is set up once.
+ */
 const GROUPS = [
   {
-    label: "OPERATE",
+    label: "TODAY",
     items: [
       ["", "Studio", Icon.Overview],
+      ["/approvals", "Approvals", Icon.Approvals],
+      ["/runs", "Runs", Icon.Runs],
+      ["/tasks", "Tasks", Icon.Tasks],
+      ["/chat", "Chat", Icon.Chat],
       ["/activity", "Activity", Icon.Activity],
+    ],
+  },
+  {
+    label: "WORK",
+    items: [
       ["/projects", "Projects", Icon.Company],
       // The repository this company works in: read it, propose a change, hand the proposal to an agent.
       ["/code", "Code", Icon.Code],
@@ -18,7 +31,6 @@ const GROUPS = [
       // The standing work, drawn: the reaction rules and agent schedules above, as one picture.
       ["/workflows", "Workflows", Icon.Workflow],
       ["/signals", "Signals", Icon.Signals],
-      ["/chat", "Chat", Icon.Chat],
     ],
   },
   {
@@ -32,15 +44,12 @@ const GROUPS = [
     ],
   },
   {
-    label: "SYSTEM",
+    label: "MEMORY & SETUP",
     items: [
-      ["/tasks", "Tasks", Icon.Tasks],
-      ["/runs", "Runs", Icon.Runs],
-      ["/approvals", "Approvals", Icon.Approvals],
-      ["/agents", "Agents", Icon.Agents],
       ["/knowledge", "Knowledge", Icon.Knowledge],
       // The same knowledge as one thing: every kind of row, and every claim somebody made about one.
       ["/graph", "Graph", Icon.Graph],
+      ["/agents", "Agents", Icon.Agents],
       // Other people's tools, installed on purpose: what each server offers, and who may call it.
       ["/mcp", "Marketplace", Icon.Plug],
       ["/integrations", "Integrations", Icon.Integrations],
@@ -49,7 +58,7 @@ const GROUPS = [
   },
 ] as const;
 
-export function CompanySidebar({ companyId, pendingApprovals }: { companyId: string; pendingApprovals: number }) {
+export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: { companyId: string; pendingApprovals: number; activeRuns?: number }) {
   const path = usePathname();
   const base = `/app/c/${companyId}`;
 
@@ -64,7 +73,12 @@ export function CompanySidebar({ companyId, pendingApprovals }: { companyId: str
           {items.map(([suffix, label, Glyph]) => {
             const href = `${base}${suffix}`;
             const active = suffix === "" ? path === base : path.startsWith(href);
-            const badge = suffix === "/approvals" && pendingApprovals > 0 ? pendingApprovals : null;
+            const badge =
+              suffix === "/approvals" && pendingApprovals > 0
+                ? { n: pendingApprovals, tone: "pill-warn", label: `${pendingApprovals} pending` }
+                : suffix === "/runs" && activeRuns > 0
+                  ? { n: activeRuns, tone: "pill-ok", label: `${activeRuns} running` }
+                  : null;
 
             return (
               <Link
@@ -78,8 +92,8 @@ export function CompanySidebar({ companyId, pendingApprovals }: { companyId: str
                   {label}
                 </span>
                 {badge !== null && (
-                  <span className="pill pill-warn min-w-6 justify-center px-1.5 py-0 text-[11px]" aria-label={`${badge} pending`}>
-                    {badge}
+                  <span className={`pill ${badge.tone} min-w-6 justify-center px-1.5 py-0 text-[11px]`} aria-label={badge.label}>
+                    {badge.n}
                   </span>
                 )}
               </Link>

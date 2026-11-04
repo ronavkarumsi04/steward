@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
+import { Icon } from "./icons";
 
 type Status = "checking" | "unsupported" | "unavailable" | "off" | "on" | "denied";
 
@@ -94,8 +95,12 @@ export function PushToggle() {
 
   if (status === "checking" || status === "unsupported") return null;
   return (
-    <div className="card-inset nb-left-blue mb-5 flex flex-wrap items-center justify-between gap-3 text-sm" data-push-status={status}>
-      <div className="min-w-0">
+    <div className="nb-panel-flat nb-accent-blue mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm" data-push-status={status}>
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="mt-0.5 grid size-8 shrink-0 place-items-center border border-line bg-accent-soft text-fg" aria-hidden="true">
+          <Icon.Approvals size={16} />
+        </span>
+        <div className="min-w-0">
         <p className="font-medium">Tell this device when a decision is waiting</p>
         <p className="text-xs text-muted">
           {status === "unavailable" && "Notifications are not set up on this deployment."}
@@ -104,6 +109,7 @@ export function PushToggle() {
           {status === "on" && "On for this device."}
         </p>
         {note && <p className="mt-1 text-xs" role="status">{note}</p>}
+        </div>
       </div>
       <div className="flex shrink-0 gap-2">
         {status === "off" && <button type="button" className="btn btn-primary" disabled={busy} onClick={turnOn}>Turn on</button>}

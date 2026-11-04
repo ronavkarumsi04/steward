@@ -71,13 +71,12 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         )}
 
         <div className="flex items-center gap-2 text-sm">
-          <span className="hidden max-w-[16rem] truncate text-muted lg:inline" title={me.user?.email}>{me.user?.email}</span>
           <Link href="/app/inbox" className="btn btn-sm" aria-current={path.startsWith("/app/inbox") ? "page" : undefined}>
             <Icon.Approvals size={14} />
             <span className="hidden sm:inline">Inbox</span>
             <span className="sr-only sm:hidden">Inbox: everything waiting on you</span>
           </Link>
-          <Link href="/app/account" className="btn btn-sm" aria-current={path.startsWith("/app/account") ? "page" : undefined}>
+          <Link href="/app/account" className="btn btn-sm" title={me.user?.email} aria-current={path.startsWith("/app/account") ? "page" : undefined}>
             <Icon.Lock size={14} />
             <span className="hidden sm:inline">Account</span>
             <span className="sr-only sm:hidden">Account and privacy</span>
