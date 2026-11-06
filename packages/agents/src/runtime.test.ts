@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, verificationEvidence, type RunContextBundle } from "./runtime.js";
+import { AgentRuntime, missingPlanTools, missingToolsNote, verificationEvidence, type RunContextBundle } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -209,5 +209,28 @@ describe("verification evidence", () => {
     const fetched = text.split("\n").find((l) => l.includes("web.fetch"))!;
     expect(fetched.endsWith("</untrusted_content>")).toBe(true);
     expect(fetched.match(/<untrusted_content/g)?.length).toBe(1);
+  });
+});
+
+describe("missingPlanTools", () => {
+  it("names the planned tools the agent cannot call and who holds them", () => {
+    const orchestrator = ["memory.*", "document.*", "delegate.run", "task.*"];
+    const missing = missingPlanTools([{ tools: ["social.publish"] }, { tools: ["document.write", "social.publish"] }, { tools: ["email.send"] }], orchestrator);
+    expect(missing).toEqual([
+      { tool: "social.publish", owners: ["marketing"] },
+      { tool: "email.send", owners: ["marketing", "sales", "support"] },
+    ]);
+  });
+
+  it("is empty when every planned tool matches the allowlist, wildcards included", () => {
+    expect(missingPlanTools([{ tools: ["document.write", "memory.search"] }], ["memory.*", "document.*"])).toEqual([]);
+  });
+
+  it("tells a delegating agent to delegate and a specialist to say so", () => {
+    const missing = [{ tool: "social.publish", owners: ["marketing"] }];
+    expect(missingToolsNote(missing, true)).toContain("delegate.run");
+    expect(missingToolsNote(missing, false)).toContain("Say plainly");
+    expect(missingToolsNote(missing, false)).toContain("the marketing agent has it");
+    expect(missingToolsNote([], true)).toBe("");
   });
 });

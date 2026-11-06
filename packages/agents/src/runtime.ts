@@ -19,6 +19,27 @@ export const Plan = z.object({
 });
 export type Plan = z.infer<typeof Plan>;
 
+/**
+ * Tools the plan intends to use that this agent cannot call. The Chief of Staff plans in terms of the
+ * company's whole toolbox (social.publish, email.send) but only holds the planning tools itself; left
+ * unsaid, the model substitutes a document for the action and reports it done. Returned per missing
+ * tool with the specialist kinds whose default allowlist carries it, so the run can be told who to
+ * delegate to.
+ */
+export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[]): Array<{ tool: string; owners: string[] }> {
+  const planned = [...new Set(steps.flatMap((s) => s.tools))].filter((t) => t && !toolNames.some((n) => matchTool(n, t)));
+  return planned.map((tool) => ({ tool, owners: Object.entries(DEFAULT_TOOL_ALLOWLIST).filter(([, allow]) => allow.some((n) => matchTool(n, tool))).map(([kind]) => kind) }));
+}
+
+export function missingToolsNote(missing: ReadonlyArray<{ tool: string; owners: string[] }>, canDelegate: boolean): string {
+  if (!missing.length) return "";
+  const lines = missing.map((m) => `${m.tool}${m.owners.length ? ` (the ${m.owners.join(" or ")} agent has it)` : ""}`);
+  const action = canDelegate
+    ? "Hand each of those steps to the specialist that has the tool with delegate.run, one delegation per workstream."
+    : "Say plainly which step you cannot do and why.";
+  return ` You do not have: ${lines.join("; ")}. ${action} Do not substitute a document for the action, and do not report an action you could not take.`;
+}
+
 export const Verification = z.object({
   passed: z.boolean(),
   score: z.number().int().min(0).max(100),
@@ -289,7 +310,10 @@ export class AgentRuntime {
     const planStep = steps.find((s) => s.kind === "plan" && s.status === "succeeded");
     if (planStep) {
       const plan = (planStep.output as { plan?: Plan } | null)?.plan;
-      if (plan) messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: "Proceed with the plan. Use tools as needed." });
+      if (plan) {
+        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames), ctx.toolNames.some((n) => matchTool(n, "delegate.run")));
+        messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: `Proceed with the plan. Use tools as needed.${note}` });
+      }
     }
     let iterations = 0;
     let pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null = null;
@@ -546,7 +570,7 @@ export class AgentRuntime {
       const res = await this.s.gateway.chat(
         {
           messages: [
-            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details. A request to draft, review, queue or Outbox a post, email or text is met only by an email.send, social.publish or sms.send call in the ledger (succeeded or awaiting approval); a document that merely contains the copy leaves it unmet." },
+            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details. A request to draft, review, queue or Outbox a post, email or text is met only by an email.send, social.publish or sms.send call in the ledger (succeeded or awaiting approval), or by a delegate.run that handed that work to a specialist; a document that merely contains the copy leaves it unmet." },
             { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool ledger (input → status → output):\n${evidence || "(no tools were called)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },
