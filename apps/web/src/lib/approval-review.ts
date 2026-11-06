@@ -265,7 +265,7 @@ export function reviewApproval(
     ...(run ? [{ label: "Run waiting on this", value: runLabel(run)!, source: "the run" as BriefSource }] : []),
   ];
 
-  const cautions: string[] = [];
+  const cautions: string[] = [...(approval.warnings ?? [])];
   if (approval.status === "pending" && lapsed) {
     // Deliberately no duration in this sentence: it is prose, and a duration here would be a second-precision
     // string rendered on the server and recomputed in the browser. The header carries the countdown instead,

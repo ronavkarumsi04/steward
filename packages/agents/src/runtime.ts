@@ -402,7 +402,7 @@ export class AgentRuntime {
           await this.s.runs.finishStep(this.scope, pending.stepId, { status: "failed", error: `Refusing to execute: ${chain.length} consecutive edits each needed a fresh approval (${assessment.detail}). A human should perform this action directly.` });
           return { kind: "continue" };
         }
-        const req: ApprovalRequest = { action: pending.toolName, reason: `${assessment.detail}; policy: ${decision.reason}`, payload: args, risk: decision.risk, dimension: decision.dimension, estimatedCostUsd: pre?.estimatedCostUsd, affectedSystem: pre?.affectedSystem ?? pending.toolName.split(".")[0]!, alternatives: pre?.alternatives ?? [], expiresInSeconds: 3 * 86_400 };
+        const req: ApprovalRequest = { action: pending.toolName, reason: `${assessment.detail}; policy: ${decision.reason}`, payload: args, risk: decision.risk, dimension: decision.dimension, estimatedCostUsd: pre?.estimatedCostUsd, affectedSystem: pre?.affectedSystem ?? pending.toolName.split(".")[0]!, alternatives: pre?.alternatives ?? [], warnings: pre?.warnings ?? [], expiresInSeconds: 3 * 86_400 };
         const approval = await this.s.approvals.request(scope, { ...req, runId, taskId: run.taskId ?? undefined, agentId: agent.id, workflowId: run.workflowId ?? undefined });
         await this.s.runs.setStepInput(this.scope, pending.stepId, { toolCallId: pending.toolCallId, toolName: pending.toolName, args, approvalId: approval.id, approvalChain: [...chain, pending.approvalId] });
         await this.s.runs.setStatus(scope, runId, "waiting_approval");
@@ -476,7 +476,7 @@ export class AgentRuntime {
       }
       if (decision.decision === "require_approval") {
         const st = await this.s.runs.beginStep(this.scope, runId, { kind: "approval", title: `Approval: ${pre?.summary ?? tc.name}`, input: { toolCallId: tc.id, toolName: tc.name, args } });
-        const req: ApprovalRequest = { action: tc.name, reason: decision.reason, payload: args, risk: decision.risk, dimension: decision.dimension, estimatedCostUsd: pre?.estimatedCostUsd, affectedSystem: pre?.affectedSystem ?? tc.name.split(".")[0]!, alternatives: pre?.alternatives ?? [], expiresInSeconds: 3 * 86_400 };
+        const req: ApprovalRequest = { action: tc.name, reason: decision.reason, payload: args, risk: decision.risk, dimension: decision.dimension, estimatedCostUsd: pre?.estimatedCostUsd, affectedSystem: pre?.affectedSystem ?? tc.name.split(".")[0]!, alternatives: pre?.alternatives ?? [], warnings: pre?.warnings ?? [], expiresInSeconds: 3 * 86_400 };
         const approval = await this.s.approvals.request(scope, { ...req, runId, taskId: run.taskId ?? undefined, agentId: agent.id, workflowId: run.workflowId ?? undefined });
         await this.s.runs.setStepInput(this.scope, st.id, { toolCallId: tc.id, toolName: tc.name, args, approvalId: approval.id });
         await this.s.runs.setStatus(scope, runId, "waiting_approval");

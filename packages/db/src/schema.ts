@@ -361,6 +361,7 @@ export const approvals = pgTable("approvals", {
   estimatedCostUsd: numeric("estimated_cost_usd", { precision: 12, scale: 4 }),
   affectedSystem: text("affected_system").notNull(),
   alternatives: json<string[]>("alternatives").notNull().default([]),
+  warnings: json<string[]>("warnings").notNull().default([]),
   status: text("status").notNull().default("pending"),
   resolvedBy: text("resolved_by"),
   resolution: json<Record<string, unknown> | null>("resolution"),

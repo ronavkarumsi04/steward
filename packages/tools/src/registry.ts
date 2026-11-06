@@ -29,7 +29,7 @@ export interface ToolDefinition<I = unknown> {
   manifest: ToolManifest;
   input: z.ZodType<I>;
   /** Estimate cost/risk before execution, used by the policy engine and approval payloads. */
-  preflight?: (input: I, ctx: ToolContext) => Promise<{ estimatedCostUsd?: number; risk?: ToolManifest["risk"]; summary: string; affectedSystem?: string; alternatives?: string[] }>;
+  preflight?: (input: I, ctx: ToolContext) => Promise<{ estimatedCostUsd?: number; risk?: ToolManifest["risk"]; summary: string; affectedSystem?: string; alternatives?: string[]; warnings?: string[] }>;
   execute: (input: I, ctx: ToolContext) => Promise<ToolResult>;
 }
 
