@@ -8,7 +8,7 @@ import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } f
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
 import type { AgentServices } from "./services.js";
-import { DEFAULT_TOOL_ALLOWLIST } from "./tools.js";
+import { DEFAULT_TOOL_ALLOWLIST, DELEGATABLE_KINDS } from "./tools.js";
 
 export const Plan = z.object({
   objective: z.string(),
@@ -31,9 +31,10 @@ export interface ToolHolder {
   allow: readonly string[];
 }
 
-/** The company's own agents and what each may call; a seeded allowlist beats the per-kind default. */
+/** The company's own agents delegate.run can reach and what each may call; a seeded allowlist beats the per-kind default. */
 export function toolHolders(agents: ReadonlyArray<{ kind: string; enabled: boolean; toolAllowlist: readonly string[] }>): ToolHolder[] {
-  return agents.filter((a) => a.enabled).map((a) => ({ kind: a.kind, allow: a.toolAllowlist.length ? a.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[a.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) }));
+  const delegatable: readonly string[] = DELEGATABLE_KINDS;
+  return agents.filter((a) => a.enabled && delegatable.includes(a.kind)).map((a) => ({ kind: a.kind, allow: a.toolAllowlist.length ? a.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[a.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) }));
 }
 
 export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[], holders: ReadonlyArray<ToolHolder>): Array<{ tool: string; owners: string[] }> {

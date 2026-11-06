@@ -213,13 +213,15 @@ describe("verification evidence", () => {
 });
 
 describe("missingPlanTools", () => {
-  it("names the planned tools the agent cannot call and who holds them", () => {
+  it("names the planned tools the agent cannot call and which delegatable specialist holds them", () => {
     const orchestrator = ["memory.*", "document.*", "delegate.run", "task.*"];
     const holders = toolHolders([
       { kind: "marketing", enabled: true, toolAllowlist: ["document.*", "social.publish", "email.send"] },
       { kind: "sales", enabled: true, toolAllowlist: ["lead.*", "email.send"] },
       { kind: "support", enabled: false, toolAllowlist: ["email.send"] },
       { kind: "research", enabled: true, toolAllowlist: [] },
+      { kind: "custom", enabled: true, toolAllowlist: ["social.publish", "email.send"] },
+      { kind: "orchestrator", enabled: true, toolAllowlist: ["email.send"] },
     ]);
     const missing = missingPlanTools([{ tools: ["social.publish"] }, { tools: ["document.write", "social.publish"] }, { tools: ["email.send"] }, { tools: ["image.generate"] }], orchestrator, holders);
     expect(missing).toEqual([
