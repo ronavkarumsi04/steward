@@ -37,3 +37,12 @@ describe("outbox", () => {
     expect(html).toContain("Nothing waiting to go out");
   });
 });
+
+describe("Outbox rows carry the request's warnings", () => {
+  it("shows a not-connected warning above the Send button", () => {
+    const warned = { ...base, id: "a-warn", warnings: ["LinkedIn is not connected. Approving will fail until it is connected under Integrations."] };
+    const html = renderToStaticMarkup(createElement(Outbox, { companyId: "c1", items: [warned] }));
+    expect(html).toContain("LinkedIn is not connected.");
+    expect(html.indexOf("LinkedIn is not connected.")).toBeLessThan(html.indexOf(">Send<"));
+  });
+});
