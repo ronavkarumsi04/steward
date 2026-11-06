@@ -428,6 +428,8 @@ export const ApprovalRequest = z.object({
   estimatedCostUsd: z.number().nonnegative().optional(),
   affectedSystem: z.string(),
   alternatives: z.array(z.string()).default([]),
+  /** Facts the tool already knows will make approval fail or hurt (no account connected, no consent); shown to the approver as cautions. */
+  warnings: z.array(z.string()).optional(),
   expiresInSeconds: z.number().int().positive().default(60 * 60 * 24 * 3),
 });
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>;

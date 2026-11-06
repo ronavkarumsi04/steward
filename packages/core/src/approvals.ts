@@ -72,6 +72,7 @@ export class ApprovalService {
           estimatedCostUsd: req.estimatedCostUsd !== undefined ? req.estimatedCostUsd.toFixed(4) : null,
           affectedSystem: req.affectedSystem,
           alternatives: req.alternatives ?? [],
+          warnings: req.warnings ?? [],
           expiresAt: new Date(Date.now() + (req.expiresInMs ?? 1000 * 60 * 60 * 24 * 3)),
           workflowId: req.workflowId,
         })

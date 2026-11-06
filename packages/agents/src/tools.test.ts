@@ -436,3 +436,23 @@ describe("outbox tools tell the model they draft, not send", () => {
     }
   });
 });
+
+describe("outbox preflight warns when the channel is not connected", () => {
+  const scope = { organizationId: "org-1", companyId: "co-1", actor: { type: "system" } } as unknown as TenantScope;
+  const ctx = (findByType: (scope: TenantScope, type: string) => Promise<unknown>) =>
+    ({ scope, runId: "run-1", agentId: "agent-1", services: { steward: { scope, integrations: { findByType } } }, log: () => undefined }) as never;
+
+  it("social.publish names the network that is missing", async () => {
+    const tool = buildToolRegistry().get("social.publish")!;
+    const pre = await tool.preflight!({ network: "linkedin", text: "Hello" }, ctx(async () => null));
+    expect(pre.warnings).toEqual(["LinkedIn is not connected. Approving will fail until it is connected under Integrations."]);
+    const ok = await tool.preflight!({ network: "x", text: "Hello" }, ctx(async () => ({ id: "i1", type: "x" })));
+    expect(ok.warnings).toEqual([]);
+  });
+
+  it("email.send warns when no provider is connected", async () => {
+    const tool = buildToolRegistry().get("email.send")!;
+    const pre = await tool.preflight!({ to: "a@b.co", subject: "Hi", text: "x" }, ctx(async () => null));
+    expect(pre.warnings?.[0]).toMatch(/email provider .* is not connected/i);
+  });
+});

@@ -18,6 +18,9 @@ function fail(content: string) {
   return { ok: false, content };
 }
 
+/** Shown to the approver before they say yes: the action is already known to fail without this connection. */
+const notConnected = (what: string) => `${what} is not connected. Approving will fail until it is connected under Integrations.`;
+
 // ---------- Company knowledge ----------
 
 const memorySearch = defineTool({
@@ -731,7 +734,7 @@ const emailSend = defineTool({
   preflight: async ({ to, subject }, ctx) => {
     const s = svc(ctx);
     const integ = (await Promise.all(["resend", "postmark", "sendgrid", "smtp"].map((t) => s.integrations.findByType(s.scope, t)))).find(Boolean);
-    return { summary: `Send email "${subject}" to ${to}`, affectedSystem: integ?.type ?? "email (not connected)", risk: "HIGH", alternatives: ["Save as draft document for a human to send", "Post to Slack instead"] };
+    return { summary: `Send email "${subject}" to ${to}`, affectedSystem: integ?.type ?? "email (not connected)", risk: "HIGH", alternatives: ["Post to Slack instead"], warnings: integ ? [] : [notConnected("An email provider (Resend, Postmark, SendGrid or SMTP)")] };
   },
   execute: async (input, ctx) => {
     const s = svc(ctx);
@@ -791,6 +794,7 @@ const smsSend = defineTool({
     const consentNote = consent?.status === "granted" ? `consent on record (${consent.source}${consent.grantedAt ? `, ${new Date(consent.grantedAt).toISOString().slice(0, 10)}` : ""})` : consent?.status === "revoked" ? "consent was REVOKED — this send will be blocked" : "NO consent on record — this send will be blocked";
     return {
       summary: `Send SMS to ${to} (${consentNote}): ${body.slice(0, 80)}${body.length > 80 ? "…" : ""}`,
+      warnings: integ ? [] : [notConnected("Twilio")],
       affectedSystem: integ?.type ?? "twilio (not connected)",
       risk: "HIGH",
       alternatives: ["Send email instead", "Draft the message for a human to send"],
@@ -862,7 +866,16 @@ const socialPublish = defineTool({
   risk: "HIGH",
   dimension: "social_publish",
   sideEffects: "external",
-  preflight: async ({ network, text }) => ({ summary: `Publish to ${network}: "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"`, affectedSystem: network, alternatives: ["Save as a draft document", "Schedule for later review"] }),
+  preflight: async ({ network, text }, ctx) => {
+    const s = svc(ctx);
+    const integ = await s.integrations.findByType(s.scope, network);
+    return {
+      summary: `Publish to ${network}: "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"`,
+      affectedSystem: network,
+      alternatives: ["Schedule for later review"],
+      warnings: integ ? [] : [notConnected(network === "x" ? "X" : "LinkedIn")],
+    };
+  },
   execute: async ({ network, text, campaignId }, ctx) => {
     const s = svc(ctx);
     const integ = await s.integrations.findByType(s.scope, network);

@@ -358,6 +358,8 @@ export interface Approval {
   estimatedCostUsd: string | null;
   affectedSystem: string;
   alternatives: string[];
+  /** Facts the tool knew at request time that make approval fail or hurt; older rows have none. */
+  warnings?: string[];
   status: "pending" | "approved" | "denied" | "expired" | "cancelled";
   resolvedBy: string | null;
   resolution: Record<string, unknown> | null;

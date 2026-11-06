@@ -323,3 +323,15 @@ describe("payload diffs", () => {
     expect(diffPayload({}, { a: null }).total).toBe(0);
   });
 });
+
+describe("warnings the tool attached at request time", () => {
+  it("lead the cautions so the approver sees a doomed approval before deciding", () => {
+    const brief = reviewApproval(approval({ id: "a-warn", action: "social.publish", warnings: ["LinkedIn is not connected. Approving will fail until it is connected under Integrations."] }), { now: NOW });
+    expect(brief.cautions[0]).toBe("LinkedIn is not connected. Approving will fail until it is connected under Integrations.");
+  });
+
+  it("are absent on older rows without the field", () => {
+    const brief = reviewApproval(approval({ id: "a-old", action: "social.publish" }), { now: NOW });
+    expect(brief.cautions.some((c) => c.includes("not connected"))).toBe(false);
+  });
+});
