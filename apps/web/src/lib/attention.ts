@@ -14,6 +14,12 @@
 import type { Approval, Budget, Run, Task } from "./types";
 import { outboxHeadline } from "./outbox-item";
 
+/** One line for a queue row: the first non-empty line of a brief, cut at 90 characters. The row links to the whole thing. */
+export function headline(text: string): string {
+  const first = text.split("\n").find((l) => l.trim())?.trim() ?? "";
+  return first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first;
+}
+
 export type AttentionSeverity = "blocking" | "decision" | "risk";
 
 export interface AttentionItem {
@@ -100,7 +106,7 @@ export function buildAttentionQueue(input: AttentionInput): AttentionItem[] {
     items.push({
       id: `run-needs-review:${run.id}`,
       severity: "decision",
-      title: run.intent || "An agent run needs review",
+      title: headline(run.intent) || "An agent run needs review",
       detail: "Finished without a verified result. It is not counted as done until you decide.",
       href: `${base}/runs/${run.id}`,
       since: run.finishedAt ?? run.createdAt,
