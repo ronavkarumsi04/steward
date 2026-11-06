@@ -24,12 +24,14 @@ describe("ApprovalCard for an outbox action", () => {
     expect(html).toContain("Raw payload");
     expect(html.indexOf("&quot;network&quot;: &quot;linkedin&quot;")).toBeGreaterThan(html.indexOf("Raw payload"));
     expect(html).toMatch(/<details[^>]*aria-label="Blast radius"(?![^>]*open)/);
+    expect(html).toContain("What this rule means");
   });
 
   it("keeps the decoded-fields view for any other action", () => {
     const deploy: Approval = { ...base, action: "deploy.production", dimension: "deploy", affectedSystem: "vercel", payload: { target: "production" } };
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: deploy }));
     expect(html).not.toContain("Post to everyone");
+    expect(html).not.toContain("What this rule means");
     expect(html).toMatch(/<details[^>]*aria-label="Blast radius"[^>]*open/);
   });
 });

@@ -141,11 +141,28 @@ export function ApprovalCard({
           <ul className="mt-1 space-y-2">
             {brief.request.policy.map((step) => (
               <li key={step.sentence} className="nb-panel-flat p-2.5">
-                <Pill tone={step.code === "unknown" ? "neutral" : "warn"}>{POLICY_LABEL[step.code]}</Pill>
-                <blockquote className="mt-1.5 text-sm">“{step.sentence}”</blockquote>
-                <p className="mt-1 text-xs text-muted">Quoted from the policy decision recorded on this request.</p>
-                {POLICY_HINT[step.code] && <p className="mt-1 text-xs text-muted">{POLICY_HINT[step.code]}</p>}
-                {brief.edited && <p className="mt-1 text-xs text-muted">{POLICY_HINT.payload_edited}</p>}
+                {message ? (
+                  <>
+                    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                      <Pill tone={step.code === "unknown" ? "neutral" : "warn"}>{POLICY_LABEL[step.code]}</Pill>
+                      <q className="min-w-0">{step.sentence}</q>
+                    </p>
+                    <details className="mt-1 text-xs text-muted">
+                      <summary className="cursor-pointer">What this rule means</summary>
+                      <p className="mt-1">Quoted from the policy decision recorded on this request.</p>
+                      {POLICY_HINT[step.code] && <p className="mt-1">{POLICY_HINT[step.code]}</p>}
+                      {brief.edited && <p className="mt-1">{POLICY_HINT.payload_edited}</p>}
+                    </details>
+                  </>
+                ) : (
+                  <>
+                    <Pill tone={step.code === "unknown" ? "neutral" : "warn"}>{POLICY_LABEL[step.code]}</Pill>
+                    <blockquote className="mt-1.5 text-sm">“{step.sentence}”</blockquote>
+                    <p className="mt-1 text-xs text-muted">Quoted from the policy decision recorded on this request.</p>
+                    {POLICY_HINT[step.code] && <p className="mt-1 text-xs text-muted">{POLICY_HINT[step.code]}</p>}
+                    {brief.edited && <p className="mt-1 text-xs text-muted">{POLICY_HINT.payload_edited}</p>}
+                  </>
+                )}
               </li>
             ))}
           </ul>
