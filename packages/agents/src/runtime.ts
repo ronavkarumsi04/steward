@@ -8,7 +8,7 @@ import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } f
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
 import type { AgentServices } from "./services.js";
-import { DEFAULT_TOOL_ALLOWLIST } from "./tools.js";
+import { DEFAULT_TOOL_ALLOWLIST, DELEGATABLE_KINDS } from "./tools.js";
 
 export const Plan = z.object({
   objective: z.string(),
@@ -18,6 +18,38 @@ export const Plan = z.object({
   needsHuman: z.array(z.string()).default([]),
 });
 export type Plan = z.infer<typeof Plan>;
+
+/**
+ * Tools the plan intends to use that this agent cannot call. The Chief of Staff plans in terms of the
+ * company's whole toolbox (social.publish, email.send) but only holds the planning tools itself; left
+ * unsaid, the model substitutes a document for the action and reports it done. Returned per missing
+ * tool with the specialist kinds whose default allowlist carries it, so the run can be told who to
+ * delegate to.
+ */
+export interface ToolHolder {
+  kind: string;
+  allow: readonly string[];
+}
+
+/** The company's own agents delegate.run can reach and what each may call; a seeded allowlist beats the per-kind default. */
+export function toolHolders(agents: ReadonlyArray<{ kind: string; enabled: boolean; toolAllowlist: readonly string[] }>): ToolHolder[] {
+  const delegatable: readonly string[] = DELEGATABLE_KINDS;
+  return agents.filter((a) => a.enabled && delegatable.includes(a.kind)).map((a) => ({ kind: a.kind, allow: a.toolAllowlist.length ? a.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[a.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) }));
+}
+
+export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[], holders: ReadonlyArray<ToolHolder>): Array<{ tool: string; owners: string[] }> {
+  const planned = [...new Set(steps.flatMap((s) => s.tools))].filter((t) => t && !toolNames.some((n) => matchTool(n, t)));
+  return planned.map((tool) => ({ tool, owners: [...new Set(holders.filter((h) => h.allow.some((n) => matchTool(n, tool))).map((h) => h.kind))] }));
+}
+
+export function missingToolsNote(missing: ReadonlyArray<{ tool: string; owners: string[] }>, canDelegate: boolean): string {
+  if (!missing.length) return "";
+  const lines = missing.map((m) => `${m.tool}${m.owners.length ? ` (the ${m.owners.join(" or ")} agent has it)` : ""}`);
+  const action = canDelegate
+    ? "Hand each of those steps to the specialist that has the tool with delegate.run, one delegation per workstream."
+    : "Say plainly which step you cannot do and why.";
+  return ` You do not have: ${lines.join("; ")}. ${action} Do not substitute a document for the action, and do not report an action you could not take.`;
+}
 
 export const Verification = z.object({
   passed: z.boolean(),
@@ -283,13 +315,17 @@ export class AgentRuntime {
 
   // ---------- 3. Iterate (one model call + tool executions) ----------
 
-  private async transcript(runId: string, ctx: RunContextBundle): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null }> {
+  private async transcript(runId: string, ctx: RunContextBundle, agentId: string): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null }> {
     const steps = await this.s.runs.steps(this.scope, runId);
     const messages: ChatMessage[] = [{ role: "system", content: ctx.systemPrompt }, { role: "user", content: ctx.userPrompt }];
     const planStep = steps.find((s) => s.kind === "plan" && s.status === "succeeded");
     if (planStep) {
       const plan = (planStep.output as { plan?: Plan } | null)?.plan;
-      if (plan) messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: "Proceed with the plan. Use tools as needed." });
+      if (plan) {
+        const holders = toolHolders((await this.s.agents.list(this.scope)).filter((a) => a.id !== agentId));
+        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames, holders), ctx.toolNames.some((n) => matchTool(n, "delegate.run")));
+        messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: `Proceed with the plan. Use tools as needed.${note}` });
+      }
     }
     let iterations = 0;
     let pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null = null;
@@ -321,7 +357,7 @@ export class AgentRuntime {
     const scope = { ...this.scope, actor };
     if (run.status === "cancelled") return { kind: "done", finalText: "Run was cancelled." };
 
-    const { messages, iterations, pending } = await this.transcript(runId, ctx);
+    const { messages, iterations, pending } = await this.transcript(runId, ctx, agent.id);
 
     // Resume a tool that was waiting for approval.
     if (pending) {
@@ -546,7 +582,7 @@ export class AgentRuntime {
       const res = await this.s.gateway.chat(
         {
           messages: [
-            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details. A request to draft, review, queue or Outbox a post, email or text is met only by an email.send, social.publish or sms.send call in the ledger (succeeded or awaiting approval); a document that merely contains the copy leaves it unmet." },
+            { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details. A request to draft, review, queue or Outbox a post, email or text is met only by an email.send, social.publish or sms.send call in the ledger (succeeded or awaiting approval), or by a delegate.run that handed that work to a specialist; a document that merely contains the copy leaves it unmet." },
             { role: "user", content: `Objective: ${plan?.success ? plan.data.objective : run.intent}\nSuccess criteria:\n${plan?.success ? plan.data.successCriteria.map((c) => `- ${c}`).join("\n") : "- The instruction was carried out."}\n\nTool ledger (input → status → output):\n${evidence || "(no tools were called)"}\n\nAgent's final report:\n${finalText.slice(0, 8000)}\n\nReturn JSON matching the schema.` },
           ],
           responseFormat: { type: "json_schema", name: "verification", schema: VERIFY_SCHEMA as unknown as Record<string, unknown> },

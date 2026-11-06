@@ -548,7 +548,9 @@ const taskCreate = defineTool({
   },
 });
 
-const SpecialistKind = z.enum(["research", "engineering", "marketing", "sales", "support", "finance", "operations"]);
+/** The kinds delegate.run can hand work to; the orchestrator and custom agents are not delegation targets. */
+export const DELEGATABLE_KINDS = ["research", "engineering", "marketing", "sales", "support", "finance", "operations"] as const;
+const SpecialistKind = z.enum(DELEGATABLE_KINDS);
 const MAX_DELEGATIONS_PER_RUN = 8;
 
 const delegateRun = defineTool({

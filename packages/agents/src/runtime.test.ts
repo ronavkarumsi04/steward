@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, verificationEvidence, type RunContextBundle } from "./runtime.js";
+import { AgentRuntime, missingPlanTools, missingToolsNote, toolHolders, verificationEvidence, type RunContextBundle } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -209,5 +209,45 @@ describe("verification evidence", () => {
     const fetched = text.split("\n").find((l) => l.includes("web.fetch"))!;
     expect(fetched.endsWith("</untrusted_content>")).toBe(true);
     expect(fetched.match(/<untrusted_content/g)?.length).toBe(1);
+  });
+});
+
+describe("missingPlanTools", () => {
+  it("names the planned tools the agent cannot call and which delegatable specialist holds them", () => {
+    const orchestrator = ["memory.*", "document.*", "delegate.run", "task.*"];
+    const holders = toolHolders([
+      { kind: "marketing", enabled: true, toolAllowlist: ["document.*", "social.publish", "email.send"] },
+      { kind: "sales", enabled: true, toolAllowlist: ["lead.*", "email.send"] },
+      { kind: "support", enabled: false, toolAllowlist: ["email.send"] },
+      { kind: "research", enabled: true, toolAllowlist: [] },
+      { kind: "custom", enabled: true, toolAllowlist: ["social.publish", "email.send"] },
+      { kind: "orchestrator", enabled: true, toolAllowlist: ["email.send"] },
+    ]);
+    const missing = missingPlanTools([{ tools: ["social.publish"] }, { tools: ["document.write", "social.publish"] }, { tools: ["email.send"] }, { tools: ["image.generate"] }], orchestrator, holders);
+    expect(missing).toEqual([
+      { tool: "social.publish", owners: ["marketing"] },
+      { tool: "email.send", owners: ["marketing", "sales"] },
+      { tool: "image.generate", owners: [] },
+    ]);
+  });
+
+  it("reads owners from the company's seeded allowlists, falling back to the per-kind default only when a seed is empty", () => {
+    const holders = toolHolders([{ kind: "marketing", enabled: true, toolAllowlist: ["document.*"] }, { kind: "research", enabled: true, toolAllowlist: [] }]);
+    expect(missingPlanTools([{ tools: ["social.publish", "web.search"] }], ["document.*"], holders)).toEqual([
+      { tool: "social.publish", owners: [] },
+      { tool: "web.search", owners: ["research"] },
+    ]);
+  });
+
+  it("is empty when every planned tool matches the allowlist, wildcards included", () => {
+    expect(missingPlanTools([{ tools: ["document.write", "memory.search"] }], ["memory.*", "document.*"], [])).toEqual([]);
+  });
+
+  it("tells a delegating agent to delegate and a specialist to say so", () => {
+    const missing = [{ tool: "social.publish", owners: ["marketing"] }];
+    expect(missingToolsNote(missing, true)).toContain("delegate.run");
+    expect(missingToolsNote(missing, false)).toContain("Say plainly");
+    expect(missingToolsNote(missing, false)).toContain("the marketing agent has it");
+    expect(missingToolsNote([], true)).toBe("");
   });
 });
