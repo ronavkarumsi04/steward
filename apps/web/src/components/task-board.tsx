@@ -91,9 +91,9 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
         <select name="priority" className="input" aria-label="Priority" defaultValue="medium">
           {["low", "medium", "high", "urgent"].map((p) => <option key={p}>{p}</option>)}
         </select>
+        <textarea name="description" className="input md:order-last md:col-span-6" placeholder="Description / acceptance criteria (optional)" rows={2} />
         <label className="flex items-center gap-1.5 whitespace-nowrap px-1 text-xs text-muted"><input type="checkbox" name="start" className="accent-accent" defaultChecked /> Start now</label>
         <button className="btn btn-primary"><Icon.Plus size={16} />Add</button>
-        <textarea name="description" className="input md:col-span-6" placeholder="Description / acceptance criteria (optional)" rows={2} />
       </form>
       {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
       <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 2xl:grid 2xl:grid-cols-6 2xl:overflow-visible">

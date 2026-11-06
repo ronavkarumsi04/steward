@@ -31,10 +31,10 @@ const ROWS: { item: string; detail?: string; cells: [Cell, Cell, Cell] }[] = [
   { item: "Run inspector", detail: "Every model call, tool call and cost on the record, with a verifier that reads the evidence.", cells: [yes(), none(), none()] },
   { item: "Your own model keys", detail: "25+ providers, including free tiers and local models.", cells: [yes(), none("Credits only"), none()] },
   { item: "Code changes on your own GitHub", detail: "Diff sessions, pull requests, a sandbox that runs the tests.", cells: [yes(), none(), part("Claims to ship code")] },
-  { item: "Watched browser automation", detail: "A real browser you can see, with a closed set of actions.", cells: [yes(), none(), none()] },
+  { item: "Watched browser automation", detail: "A real browser you can see, with a closed set of actions.", cells: [part("Self-hosted with Chromium; the hosted beta reads pages over HTTP"), none(), none()] },
   { item: "Outreach drafted and queued", detail: "Email, X and LinkedIn posts, texts.", cells: [yes("Outbox with Send, Don't send, Edit"), yes("Outreach, posts with pictures"), yes("Tweets, replies, deals")] },
   { item: "Pictures, decks and spreadsheets", cells: [part("Decks and sheets, typed and totalled; pictures next"), yes(), none()] },
-  { item: "Text your agent by SMS", cells: [notYet(), yes("Pro plan phone number"), none()] },
+  { item: "Text your agent by SMS", cells: [notYet("Phone inbox with push notifications today; SMS next"), yes("Pro plan phone number"), none()] },
   { item: "Workflows and reactions", detail: "Scheduled and event-driven runs you can read and edit.", cells: [yes(), part("Runs alone on paid plans"), yes("Autonomous by default")] },
   { item: "Integrations", cells: [yes("MCP marketplace with allowlists and risk levels"), part("Gmail, Calendar, Sheets, Slack, Notion, HubSpot, Stripe"), none()] },
   { item: "Memory you can correct", detail: "Durable memory and a knowledge graph with revision history.", cells: [yes(), none(), none()] },
@@ -120,7 +120,7 @@ export default async function Compare() {
         <ol className={s.conditions}>
           <li>
             <h3 className={s.h3}>Text your agent</h3>
-            <p>Approvals and a chat with your Chief of Staff from your phone, starting with a mobile-first approvals screen.</p>
+            <p>Approvals already reach your phone as push notifications from the inbox; texting back and forth with your Chief of Staff is next.</p>
           </li>
           <li>
             <h3 className={s.h3}>Pictures</h3>
