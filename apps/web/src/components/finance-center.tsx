@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Budget, BudgetLedgerEntry, UsageRow } from "@/lib/types";
+import { splitUsage } from "@/lib/finance-usage";
 import { Ago, Card, Empty, PageHeader, Pill, Stat, usd } from "./ui";
 
 const LABELS: Record<Budget["category"], string> = {
@@ -30,10 +31,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
   const reserved = total?.reservedUsd ?? categoryRows.reduce((n, b) => n + b.reservedUsd, 0);
   const aiCost = aiUsage.reduce((n, r) => n + r.costUsd, 0);
   const attention = budgets.filter((b) => b.exhausted || b.overSoftThreshold);
-  const byWork = (a: UsageRow, b: UsageRow) => b.costUsd - a.costUsd || b.calls - a.calls;
-  const silent = (r: UsageRow) => r.errors >= r.calls && r.inputTokens + r.outputTokens === 0;
-  const usage = aiUsage.filter((r) => !silent(r)).sort(byWork);
-  const neverAnswered = aiUsage.filter(silent).sort(byWork);
+  const { usage, neverAnswered } = splitUsage(aiUsage);
 
   return (
     <div className="space-y-5">
