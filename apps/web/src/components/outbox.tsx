@@ -4,20 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Approval } from "@/lib/types";
+import { OUTBOX_LIMITS as LIMITS, outboxItem } from "@/lib/outbox-item";
 import { Pill } from "./ui";
 
-type Kind = "email" | "social" | "sms";
+export { outboxItem } from "@/lib/outbox-item";
+
 
 /** What an outbox approval is, read from the tool call it guards rather than from the model's description of it. */
-export function outboxItem(a: Approval): { kind: Kind; to: string; subject: string; text: string; field: "text" | "body" | "message"; network?: string } {
-  const p = a.payload as Record<string, unknown>;
-  const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : "");
-  if (a.action === "social.publish") return { kind: "social", to: "public", subject: "", text: str("text"), field: "text", network: str("network") || a.affectedSystem };
-  if (a.action === "sms.send") return { kind: "sms", to: str("to"), subject: "", text: str("body") || str("text") || str("message"), field: p.body !== undefined ? "body" : p.message !== undefined ? "message" : "text" };
-  return { kind: "email", to: str("to"), subject: str("subject"), text: str("text"), field: "text" };
-}
 
-const LIMITS: Record<string, number> = { x: 280, linkedin: 3000 };
 
 function OutboxRow({ companyId, approval, onDone }: { companyId: string; approval: Approval; onDone: (a: Approval) => void }) {
   const router = useRouter();
@@ -66,7 +60,7 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
         )}
         {limit !== undefined ? <p className={`mt-2 text-right text-xs ${over ? "text-danger" : "text-faint"}`}>{text.length} / {limit}</p> : null}
       </div>
-      {approval.reason ? <p className="mt-2 text-xs text-muted">Why the agent wants to send it: {approval.reason}</p> : null}
+      {approval.reason ? <p className="mt-2 text-xs text-muted">Held because: {approval.reason}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-primary" disabled={busy !== null || over} onClick={() => void decide("approved")}>
           {busy === "approved" ? "Sending…" : edited ? "Send edited" : "Send"}

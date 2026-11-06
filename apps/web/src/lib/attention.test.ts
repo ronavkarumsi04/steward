@@ -223,3 +223,26 @@ describe("attention queue", () => {
     expect(items[0]!.since).toBe(at(60 * 26));
   });
 });
+
+describe("outbox approvals read as the message, not the action name", () => {
+  it("titles a pending post with its first line and says where it would go", () => {
+    const items = buildAttentionQueue({
+      companyId: "co-1",
+      now: NOW,
+      approvals: [approval({ id: "ap-post", action: "social.publish", reason: "social_publish actions require approval at autonomy level 2", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess. Smoke detects." } })],
+      runs: [],
+      tasks: [],
+      budget: null,
+    });
+    const post = items.find((i) => i.id === "approval:ap-post");
+    expect(post?.title).toBe("Mixed delimiters. Broken encoding.");
+    expect(post?.detail).toBe("LINKEDIN post waiting for your go-ahead");
+  });
+
+  it("leaves other approvals on the action name and policy reason", () => {
+    const items = buildAttentionQueue({ companyId: "co-1", now: NOW, approvals: [approval({ id: "ap-deploy", action: "deploy.production", reason: "deploys ask" })], runs: [], tasks: [], budget: null });
+    const row = items.find((i) => i.id === "approval:ap-deploy");
+    expect(row?.title).toBe("deploy.production");
+    expect(row?.detail).toBe("deploys ask");
+  });
+});
