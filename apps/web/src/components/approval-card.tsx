@@ -264,7 +264,7 @@ export function ApprovalCard({
         )}
       </section>
 
-      <details aria-label="Blast radius" className="mt-4" open={!message || recordedBlast > 0}>
+      <details aria-label="Blast radius" className="mt-4" open={!message}>
         <summary className="nb-section-label cursor-pointer">
           BLAST RADIUS{recordedBlast < brief.blast.length ? ` · ${recordedBlast} of ${brief.blast.length} recorded` : ""}
         </summary>
