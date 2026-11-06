@@ -26,9 +26,19 @@ export type Plan = z.infer<typeof Plan>;
  * tool with the specialist kinds whose default allowlist carries it, so the run can be told who to
  * delegate to.
  */
-export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[]): Array<{ tool: string; owners: string[] }> {
+export interface ToolHolder {
+  kind: string;
+  allow: readonly string[];
+}
+
+/** The company's own agents and what each may call; a seeded allowlist beats the per-kind default. */
+export function toolHolders(agents: ReadonlyArray<{ kind: string; enabled: boolean; toolAllowlist: readonly string[] }>): ToolHolder[] {
+  return agents.filter((a) => a.enabled).map((a) => ({ kind: a.kind, allow: a.toolAllowlist.length ? a.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[a.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) }));
+}
+
+export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[], holders: ReadonlyArray<ToolHolder>): Array<{ tool: string; owners: string[] }> {
   const planned = [...new Set(steps.flatMap((s) => s.tools))].filter((t) => t && !toolNames.some((n) => matchTool(n, t)));
-  return planned.map((tool) => ({ tool, owners: Object.entries(DEFAULT_TOOL_ALLOWLIST).filter(([, allow]) => allow.some((n) => matchTool(n, tool))).map(([kind]) => kind) }));
+  return planned.map((tool) => ({ tool, owners: [...new Set(holders.filter((h) => h.allow.some((n) => matchTool(n, tool))).map((h) => h.kind))] }));
 }
 
 export function missingToolsNote(missing: ReadonlyArray<{ tool: string; owners: string[] }>, canDelegate: boolean): string {
@@ -304,14 +314,15 @@ export class AgentRuntime {
 
   // ---------- 3. Iterate (one model call + tool executions) ----------
 
-  private async transcript(runId: string, ctx: RunContextBundle): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null }> {
+  private async transcript(runId: string, ctx: RunContextBundle, agentId: string): Promise<{ messages: ChatMessage[]; iterations: number; pending: { toolCallId: string; toolName: string; args: Record<string, unknown>; approvalId?: string; approvalChain?: string[]; stepId: string } | null }> {
     const steps = await this.s.runs.steps(this.scope, runId);
     const messages: ChatMessage[] = [{ role: "system", content: ctx.systemPrompt }, { role: "user", content: ctx.userPrompt }];
     const planStep = steps.find((s) => s.kind === "plan" && s.status === "succeeded");
     if (planStep) {
       const plan = (planStep.output as { plan?: Plan } | null)?.plan;
       if (plan) {
-        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames), ctx.toolNames.some((n) => matchTool(n, "delegate.run")));
+        const holders = toolHolders((await this.s.agents.list(this.scope)).filter((a) => a.id !== agentId));
+        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames, holders), ctx.toolNames.some((n) => matchTool(n, "delegate.run")));
         messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: `Proceed with the plan. Use tools as needed.${note}` });
       }
     }
@@ -345,7 +356,7 @@ export class AgentRuntime {
     const scope = { ...this.scope, actor };
     if (run.status === "cancelled") return { kind: "done", finalText: "Run was cancelled." };
 
-    const { messages, iterations, pending } = await this.transcript(runId, ctx);
+    const { messages, iterations, pending } = await this.transcript(runId, ctx, agent.id);
 
     // Resume a tool that was waiting for approval.
     if (pending) {
