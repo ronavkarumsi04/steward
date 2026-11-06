@@ -14,7 +14,7 @@ const base: Approval = {
 };
 
 describe("ApprovalCard for an outbox action", () => {
-  const post: Approval = { ...base, action: "social.publish", dimension: "social_publish", affectedSystem: "linkedin", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess." } };
+  const post: Approval = { ...base, action: "social.publish", dimension: "social_publish", affectedSystem: "linkedin", reason: "social_publish actions require approval at autonomy level 2", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess." } };
 
   it("shows the post as text with its channel and length, and folds the JSON and blast radius away", () => {
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: post }));
