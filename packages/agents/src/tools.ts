@@ -720,7 +720,7 @@ async function checkOutbound(s: AgentServices, channel: string, recipient: strin
 
 const emailSend = defineTool({
   name: "email.send",
-  description: "Send an email through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Marketing email automatically gets a working unsubscribe link and List-Unsubscribe headers, and agent-authored mail carries an AI disclosure you can turn off. Externally visible; subject to approval policy.",
+  description: "Draft an email into the founder's Outbox; by policy it waits there for approval before it is sent through the company's connected email provider (Resend, Postmark, SendGrid or SMTP). Use it whenever the founder wants an email to review. Marketing email automatically gets a working unsubscribe link and List-Unsubscribe headers, and agent-authored mail carries an AI disclosure you can turn off. Externally visible; subject to approval policy.",
   input: z.object({ to: z.string().email(), subject: z.string().min(1).max(200), text: z.string().min(1).max(50_000), html: z.string().max(200_000).optional(), replyTo: z.string().email().optional(), from: z.string().optional(), campaignId: z.string().optional(), aiDisclosure: z.boolean().optional() }),
   risk: "HIGH",
   dimension: "email_send",
@@ -775,7 +775,7 @@ const emailSend = defineTool({
 
 const smsSend = defineTool({
   name: "sms.send",
-  description: "Send an SMS through the company's connected Twilio number. Blocked unless the recipient has a recorded consent and has not opted out — SMS to a number without consent is unlawful in most places. Externally visible; subject to approval policy.",
+  description: "Draft a text into the founder's Outbox; by policy it waits there for approval before it is sent through the company's connected Twilio number. Blocked unless the recipient has a recorded consent and has not opted out — SMS to a number without consent is unlawful in most places. Externally visible; subject to approval policy.",
   input: z.object({ to: z.string().min(4).max(32), body: z.string().min(1).max(1600), campaignId: z.string().optional(), aiDisclosure: z.boolean().optional() }),
   risk: "HIGH",
   dimension: "customer_comms",
@@ -855,7 +855,7 @@ const slackPost = defineTool({
 
 const socialPublish = defineTool({
   name: "social.publish",
-  description: "Publish a post to a connected social account (X or LinkedIn). Public and irreversible; requires approval by default.",
+  description: "Draft a post for X or LinkedIn into the founder's Outbox; by policy it is published to the connected account only after approval. Use it whenever the founder wants a post to review, even if nothing should go out yet. Public and irreversible once approved.",
   input: z.object({ network: z.enum(["x", "linkedin"]), text: z.string().min(1).max(3000), campaignId: z.string().optional() }),
   risk: "HIGH",
   dimension: "social_publish",
