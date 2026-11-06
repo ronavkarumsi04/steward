@@ -30,7 +30,10 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
   const reserved = total?.reservedUsd ?? categoryRows.reduce((n, b) => n + b.reservedUsd, 0);
   const aiCost = aiUsage.reduce((n, r) => n + r.costUsd, 0);
   const attention = budgets.filter((b) => b.exhausted || b.overSoftThreshold);
-  const usage = [...aiUsage].sort((a, b) => b.costUsd - a.costUsd);
+  const byWork = (a: UsageRow, b: UsageRow) => b.costUsd - a.costUsd || b.calls - a.calls;
+  const silent = (r: UsageRow) => r.errors >= r.calls && r.inputTokens + r.outputTokens === 0;
+  const usage = aiUsage.filter((r) => !silent(r)).sort(byWork);
+  const neverAnswered = aiUsage.filter(silent).sort(byWork);
 
   return (
     <div className="space-y-5">
@@ -118,7 +121,9 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
         </Card>
 
         <Card className="nb-left-purple" title="AI model spend · 30 days" description="Gateway calls grouped by provider and model.">
-          {usage.length === 0 ? <Empty>No AI usage recorded in this window.</Empty> : (
+          {usage.length === 0 && neverAnswered.length === 0 ? <Empty>No AI usage recorded in this window.</Empty> : null}
+          {usage.length === 0 && neverAnswered.length > 0 ? <Empty>No model answered in this window.</Empty> : null}
+          {usage.length > 0 ? (
             <div className="space-y-2">
               {usage.map((row) => (
                 <div key={`${row.provider}:${row.model}`} className="nb-panel-flat p-3 text-sm">
@@ -132,7 +137,22 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage }: { company
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
+          {neverAnswered.length > 0 ? (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-fg">
+                {neverAnswered.length} {neverAnswered.length === 1 ? "model" : "models"} tried and never answered
+              </summary>
+              <ul className="mt-2 space-y-1 text-xs text-muted">
+                {neverAnswered.map((row) => (
+                  <li key={`${row.provider}:${row.model}`} className="flex justify-between gap-3">
+                    <span className="truncate">{row.model} <span className="opacity-70">· {row.provider}</span></span>
+                    <span className="tnum shrink-0 text-danger">{row.errors} {row.errors === 1 ? "error" : "errors"}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </Card>
       </div>
     </div>
