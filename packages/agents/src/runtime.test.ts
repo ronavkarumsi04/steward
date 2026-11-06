@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, missingPlanTools, missingToolsNote, toolHolders, verificationEvidence, type RunContextBundle } from "./runtime.js";
+import { AgentRuntime, missingPlanTools, missingToolsNote, settleDelegation, toolHolders, verificationEvidence, type RunContextBundle, type Verification } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -249,5 +249,30 @@ describe("missingPlanTools", () => {
     expect(missingToolsNote(missing, false)).toContain("Say plainly");
     expect(missingToolsNote(missing, false)).toContain("the marketing agent has it");
     expect(missingToolsNote([], true)).toBe("");
+  });
+});
+
+describe("settleDelegation", () => {
+  const failed: Verification = { passed: false, score: 0, summary: "The post is not in the Outbox.", unmet: ["Post is in Outbox awaiting approval"], followUps: [], verdict: "failed" };
+
+  it("passes a run whose only actions were successful delegations", () => {
+    const v = settleDelegation(failed, [{ toolName: "delegate.run", status: "succeeded" }, { toolName: "delegate.run", status: "succeeded" }]);
+    expect(v.passed).toBe(true);
+    expect(v.verdict).toBe("passed");
+    expect(v.unmet).toEqual([]);
+    expect(v.score).toBe(70);
+    expect(v.summary).toMatch(/^Handed to 2 specialists; each specialist run is verified on its own\./);
+    expect(v.summary).toContain("The post is not in the Outbox.");
+  });
+
+  it("leaves the verdict alone when the run did anything else, delegated and failed, or called no tool", () => {
+    expect(settleDelegation(failed, [{ toolName: "delegate.run", status: "succeeded" }, { toolName: "document.write", status: "succeeded" }])).toBe(failed);
+    expect(settleDelegation(failed, [{ toolName: "delegate.run", status: "failed" }])).toBe(failed);
+    expect(settleDelegation(failed, [])).toBe(failed);
+  });
+
+  it("never lowers a verdict that already passed", () => {
+    const ok: Verification = { ...failed, passed: true, score: 95, verdict: "passed" };
+    expect(settleDelegation(ok, [{ toolName: "delegate.run", status: "succeeded" }])).toBe(ok);
   });
 });

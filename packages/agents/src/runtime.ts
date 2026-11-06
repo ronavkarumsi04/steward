@@ -67,6 +67,26 @@ export const Verification = z.object({
 });
 export type Verification = z.infer<typeof Verification>;
 
+/**
+ * A run whose every action was a successful delegate.run has done its job: the specialists' runs carry
+ * their own plans, approvals and verification. Reviewers keep failing such a run on criteria that describe
+ * the delegated work ("the post is in the Outbox") because at review time the specialist has not started,
+ * so the rule lives here, in code, rather than in the reviewer prompt.
+ */
+export function settleDelegation(v: Verification, calls: ReadonlyArray<{ toolName: string; status: string }>): Verification {
+  if (v.passed || calls.length === 0) return v;
+  if (!calls.every((c) => c.toolName === "delegate.run" && c.status === "succeeded")) return v;
+  const n = calls.length;
+  return {
+    ...v,
+    passed: true,
+    verdict: "passed",
+    score: Math.max(v.score, 70),
+    unmet: [],
+    summary: `Handed to ${n === 1 ? "a specialist" : `${n} specialists`}; each specialist run is verified on its own. Reviewer's note on the handed-off work: ${v.summary}`,
+  };
+}
+
 export interface RunContextBundle {
   systemPrompt: string;
   userPrompt: string;
@@ -593,7 +613,7 @@ export class AgentRuntime {
         },
         { policy: { ...ctx.routingPolicy, requirements: { ...ctx.routingPolicy.requirements, preference: "cost" } }, purpose: "verification", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
-      const v = parseStructured(res, Verification);
+      const v = settleDelegation(parseStructured(res, Verification), calls);
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: v });
       return v;
     } catch (e) {
