@@ -69,7 +69,7 @@ const DESKS = [
   ["Run Inspector", "Every run as a timeline: the plan, each model and tool call, what it cost and who approved it."],
   ["Site Studio", "A company website built from plain blocks, previewed by the same renderer that publishes it, with numbered versions."],
   ["Code IDE", "Your repository, read through your own GitHub connection. Steward keeps no copy of it."],
-  ["Browser", "A real Chromium an agent can drive while you watch, limited to seven actions and stoppable mid-flight."],
+  ["Browser", "A real Chromium an agent can drive while you watch, limited to seven actions and stoppable mid-flight. The hosted beta reads pages over HTTP until its server gets a browser."],
   ["Workflows", "Standing work, drawn: a trigger, the agent that does it and the ceiling it works under."],
   ["Knowledge & memory", "Projects, decisions and documents in one graph, plus memories your team can review and correct."],
   ["MCP marketplace", "Install a Model Context Protocol server and see exactly what it may do before anything can call it."],

@@ -22,7 +22,7 @@ const RATES: { id: string; tone?: "canary" | "pink"; name: string; price: string
       { text: "Every desk: engineering, marketing, sales, operations, chief of staff." },
       { text: "Your own model keys, encrypted with a key only your deployment holds." },
       { text: "Approvals, per-run budgets, a cancel that stops, the run inspector." },
-      { text: "Site Studio, Code IDE on your GitHub, watched browser, workflows, MCP." },
+      { text: "Site Studio, Code IDE on your GitHub, workflows, MCP; the watched browser on self-hosted stacks." },
       { text: "Organizations are isolated from each other; invite your own team." },
     ],
   },
