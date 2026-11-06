@@ -425,3 +425,14 @@ describe("image.generate", () => {
     }
   });
 });
+
+describe("outbox tools tell the model they draft, not send", () => {
+  it("every outbox action names the Outbox and approval in its description", () => {
+    const registry = buildToolRegistry();
+    for (const name of ["email.send", "sms.send", "social.publish"]) {
+      const description = registry.get(name)?.manifest.description ?? "";
+      expect(description, name).toMatch(/Outbox/);
+      expect(description, name).toMatch(/approv/i);
+    }
+  });
+});
