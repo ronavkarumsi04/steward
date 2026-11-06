@@ -61,6 +61,9 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
         {limit !== undefined ? <p className={`mt-2 text-right text-xs ${over ? "text-danger" : "text-faint"}`}>{text.length} / {limit}</p> : null}
       </div>
       {approval.reason ? <p className="mt-2 text-xs text-muted">Held because: {approval.reason}</p> : null}
+      {(approval.warnings ?? []).map((w) => (
+        <p key={w} role="note" className="nb-panel-flat nb-left-orange mt-2 px-3 py-2 text-xs leading-relaxed text-fg-2">{w}</p>
+      ))}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-primary" disabled={busy !== null || over} onClick={() => void decide("approved")}>
           {busy === "approved" ? "Sending…" : edited ? "Send edited" : "Send"}

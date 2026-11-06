@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAttentionQueue, FAILURE_WINDOW_MS, type AttentionItem } from "./attention";
+import { buildAttentionQueue, FAILURE_WINDOW_MS, headline, type AttentionItem } from "./attention";
 import type { Approval, Budget, Run, Task } from "./types";
 
 /**
@@ -244,5 +244,16 @@ describe("outbox approvals read as the message, not the action name", () => {
     const row = items.find((i) => i.id === "approval:ap-deploy");
     expect(row?.title).toBe("deploy.production");
     expect(row?.detail).toBe("deploys ask");
+  });
+});
+
+describe("headline", () => {
+  it("keeps a short brief whole and cuts a long one at a word-safe 90 characters", () => {
+    expect(headline("Tidy CSV. Zero config.")).toBe("Tidy CSV. Zero config.");
+    const long = "Draft three launch posts for our CSV tidying CLI, one for X and two for LinkedIn, and put each in the Outbox as a draft for my review.";
+    const cut = headline(long);
+    expect(cut.length).toBeLessThanOrEqual(90);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(headline("\n\n  second line is first\nmore")).toBe("second line is first");
   });
 });
