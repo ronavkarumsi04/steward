@@ -115,20 +115,24 @@ export default async function Compare() {
           <h2 id="honest-title" className={s.h2}>
             Where they are ahead, <span>today.</span>
           </h2>
-          <p className={s.sectionLede}>Three lines read Not yet and one Partly on our side. They are on the board, in this order.</p>
+          <p className={s.sectionLede}>Three lines read Not yet and two Partly on our side. They are on the board, in this order.</p>
         </div>
         <ol className={s.conditions}>
           <li>
-            <h3 className={s.h3}>Text your agent</h3>
-            <p>Approvals already reach your phone as push notifications from the inbox; texting back and forth with your Chief of Staff is next.</p>
+            <h3 className={s.h3}>Logo generation</h3>
+            <p>The brand kit already carries a mark; generating one from the brief is next.</p>
+          </li>
+          <li>
+            <h3 className={s.h3}>Watched browser on the hosted beta</h3>
+            <p>Self-hosted stacks with Chromium get the watched browser today; the hosted beta reads pages over HTTP until its server has room for one.</p>
           </li>
           <li>
             <h3 className={s.h3}>Pictures</h3>
             <p>Research briefs with sources, decks and sheets are in; generated pictures for posts and decks are next.</p>
           </li>
           <li>
-            <h3 className={s.h3}>Logo generation</h3>
-            <p>The brand kit already carries a mark; generating one from the brief is next.</p>
+            <h3 className={s.h3}>Text your agent</h3>
+            <p>Approvals already reach your phone as push notifications from the inbox; texting back and forth with your Chief of Staff is next.</p>
           </li>
           <li>
             <h3 className={s.h3}>Interface in your language</h3>
