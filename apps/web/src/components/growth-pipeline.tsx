@@ -177,6 +177,10 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
       </section>
 
       <form onSubmit={createLead} className="card p-4 sm:p-5">
+        <div className="mb-3">
+          <div className="nb-section-label">Leads</div>
+          <h2 className="mt-1 text-lg font-bold tracking-tight">Add a prospect by hand</h2>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-52 grow"><label className="label">Opportunity</label><input name="title" className="input" placeholder="Lead title" aria-label="Lead title" required maxLength={300} /></div>
           <div className="min-w-40 grow"><label className="label">Person</label><input name="name" className="input" placeholder="Name" aria-label="Lead name" maxLength={200} /></div>
