@@ -12,6 +12,7 @@
  *     because they are two separate calls to make.
  */
 import type { Approval, Budget, Run, Task } from "./types";
+import { outboxHeadline } from "./outbox-item";
 
 export type AttentionSeverity = "blocking" | "decision" | "risk";
 
@@ -83,11 +84,12 @@ export function buildAttentionQueue(input: AttentionInput): AttentionItem[] {
 
   // 1. Decisions only a person can make, one line each, longest-waiting first.
   for (const a of pending) {
+    const headline = outboxHeadline(a);
     items.push({
       id: `approval:${a.id}`,
       severity: "decision",
-      title: a.action,
-      detail: a.reason,
+      title: headline?.title ?? a.action,
+      detail: headline?.detail ?? a.reason,
       href: `${base}/approvals#${a.id}`,
       since: a.createdAt,
     });

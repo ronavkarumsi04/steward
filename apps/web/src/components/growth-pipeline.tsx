@@ -117,6 +117,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
     }
   }
 
+  const waiting = (initial.outbox ?? []).some((a) => a.status === "pending");
   return (
     <div className="space-y-5">
       <PageHeader eyebrow="Growth" title="Customer pipeline" description="One place for prospects, pipeline value, and the outreach Steward has actually sent." />
@@ -127,6 +128,9 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         <div className="card nb-left-green p-4"><div className="eyebrow">Won value</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.won)}</div></div>
         <div className="card nb-left-orange p-4"><div className="eyebrow">Recent outreach</div><div className="tnum mt-2 text-2xl font-semibold">{summary.outbound}</div></div>
       </div>
+
+      {/* Messages waiting for a decision outrank empty campaign and lead forms, on a phone most of all. */}
+      {waiting ? <Outbox companyId={companyId} items={initial.outbox ?? []} /> : null}
 
       <section className="card nb-left-pink overflow-hidden">
         <div className="border-b border-line px-4 py-4 sm:px-5">
@@ -226,7 +230,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         </div>
       )}
 
-      <Outbox companyId={companyId} items={initial.outbox ?? []} />
+      {waiting ? null : <Outbox companyId={companyId} items={initial.outbox ?? []} />}
 
       <section className="card overflow-hidden">
         <div className="border-b border-line px-4 py-3 sm:px-5"><div className="eyebrow">Recent outreach</div><h2 className="mt-1 text-base font-semibold">Messages Steward actually sent</h2></div>

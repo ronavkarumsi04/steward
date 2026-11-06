@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { diffPayload, POLICY_HINT, POLICY_LABEL, reviewApproval } from "@/lib/approval-review";
+import { isOutboxAction, OUTBOX_LIMITS, outboxItem } from "@/lib/outbox-item";
 import type { Approval, Run } from "@/lib/types";
 import { Icon } from "./icons";
 import { Ago, Json, Pill, RiskPill, StatusPill, usd } from "./ui";
@@ -45,6 +46,9 @@ export function ApprovalCard({
   const brief = useMemo(() => reviewApproval(state, { run: run ?? null }), [state, run]);
   const pending = state.status === "pending";
   const requestedJson = useMemo(() => JSON.stringify(state.payload ?? {}, null, 2), [state.payload]);
+  /** An email, post or text reads as the message it is; the JSON stays one disclosure away. */
+  const message = useMemo(() => (isOutboxAction(state.action) ? outboxItem(state) : null), [state]);
+  const recordedBlast = brief.blast.filter((line) => !line.source.toLowerCase().includes("not recorded")).length;
 
   /** The edited payload, or the reason it cannot be one. Missing draft means "no edit". */
   const draftState = useMemo((): { value: Record<string, unknown> | null; error: string | null } => {
@@ -176,26 +180,48 @@ export function ApprovalCard({
             {copied ? "Copied" : "Copy JSON"}
           </button>
         </div>
-        {brief.payload.facts.length > 0 ? (
-          <dl className="mt-1 grid gap-x-6 gap-y-1 text-xs md:grid-cols-2">
-            {brief.payload.facts.map((fact) => (
-              <div key={fact.label} className="min-w-0">
-                <dt className="text-muted">{fact.label}</dt>
-                <dd className="mono break-words">{fact.value}</dd>
+        {message && draft === null ? (
+          <>
+            <div className="mt-1 border border-line bg-paper p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                <Pill tone={message.kind === "social" ? "accent" : "neutral"}>{message.kind === "social" ? message.network : message.kind}</Pill>
+                <span className="font-medium text-fg">{message.kind === "social" ? "Post to everyone" : `To ${message.to || "—"}`}</span>
+                {message.subject ? <span className="min-w-0 truncate">· {message.subject}</span> : null}
               </div>
-            ))}
-          </dl>
+              <p className="mt-2 whitespace-pre-wrap">{message.text || <span className="text-muted">(empty message)</span>}</p>
+              <p className="mt-2 text-right text-xs text-faint">
+                {message.text.length}{message.network && OUTBOX_LIMITS[message.network] ? ` / ${OUTBOX_LIMITS[message.network]}` : ""} characters
+              </p>
+            </div>
+            <details className="mt-1 text-xs">
+              <summary className="cursor-pointer text-muted">Raw payload · {brief.payload.fields} field{brief.payload.fields === 1 ? "" : "s"}</summary>
+              <Json value={state.payload} />
+            </details>
+          </>
         ) : (
-          <p className="mt-1 text-xs text-muted">Nothing in this payload maps to a field worth decoding — read it as written.</p>
-        )}
-        <p className="mt-1 text-xs text-muted">
-          {brief.payload.fields} field{brief.payload.fields === 1 ? "" : "s"} in the payload{brief.payload.unmapped > 0 ? `, ${brief.payload.unmapped} of them not decoded above` : ""}.
-        </p>
-        {pending ? <Json value={state.payload} /> : (
-          <details className="mt-1 text-xs">
-            <summary className="cursor-pointer text-muted">Payload as recorded</summary>
-            <Json value={state.payload} />
-          </details>
+          <>
+            {brief.payload.facts.length > 0 ? (
+              <dl className="mt-1 grid gap-x-6 gap-y-1 text-xs md:grid-cols-2">
+                {brief.payload.facts.map((fact) => (
+                  <div key={fact.label} className="min-w-0">
+                    <dt className="text-muted">{fact.label}</dt>
+                    <dd className="mono break-words">{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-1 text-xs text-muted">Nothing in this payload maps to a field worth decoding — read it as written.</p>
+            )}
+            <p className="mt-1 text-xs text-muted">
+              {brief.payload.fields} field{brief.payload.fields === 1 ? "" : "s"} in the payload{brief.payload.unmapped > 0 ? `, ${brief.payload.unmapped} of them not decoded above` : ""}.
+            </p>
+            {pending ? <Json value={state.payload} /> : (
+              <details className="mt-1 text-xs">
+                <summary className="cursor-pointer text-muted">Payload as recorded</summary>
+                <Json value={state.payload} />
+              </details>
+            )}
+          </>
         )}
 
         {pending && draft === null && (
@@ -238,8 +264,10 @@ export function ApprovalCard({
         )}
       </section>
 
-      <section aria-label="Blast radius" className="mt-4">
-        <h4 className="nb-section-label">BLAST RADIUS</h4>
+      <details aria-label="Blast radius" className="mt-4" open={!message}>
+        <summary className="nb-section-label cursor-pointer">
+          BLAST RADIUS{recordedBlast < brief.blast.length ? ` · ${recordedBlast} of ${brief.blast.length} recorded` : ""}
+        </summary>
         <dl className="mt-1 grid gap-x-6 gap-y-2 text-xs md:grid-cols-2">
           {brief.blast.map((line) => (
             <div key={line.label} className="min-w-0">
@@ -250,7 +278,7 @@ export function ApprovalCard({
             </div>
           ))}
         </dl>
-      </section>
+      </details>
 
       <section aria-label="If you decide" className="mt-4 space-y-1.5 text-xs leading-relaxed">
         <p>
