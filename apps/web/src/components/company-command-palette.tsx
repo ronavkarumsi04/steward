@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "./locale-provider";
+import { useT, useTf } from "./locale-provider";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +46,7 @@ function shortId(id: string): string {
  */
 export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const t = useT();
+  const tf = useTf();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -336,7 +337,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
             className="nb-dialog w-full max-w-xl overflow-hidden border border-line"
           >
             <h2 id="command-palette-title" className="sr-only">
-              Company command palette
+              {t("shell.paletteTitle")}
             </h2>
             <div className="nb-command-header border-b-2 border-line p-3">
               <input
@@ -346,7 +347,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                 onKeyDown={onPaletteKeyDown}
                 className="nb-command-input w-full border border-line bg-panel px-3 py-2 text-sm font-medium text-fg outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-black focus:ring-offset-2"
                 placeholder={picking ? t("shell.paletteChooseAgent") : t("shell.paletteHint")}
-                aria-label={picking ? "Choose the agent" : "Search or type a command"}
+                aria-label={picking ? t("shell.paletteAgentLabel") : t("shell.paletteInputLabel")}
                 // The combobox pattern: the listbox is the popup this input controls, and the highlighted row is
                 // announced through aria-activedescendant rather than by moving focus off the input. While a
                 // confirmation is open the popup is a group of facts, so the input stops claiming to control a
@@ -413,7 +414,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                 )}
                 {total > matches.length && (
                   <p className="px-3 py-2 text-[11px] font-semibold text-muted">
-                    Showing {matches.length} of {total} — keep typing to narrow.
+                    {tf("shell.paletteShowing", { n: matches.length, total })}
                   </p>
                 )}
               </div>
@@ -425,9 +426,9 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
               ) : picking ? (
                 <span>{t("shell.palettePickKeys")}</span>
               ) : (
-                <span>↑↓ navigate · Enter run · Esc close</span>
+                <span>{t("shell.paletteNavKeys")}</span>
               )}
-              <span>G A Activity · G T Tasks</span>
+              <span>{t("shell.paletteShortcuts")}</span>
             </footer>
           </section>
         </div>
