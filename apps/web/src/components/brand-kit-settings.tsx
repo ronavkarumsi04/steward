@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useT, useTf } from "./locale-provider";
+import { tf as tfIn, type MessageKey } from "@/lib/i18n";
 import { useState, type FormEvent } from "react";
 import {
   BRAND_ACCENT_HEX,
@@ -19,21 +21,22 @@ import {
 import { ApiError, browserApi } from "@/lib/api";
 import type { Company } from "@/lib/types";
 
-const FONT_LABEL = { sans: "Sans", serif: "Serif", mono: "Mono" } as const;
-const RADIUS_LABEL = { sharp: "Sharp", soft: "Soft", round: "Round" } as const;
-const MARK_LABEL = { wordmark: "Wordmark", monogram: "Monogram" } as const;
+
 
 function words(raw: string): string[] {
   return raw.split(/[,\n]/).map((w) => w.trim()).filter(Boolean);
 }
 
 /** Why a kit cannot be saved as typed, in the founder's terms; null when it can. Mirrors the schema limits. */
-export function brandKitProblem(kit: BrandKit): string | null {
-  if (kit.voice.tone.length > 5) return `Up to five tone words — remove ${kit.voice.tone.length - 5}.`;
-  if (kit.voice.do.length > 8) return `Up to eight "do" lines — remove ${kit.voice.do.length - 8}.`;
-  if (kit.voice.dont.length > 8) return `Up to eight "don't" lines — remove ${kit.voice.dont.length - 8}.`;
+export function brandKitProblem(
+  kit: BrandKit,
+  tf: (key: MessageKey, vars: Record<string, string | number>) => string = (key, vars) => tfIn("en", key, vars),
+): string | null {
+  if (kit.voice.tone.length > 5) return tf("brand.tooManyTone", { n: kit.voice.tone.length - 5 });
+  if (kit.voice.do.length > 8) return tf("brand.tooManyDo", { n: kit.voice.do.length - 8 });
+  if (kit.voice.dont.length > 8) return tf("brand.tooManyDont", { n: kit.voice.dont.length - 8 });
   const long = [...kit.voice.tone, ...kit.voice.do, ...kit.voice.dont].find((w) => w.length > 80);
-  if (long) return `"${long.slice(0, 24)}…" is over 80 characters.`;
+  if (long) return tf("brand.tooLong", { text: long.slice(0, 24) });
   return null;
 }
 
@@ -42,6 +45,8 @@ export function brandKitProblem(kit: BrandKit): string | null {
  * site's real CSS values (the same hex, stack and radius the published page gets), not an approximation.
  */
 export function BrandPreview({ kit, name }: { kit: BrandKit; name: string }) {
+  const t = useT();
+  const tf = useTf();
   const accent = BRAND_ACCENT_HEX[kit.accent];
   const ink = kit.dark ? "#f5f5f4" : "#18181b";
   const muted = kit.dark ? "#a8a29e" : "#52525b";
@@ -49,7 +54,7 @@ export function BrandPreview({ kit, name }: { kit: BrandKit; name: string }) {
   const line = kit.dark ? "#292524" : "#e7e5e4";
   const radius = BRAND_RADIUS_CSS[kit.radius];
   return (
-    <div data-testid="brand-preview" aria-label={`Preview of ${name} in ${kit.accent} on ${kit.dark ? "dark" : "light"}`} className="overflow-hidden border border-line" style={{ background: page, color: ink, fontFamily: BRAND_FONT_STACK[kit.font] }}>
+    <div data-testid="brand-preview" aria-label={tf("brand.previewLabel", { name, accent: kit.accent, scheme: kit.dark ? t("brand.dark") : t("brand.light") })} className="overflow-hidden border border-line" style={{ background: page, color: ink, fontFamily: BRAND_FONT_STACK[kit.font] }}>
       <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: `1px solid ${line}` }}>
         <span className="flex items-center gap-2 font-bold">
           {kit.mark === "monogram" ? (
@@ -57,18 +62,20 @@ export function BrandPreview({ kit, name }: { kit: BrandKit; name: string }) {
           ) : null}
           <span>{name}</span>
         </span>
-        <span className="text-xs" style={{ color: accent }}>Contact</span>
+        <span className="text-xs" style={{ color: accent }}>{t("brand.contact")}</span>
       </div>
       <div className="px-4 py-5">
-        <p className="text-lg font-semibold leading-snug">{kit.tagline || "What this company does, in one line"}</p>
-        <p className="mt-1 text-sm" style={{ color: muted }}>{kit.voice.tone.length ? `Sounds ${kit.voice.tone.join(", ")}.` : "Add a few tone words to hear the voice."}</p>
-        <span className="mt-3 inline-block px-3 py-1.5 text-sm font-medium text-white" style={{ background: accent, borderRadius: radius }}>Get in touch</span>
+        <p className="text-lg font-semibold leading-snug">{kit.tagline || t("brand.taglineFallback")}</p>
+        <p className="mt-1 text-sm" style={{ color: muted }}>{kit.voice.tone.length ? tf("brand.sounds", { tone: kit.voice.tone.join(", ") }) : t("brand.addTone")}</p>
+        <span className="mt-3 inline-block px-3 py-1.5 text-sm font-medium text-white" style={{ background: accent, borderRadius: radius }}>{t("brand.getInTouch")}</span>
       </div>
     </div>
   );
 }
 
 export function BrandKitSettings({ company, profile }: { company: Company; profile: CompanyProfile | null }) {
+  const t = useT();
+  const tf = useTf();
   const router = useRouter();
   const [kit, setKit] = useState<BrandKit>(() => profile?.brand ?? emptyBrandKit());
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +88,7 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
     setKit((k) => ({ ...k, ...next }));
   }
 
-  const problem = brandKitProblem(kit);
+  const problem = brandKitProblem(kit, tf);
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -100,7 +107,7 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
       setSaved(true);
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the brand kit.");
+      setError(err instanceof ApiError ? err.message : t("brand.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -109,21 +116,21 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
   return (
     <form onSubmit={save} className="card nb-left-purple space-y-4" aria-labelledby="brand-kit-heading">
       <div>
-        <h2 id="brand-kit-heading" className="font-semibold">Brand kit</h2>
+        <h2 id="brand-kit-heading" className="font-semibold">{t("brand.title")}</h2>
         <p className="text-sm text-muted">
-          The few decisions every surface reuses: the site, posts, decks and launch copy all take their look and voice from here.
-          {brandKitDecided(kit) ? "" : " Nothing is decided yet, so agents fall back to the defaults below."}
+          {t("brand.intro")}
+          {brandKitDecided(kit) ? "" : t("brand.undecided")}
         </p>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_minmax(16rem,22rem)]">
         <div className="space-y-4">
           <label className="block">
-            <span className="label">Tagline</span>
-            <input className="input" value={kit.tagline} maxLength={160} onChange={(e) => patch({ tagline: e.target.value })} placeholder="One line that says what you do" />
+            <span className="label">{t("brand.tagline")}</span>
+            <input className="input" value={kit.tagline} maxLength={160} onChange={(e) => patch({ tagline: e.target.value })} placeholder={t("brand.taglinePlaceholder")} />
           </label>
 
           <fieldset>
-            <legend className="label">Accent</legend>
+            <legend className="label">{t("brand.accent")}</legend>
             <div className="flex flex-wrap gap-2">
               {SITE_ACCENTS.map((accent) => (
                 <label key={accent} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
@@ -137,39 +144,39 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
 
           <div className="grid gap-3 sm:grid-cols-3">
             <fieldset>
-              <legend className="label">Type</legend>
+              <legend className="label">{t("brand.type")}</legend>
               <div className="flex flex-col gap-1">
                 {SITE_FONTS.map((font) => (
                   <label key={font} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft" style={{ fontFamily: BRAND_FONT_STACK[font] }}>
                     <input type="radio" name="font" value={font} checked={kit.font === font} onChange={() => patch({ font })} />
-                    {FONT_LABEL[font]}
+                    {t(`brand.font.${font}` as MessageKey)}
                   </label>
                 ))}
               </div>
             </fieldset>
             <fieldset>
-              <legend className="label">Corners</legend>
+              <legend className="label">{t("brand.corners")}</legend>
               <div className="flex flex-col gap-1">
                 {SITE_RADII.map((radius) => (
                   <label key={radius} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft">
                     <input type="radio" name="radius" value={radius} checked={kit.radius === radius} onChange={() => patch({ radius })} />
-                    {RADIUS_LABEL[radius]}
+                    {t(`brand.radius.${radius}` as MessageKey)}
                   </label>
                 ))}
               </div>
             </fieldset>
             <fieldset>
-              <legend className="label">Mark</legend>
+              <legend className="label">{t("brand.mark")}</legend>
               <div className="flex flex-col gap-1">
                 {BRAND_MARKS.map((mark) => (
                   <label key={mark} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft">
                     <input type="radio" name="mark" value={mark} checked={kit.mark === mark} onChange={() => patch({ mark })} />
-                    {MARK_LABEL[mark]}
+                    {t(`brand.mark.${mark}` as MessageKey)}
                   </label>
                 ))}
                 <label className="mt-1 flex cursor-pointer items-center gap-2 text-sm">
                   <input type="checkbox" checked={kit.dark} onChange={(e) => patch({ dark: e.target.checked })} />
-                  Dark site
+                  {t("brand.darkSite")}
                 </label>
               </div>
             </fieldset>
@@ -177,28 +184,28 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
 
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
-              <span className="label">Tone (up to five words)</span>
-              <input className="input" defaultValue={kit.voice.tone.join(", ")} onChange={(e) => patch({ voice: { ...kit.voice, tone: words(e.target.value) } })} placeholder="plain, warm, exact" />
+              <span className="label">{t("brand.tone")}</span>
+              <input className="input" defaultValue={kit.voice.tone.join(", ")} onChange={(e) => patch({ voice: { ...kit.voice, tone: words(e.target.value) } })} placeholder={t("brand.tonePlaceholder")} />
             </label>
             <label className="block">
-              <span className="label">Do (one per line)</span>
-              <textarea className="input min-h-20" defaultValue={kit.voice.do.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, do: words(e.target.value) } })} placeholder="Name the number" />
+              <span className="label">{t("brand.do")}</span>
+              <textarea className="input min-h-20" defaultValue={kit.voice.do.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, do: words(e.target.value) } })} placeholder={t("brand.doPlaceholder")} />
             </label>
             <label className="block">
-              <span className="label">Don&apos;t (one per line)</span>
-              <textarea className="input min-h-20" defaultValue={kit.voice.dont.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, dont: words(e.target.value) } })} placeholder="Say &quot;leverage&quot;" />
+              <span className="label">{t("brand.dont")}</span>
+              <textarea className="input min-h-20" defaultValue={kit.voice.dont.join("\n")} onChange={(e) => patch({ voice: { ...kit.voice, dont: words(e.target.value) } })} placeholder={t("brand.dontPlaceholder")} />
             </label>
           </div>
         </div>
         <div className="space-y-2">
-          <span className="label">How the site will open</span>
+          <span className="label">{t("brand.preview")}</span>
           <BrandPreview kit={kit} name={name} />
         </div>
       </div>
       <div className="flex items-center justify-end gap-3">
         {error ? <span role="alert" className="text-sm text-danger">{error}</span> : problem ? <span className="text-sm text-danger">{problem}</span> : null}
-        {saved ? <span role="status" className="text-sm text-muted">Brand kit saved. New sites, posts and copy use it from now on.</span> : null}
-        <button className="btn btn-primary" disabled={busy || problem !== null}>{busy ? "Saving…" : "Save brand kit"}</button>
+        {saved ? <span role="status" className="text-sm text-muted">{t("brand.saved")}</span> : null}
+        <button className="btn btn-primary" disabled={busy || problem !== null}>{busy ? t("brand.saving") : t("brand.save")}</button>
       </div>
     </form>
   );
