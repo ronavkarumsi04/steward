@@ -135,7 +135,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
       {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
-      <form onSubmit={saveProfile} id="profile" className="card nb-left-green scroll-mt-20 space-y-3">
+      <form onSubmit={saveProfile} id="profile" className="card nb-left-green scroll-mt-[11rem] md:scroll-mt-32 space-y-3">
         <h2 className="font-semibold">{t("settings.profile")}</h2>
         <p className="text-sm text-muted">{t("settings.profileHelp")}</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -155,11 +155,11 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary">{t("settings.saveProfile")}</button></div>
       </form>
 
-      <div id="brand-kit" className="scroll-mt-20">
+      <div id="brand-kit" className="scroll-mt-[11rem] md:scroll-mt-32">
         <BrandKitSettings company={company} profile={profile} />
       </div>
 
-      <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue scroll-mt-20 space-y-3">
+      <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue scroll-mt-[11rem] md:scroll-mt-32 space-y-3">
         <h2 className="font-semibold">{t("settings.autonomy")}</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div><label className="block"><span className="label">{t("settings.companyName")}</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
@@ -182,7 +182,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>{t("settings.save")}</button></div>
       </form>
 
-      <Card title={t("settings.policies")} id="policies" className="nb-left-yellow scroll-mt-20">
+      <Card title={t("settings.policies")} id="policies" className="nb-left-yellow scroll-mt-[11rem] md:scroll-mt-32">
         <p className="mb-3 text-sm text-muted">{t("settings.policiesHelp")} <b>{t("policy.mode.deny")}</b> {t("settings.policiesDeny")} <b>{t("policy.mode.approve")}</b> {t("settings.policiesApprove")} <b>{t("policy.mode.allow")}</b> {t("settings.policiesAllow")}</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
@@ -191,7 +191,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
               <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
                 <div><div className="font-medium">{t(`dimension.${d.id}` as MessageKey)}</div><div className="mono text-xs text-muted">{d.id}</div></div>
                 <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select>
-                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {r}</option>)}</select>
+                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select>
                 <input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} />
                 <input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} />
                 <input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} />
@@ -202,21 +202,21 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange scroll-mt-20">
+      <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange scroll-mt-[11rem] md:scroll-mt-32">
         {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
           <table className="mb-4 w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
             <tbody>
               {budgets.map((b) => (
                 <tr key={`${b.category}-${b.period}`} className={`border-t border-line ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
-                  <td className="py-1">{b.category}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
+                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
-          <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+          <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select>
           <select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select>
           <input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} />
           <input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={t("settings.softThreshold")} />
@@ -225,7 +225,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title={t("settings.goals")} id="goals" className="nb-left-purple scroll-mt-20">
+      <Card title={t("settings.goals")} id="goals" className="nb-left-purple scroll-mt-[11rem] md:scroll-mt-32">
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -247,7 +247,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title={t("settings.controls")} id="controls" className="nb-left-red scroll-mt-20">
+      <Card title={t("settings.controls")} id="controls" className="nb-left-red scroll-mt-[11rem] md:scroll-mt-32">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
             <div className="font-medium">{t("settings.outboundPause")}</div>
@@ -271,7 +271,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <div id="overclock" className="scroll-mt-20">
+      <div id="overclock" className="scroll-mt-[11rem] md:scroll-mt-32">
         <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
       </div>
     </div>

@@ -134,7 +134,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
                         disabled={busyId === task.id}
                         onChange={(e) => move(task, e.target.value as TaskStatus)}
                       >
-                        {["backlog", "todo", "in_progress", "blocked", "review", "done", "cancelled"].map((s) => <option key={s} value={s}>{statusLabel(locale, s)}</option>)}
+                        {["backlog", "todo", "in_progress", "blocked", "waiting_approval", "review", "done", "cancelled"].map((s) => <option key={s} value={s}>{statusLabel(locale, s)}</option>)}
                       </select>
                       <Link href={`/app/c/${companyId}/runs?taskId=${task.id}`} className="btn btn-ghost btn-sm">{t("tasks.runs")}</Link>
                     </div>

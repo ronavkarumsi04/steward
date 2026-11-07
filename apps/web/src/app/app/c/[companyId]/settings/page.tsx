@@ -38,13 +38,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ compa
   return (
     <div className="space-y-4">
       <PageHeader eyebrow={t(locale, "settings.eyebrow")} title={t(locale, "settings.title")} description={t(locale, "settings.description")} />
-      <nav aria-label={t(locale, "settings.onThisPage")} className="segmented sticky top-[4.25rem] z-[var(--z-nav)] w-full overflow-x-auto">
+      <nav aria-label={t(locale, "settings.onThisPage")} className="segmented sticky top-[7rem] z-[var(--z-nav)] w-full overflow-x-auto md:top-[4.25rem]">
         {SECTIONS.map(([id]) => (
           <a key={id} href={`#${id}`} className="shrink-0">{t(locale, `settings.sec.${id}` as MessageKey)}</a>
         ))}
       </nav>
       <SettingsPanel company={o.company} profile={o.profile?.profile ?? null} policies={o.policies} budgets={o.budgets} goals={o.goals} isAdmin={isAdmin} />
-      <div id="routing" className="scroll-mt-20">
+      <div id="routing" className="scroll-mt-[11rem] md:scroll-mt-32">
         <RoutingPanel orgId={orgId} companyId={companyId} models={models} routing={routing} isAdmin={isAdmin} />
       </div>
     </div>
