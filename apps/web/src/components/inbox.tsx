@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useT, useTf } from "./locale-provider";
 import { useState } from "react";
 import type { Approval } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
@@ -19,6 +20,8 @@ export type InboxGroup = {
  * reads the same on a desk. A decided card stays until the page is left, so the outcome can be read.
  */
 export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGroup[]; manyOrgs: boolean; truncated?: boolean }) {
+  const t = useT();
+  const tf = useTf();
   // The answered card, kept whole: the server list is pending-only, so after the refresh this is the only
   // place its outcome (who decided, the note, whether the workflow took it) can still be read.
   const [decided, setDecided] = useState<Array<{ approval: Approval; companyId: string }>>([]);
@@ -29,13 +32,13 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
     <div className="mx-auto w-full max-w-[720px] px-3 py-5 sm:px-5 sm:py-8">
       <header className="mb-5 flex items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">Waiting on you</p>
+          <p className="eyebrow">{t("inbox.eyebrow")}</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl" style={{ fontStretch: "112%" }}>
-            Inbox
+            {t("inbox.title")}
           </h1>
         </div>
         <p className="text-right text-sm text-muted" aria-live="polite">
-          {waiting === 0 ? "Nothing pending" : waiting === 1 ? "1 request" : `${waiting} requests`}
+          {waiting === 0 ? t("inbox.nothingPending") : waiting === 1 ? t("inbox.oneRequest") : tf("inbox.nRequests", { n: waiting })}
         </p>
       </header>
       <PushToggle />
@@ -43,7 +46,7 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
       {decided.length > 0 && (
         <section aria-labelledby="inbox-decided" className="mb-7 space-y-3">
           <h2 id="inbox-decided" className="nb-section-label">
-            JUST DECIDED
+            {t("inbox.justDecided")}
           </h2>
           {decided.map((d) => (
             <ApprovalCard key={`decided-${d.approval.id}`} companyId={d.companyId} approval={d.approval} run={null} />
@@ -52,13 +55,13 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
       )}
 
       {groups.length === 0 && decided.length === 0 ? (
-        <section className="card nb-left-green p-5" aria-label="Inbox empty">
-          <h2 className="text-lg font-semibold">Nothing is waiting on you.</h2>
+        <section className="card nb-left-green p-5" aria-label={t("inbox.emptyLabel")}>
+          <h2 className="text-lg font-semibold">{t("inbox.emptyTitle")}</h2>
           <p className="mt-1 text-sm text-muted">
-            When an agent needs a decision — an email to send, a post to publish, money to spend — it appears here as the request itself, and you answer it in place.
+            {t("inbox.emptyHelp")}
           </p>
           <Link href="/app" className="btn btn-sm mt-4">
-            Your companies <Icon.ChevronRight size={14} />
+            {t("inbox.yourCompanies")} <Icon.ChevronRight size={14} />
           </Link>
         </section>
       ) : (
@@ -71,7 +74,7 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
                   {manyOrgs && <span className="ml-2 text-sm font-normal text-muted">{g.orgName}</span>}
                 </h2>
                 <Link href={`/app/c/${g.company.id}/approvals`} className="text-sm text-muted underline-offset-4 hover:underline">
-                  All approvals
+                  {t("inbox.allApprovals")}
                 </Link>
               </div>
               {g.approvals
@@ -85,11 +88,11 @@ export function Inbox({ groups, manyOrgs, truncated = false }: { groups: InboxGr
       )}
       {truncated && (
         <p className="mt-6 text-sm text-muted" role="note">
-          Showing the newest 200 requests. Older ones are on each company's Approvals page.
+          {t("inbox.truncated")}
         </p>
       )}
       <p className="mt-8 text-xs leading-relaxed text-muted">
-        Add Steward to your home screen to open this inbox like an app. The decision you make here is the same record the workspace shows.
+        {t("inbox.homeScreen")}
       </p>
     </div>
   );

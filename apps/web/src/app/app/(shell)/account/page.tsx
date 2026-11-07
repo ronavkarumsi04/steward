@@ -2,10 +2,13 @@ import Link from "next/link";
 import { LEGAL_DOCUMENTS } from "@steward/legal";
 import { LanguageSelect } from "@/components/language-select";
 import { DeleteAccountForm, MarketingConsentToggle } from "@/components/privacy-controls";
-import { requireMe, serverApi } from "@/lib/server";
+import { getLocale, requireMe, serverApi } from "@/lib/server";
+import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { PendingAgreement } from "@/lib/types";
 
-export const metadata = { title: "Account and privacy" };
+export async function generateMetadata() {
+  return { title: t(await getLocale(), "account.title") };
+}
 
 interface AgreementRecord {
   id: string;
@@ -28,6 +31,8 @@ interface PrivacyRequestRecord {
 
 export default async function AccountPage() {
   const [me, api] = await Promise.all([requireMe("/app/account"), serverApi()]);
+  const locale = await getLocale();
+  const T = (key: MessageKey) => t(locale, key);
   const [agreements, requests, marketing] = await Promise.all([
     api.get<{ accepted: Array<{ document: string; version: string; acceptedAt: string }>; history: AgreementRecord[]; pending: PendingAgreement[]; versions: Record<string, string> }>("/auth/agreements"),
     api.get<{ requests: PrivacyRequestRecord[] }>("/privacy/requests").catch(() => ({ requests: [] as PrivacyRequestRecord[] })),
@@ -41,29 +46,31 @@ export default async function AccountPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Account and privacy</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{T("account.title")}</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          Your personal data controls. Export and deletion here act on your account; organization data is exported and deleted from that organization's Data &amp; privacy page.
+          {T("account.intro")}
         </p>
       </header>
 
       <section className="card p-5" aria-labelledby="agreements">
         <h2 id="agreements" className="text-[15px] font-semibold">
-          What you have agreed to
+          {T("account.agreed")}
         </h2>
-        <p className="mt-1 text-sm text-muted">Each acceptance is stored with its version, the time, and the device you accepted from.</p>
+        <p className="mt-1 text-sm text-muted">{T("account.agreedHelp")}</p>
         {agreements.pending.length > 0 && (
           <p role="alert" className="nb-panel-flat nb-left-red mt-3 px-3 py-2 text-sm text-danger">
-            You have {agreements.pending.length} outstanding {agreements.pending.length === 1 ? "acceptance" : "acceptances"}: {agreements.pending.map((p) => p.title).join(", ")}.
+            {agreements.pending.length === 1
+              ? tf(locale, "account.outstandingOne", { titles: agreements.pending.map((p) => p.title).join(", ") })
+              : tf(locale, "account.outstandingMany", { n: agreements.pending.length, titles: agreements.pending.map((p) => p.title).join(", ") })}
           </p>
         )}
         <table className="mt-4 w-full border-collapse text-left text-sm">
-          <caption className="sr-only">Agreement acceptance history</caption>
+          <caption className="sr-only">{T("account.historyCaption")}</caption>
           <thead>
             <tr>
-              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Document</th>
-              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Version</th>
-              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">Accepted</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">{T("account.colDocument")}</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">{T("account.colVersion")}</th>
+              <th scope="col" className="border border-line bg-panel-2 px-3 py-2 font-semibold">{T("account.colAccepted")}</th>
             </tr>
           </thead>
           <tbody>
@@ -84,40 +91,40 @@ export default async function AccountPage() {
 
       <section className="card p-5" aria-labelledby="preferences">
         <h2 id="preferences" className="text-[15px] font-semibold">
-          Communication preferences
+          {T("account.comms")}
         </h2>
         <div className="mt-3">
           <MarketingConsentToggle optedIn={marketingOn} />
-          {marketing.marketing.optedIn === null && <p className="mt-2 text-xs text-muted">You have not made a choice yet — marketing email is off by default.</p>}
+          {marketing.marketing.optedIn === null && <p className="mt-2 text-xs text-muted">{T("account.marketingUnset")}</p>}
         </div>
       </section>
 
       <section className="card p-5" aria-labelledby="export">
         <h2 id="export" className="text-[15px] font-semibold">
-          Export your data
+          {T("account.export")}
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          A machine-readable JSON archive. Secrets, session tokens and API key hashes are deliberately excluded — see the manifest inside the file for the list and why.
+          {T("account.exportHelp")}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a href="/api/v1/privacy/export" className="btn btn-primary h-10" download>
-            Download my personal data
+            {T("account.download")}
           </a>
           {me.memberships.map((m) => (
             <a key={m.organizationId} href={`/api/v1/privacy/export?organizationId=${m.organizationId}`} className="btn h-10" download>
-              {m.name} (organization)
+              {tf(locale, "account.orgExport", { name: m.name })}
             </a>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted">Every export you run is logged as a privacy request so you have a record of it.</p>
+        <p className="mt-3 text-xs text-muted">{T("account.exportLogged")}</p>
       </section>
 
       <section className="card p-5" aria-labelledby="requests">
         <h2 id="requests" className="text-[15px] font-semibold">
-          Your privacy requests
+          {T("account.requests")}
         </h2>
         {requests.requests.length === 0 ? (
-          <p className="mt-1 text-sm text-muted">No requests yet.</p>
+          <p className="mt-1 text-sm text-muted">{T("account.noRequests")}</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {requests.requests.map((r) => (
@@ -131,16 +138,16 @@ export default async function AccountPage() {
           </ul>
         )}
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          Need a correction, an objection, or help with a request? Contact the channel on the <Link href="/legal/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link> page — we log it and answer within the period the law allows.
+          {T("account.contactBefore")} <Link href="/legal/privacy" className="font-medium text-accent hover:underline">{T("account.privacyPolicy")}</Link> page — we log it and answer within the period the law allows.
         </p>
       </section>
 
       <section className="card border-danger p-5" aria-labelledby="danger">
         <h2 id="danger" className="text-[15px] font-semibold text-danger">
-          Delete your account
+          {T("account.delete")}
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          Read the <Link href="/legal/retention" className="font-medium text-accent hover:underline">Retention Policy</Link> first: it lists exactly what deletion removes and the two things it keeps.
+          {T("account.deleteBefore")} <Link href="/legal/retention" className="font-medium text-accent hover:underline">{T("account.retentionPolicy")}</Link>: it lists exactly what deletion removes and the two things it keeps.
         </p>
         <div className="mt-3">
           <DeleteAccountForm />
@@ -151,19 +158,18 @@ export default async function AccountPage() {
           already is, and because the interface is something you are entitled to read. */}
       <section className="card p-5" aria-labelledby="interface">
         <h2 id="interface" className="text-[15px] font-semibold">
-          The interface itself
+          {T("account.interface")}
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          The design system — colour, surfaces, state, layering, and the motion rules with a bar you can rescale
-          — rendered live rather than described.
+          {T("account.interfaceHelp")}
         </p>
         <LanguageSelect current={me.user.locale} />
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          The workspace navigation reads in the language you pick; the rest of the interface follows as the catalog grows.
+          {T("account.languageHelp")}
         </p>
         <p className="mt-3">
           <Link href="/app/design" className="btn">
-            Open the design system
+            {T("account.openDesign")}
           </Link>
         </p>
       </section>
