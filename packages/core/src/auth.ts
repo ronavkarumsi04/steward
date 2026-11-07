@@ -20,6 +20,7 @@ export interface SessionUser {
   name: string;
   emailVerified: boolean;
   isSuperadmin: boolean;
+  locale: string;
 }
 
 export interface RegisterAgreement {
@@ -198,6 +199,11 @@ export class AuthService {
     await this.revokeAllSessions(userId);
   }
 
+  /** Interface language. Validated by the route (a short allowlist), stored as a BCP 47 tag. */
+  async setLocale(userId: string, locale: string): Promise<void> {
+    await this.db.update(users).set({ locale, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
   async hasAnyUsers(): Promise<boolean> {
     const [row] = await this.db.select({ id: users.id }).from(users).limit(1);
     return Boolean(row);
@@ -243,7 +249,7 @@ export class AuthService {
 }
 
 function toSessionUser(u: typeof users.$inferSelect): SessionUser {
-  return { id: u.id, email: u.email, name: u.name, emailVerified: Boolean(u.emailVerifiedAt), isSuperadmin: u.isSuperadmin };
+  return { id: u.id, email: u.email, name: u.name, emailVerified: Boolean(u.emailVerifiedAt), isSuperadmin: u.isSuperadmin, locale: u.locale ?? "en" };
 }
 
 const ROLE_RANK: Record<Role, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };

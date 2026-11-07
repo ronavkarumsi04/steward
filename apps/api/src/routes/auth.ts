@@ -7,6 +7,9 @@ import { HttpError, orgScope, requireUser, type ApiDeps, type AppEnv, param } fr
 import { clearSessionCookie, clientIp, rateLimit, setSessionCookie } from "../middleware.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 
+/** Interface languages the web app ships a catalog for; kept in step with apps/web/src/lib/i18n.ts. */
+const LOCALES = ["en", "es"] as const;
+
 const Credentials = z.object({ email: z.email(), password: z.string().min(10).max(200) });
 const RESET_TOKEN_TTL_MS = 1000 * 60 * 30;
 
@@ -153,6 +156,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const accepted = await new PrivacyService(c.get("deps").core.db).acceptedFor(user.id);
     c.header("cache-control", "no-store");
     return c.json({ user, memberships: c.get("memberships") ?? [], pendingAgreements: pendingAgreements(accepted) });
+  });
+
+  defineRoute(app, reg, { method: "patch", path: "/auth/me", tag: "auth", summary: "Update the signed-in user's own preferences (interface language)", body: z.object({ locale: z.enum(LOCALES) }) }, async (c, body) => {
+    const user = requireUser(c);
+    await c.get("deps").auth.setLocale(user.id, body.locale);
+    c.header("cache-control", "no-store");
+    return c.json({ user: { ...user, locale: body.locale } });
   });
 
   defineRoute(app, reg, { method: "post", path: "/auth/password", tag: "auth", summary: "Change password (requires current password)", body: z.object({ currentPassword: z.string(), newPassword: z.string().min(10).max(200) }) }, async (c, { body }) => {

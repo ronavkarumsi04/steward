@@ -29,6 +29,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   name: text("name").notNull().default(""),
   avatarUrl: text("avatar_url"),
+  /** BCP 47 tag of the interface language the person chose; "en" until they pick another. */
+  locale: text("locale").notNull().default("en"),
   isSuperadmin: boolean("is_superadmin").notNull().default(false),
   // Optional marketing consent, kept separate from the contractual clickwrap: consent must be a
   // distinct, freely given act, and it has to be withdrawable without affecting the account.
