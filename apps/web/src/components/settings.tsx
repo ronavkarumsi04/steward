@@ -204,7 +204,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
 
       <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange scroll-mt-[11rem] md:scroll-mt-32">
         {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
-          <table className="mb-4 w-full text-sm">
+          <div className="table-wrap mb-4"><table className="table text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
             <tbody>
               {budgets.map((b) => (
@@ -213,7 +213,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
           <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select>
