@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LEGAL_DOCUMENTS } from "@steward/legal";
+import { LanguageSelect } from "@/components/language-select";
 import { DeleteAccountForm, MarketingConsentToggle } from "@/components/privacy-controls";
 import { requireMe, serverApi } from "@/lib/server";
 import type { PendingAgreement } from "@/lib/types";
@@ -155,6 +156,10 @@ export default async function AccountPage() {
         <p className="mt-1 text-sm leading-relaxed text-muted">
           The design system — colour, surfaces, state, layering, and the motion rules with a bar you can rescale
           — rendered live rather than described.
+        </p>
+        <LanguageSelect current={me.user.locale} />
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          The workspace navigation reads in the language you pick; the rest of the interface follows as the catalog grows.
         </p>
         <p className="mt-3">
           <Link href="/app/design" className="btn">

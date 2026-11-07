@@ -7,6 +7,8 @@ export interface User {
   name: string;
   emailVerified: boolean;
   isSuperadmin: boolean;
+  /** BCP 47 tag of the interface language; absent on older sessions. */
+  locale?: string;
 }
 export interface Membership {
   organizationId: string;

@@ -7,15 +7,17 @@ import { browserApi } from "@/lib/api";
 import type { Me } from "@/lib/types";
 import { Icon } from "./icons";
 import { ThemeToggle } from "./feedback";
+import { useT } from "./locale-provider";
 
 const ORG_LINKS = [
-  ["providers", "Providers", Icon.Providers],
-  ["integrations", "Integrations", Icon.Integrations],
-  ["members", "Members", Icon.Members],
-  ["privacy", "Data & privacy", Icon.Lock],
+  ["providers", "top.providers", Icon.Providers],
+  ["integrations", "top.integrations", Icon.Integrations],
+  ["members", "top.members", Icon.Members],
+  ["privacy", "top.privacy", Icon.Lock],
 ] as const;
 
 export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
+  const t = useT();
   const router = useRouter();
   const path = usePathname();
   const [busy, setBusy] = useState(false);
@@ -62,8 +64,8 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
               return (
                 <Link key={slug} href={href} aria-current={active ? "page" : undefined} className="gap-1.5">
                   <Glyph size={16} />
-                  <span className="hidden sm:inline">{label}</span>
-                  <span className="sr-only sm:hidden">{label}</span>
+                  <span className="hidden sm:inline">{t(label)}</span>
+                  <span className="sr-only sm:hidden">{t(label)}</span>
                 </Link>
               );
             })}
@@ -73,18 +75,18 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         <div className="flex items-center gap-2 text-sm">
           <Link href="/app/inbox" className="btn btn-sm" aria-current={path.startsWith("/app/inbox") ? "page" : undefined}>
             <Icon.Approvals size={14} />
-            <span className="hidden sm:inline">Inbox</span>
-            <span className="sr-only sm:hidden">Inbox: everything waiting on you</span>
+            <span className="hidden sm:inline">{t("top.inbox")}</span>
+            <span className="sr-only sm:hidden">{t("top.inboxLong")}</span>
           </Link>
           <Link href="/app/account" className="btn btn-sm" title={me.user?.email} aria-current={path.startsWith("/app/account") ? "page" : undefined}>
             <Icon.Lock size={14} />
-            <span className="hidden sm:inline">Account</span>
-            <span className="sr-only sm:hidden">Account and privacy</span>
+            <span className="hidden sm:inline">{t("top.account")}</span>
+            <span className="sr-only sm:hidden">{t("top.accountLong")}</span>
           </Link>
           <ThemeToggle />
           <button className="btn btn-sm" onClick={logout} disabled={busy}>
             {busy ? <span className="spinner" aria-hidden="true" /> : null}
-            Sign out
+            {t("top.signOut")}
           </button>
         </div>
       </div>
