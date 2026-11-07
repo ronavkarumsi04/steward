@@ -126,7 +126,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
                     <div className="tnum font-medium">{usd(row.costUsd)}</div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-                    <span>{f("finance.calls", { n: row.calls })}</span><span>{f("finance.in", { n: row.inputTokens.toLocaleString() })}</span><span>{f("finance.out", { n: row.outputTokens.toLocaleString() })}</span><span className={row.errors ? "text-danger" : ""}>{f("finance.errorMany", { n: row.errors })}</span>
+                    <span>{row.calls === 1 ? t("finance.callOne") : f("finance.calls", { n: row.calls })}</span><span>{f("finance.in", { n: row.inputTokens.toLocaleString() })}</span><span>{f("finance.out", { n: row.outputTokens.toLocaleString() })}</span><span className={row.errors ? "text-danger" : ""}>{f("finance.errorMany", { n: row.errors })}</span>
                   </div>
                 </div>
               ))}

@@ -64,6 +64,7 @@
   /* Layering. Named rungs, so a new overlay has an obvious place to sit. */
   --z-sticky-cell: 1;
   --z-nav: 30;
+  --z-sidebar: 20;
   --z-modal: 50;
   --z-overlay: 100;
   --z-toast: 200;
