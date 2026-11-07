@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import { requireMe, serverApi } from "@/lib/server";
+import { getLocale, requireMe, serverApi } from "@/lib/server";
+import { t } from "@/lib/i18n";
 import type { Approval, Company } from "@/lib/types";
 import { Inbox, type InboxGroup } from "@/components/inbox";
 
-export const metadata: Metadata = { title: "Inbox" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLocale(), "inbox.title") };
+}
 
 /** The API's maximum page. Beyond it the inbox says so and points at each company's own Approvals page. */
 const INBOX_PAGE = 200;
