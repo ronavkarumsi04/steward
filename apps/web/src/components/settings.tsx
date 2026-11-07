@@ -2,30 +2,33 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { AUTONOMY_LABELS, type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
+import { type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
 import { BrandKitSettings } from "./brand-kit-settings";
 import { Card, Empty, StatusPill, usd } from "./ui";
+import { useLocale, useT, useTf } from "./locale-provider";
+import { statusLabel, type MessageKey } from "@/lib/i18n";
 
-const DIMENSIONS: Array<{ id: PolicyDimension; label: string }> = [
-  { id: "ai_spend", label: "AI spend" },
-  { id: "infra_spend", label: "Infrastructure spend" },
-  { id: "ad_spend", label: "Ad spend" },
-  { id: "email_send", label: "Sending email" },
-  { id: "social_publish", label: "Publishing to social" },
-  { id: "code_deploy", label: "Deploying code (non-prod)" },
-  { id: "prod_deploy", label: "Deploying to production" },
-  { id: "db_mutation", label: "Mutating databases" },
-  { id: "customer_comms", label: "Contacting customers" },
-  { id: "payments", label: "Moving money" },
-  { id: "external_write", label: "Other external writes" },
+const DIMENSIONS: Array<{ id: PolicyDimension }> = [
+  { id: "ai_spend" },
+  { id: "infra_spend" },
+  { id: "ad_spend" },
+  { id: "email_send" },
+  { id: "social_publish" },
+  { id: "code_deploy" },
+  { id: "prod_deploy" },
+  { id: "db_mutation" },
+  { id: "customer_comms" },
+  { id: "payments" },
+  { id: "external_write" },
 ];
 const BUDGET_CATEGORIES: Budget["category"][] = ["total", "ai", "infra", "ads", "messaging", "payments"];
 
 function useAction() {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   async function run(label: string, fn: () => Promise<unknown>) {
@@ -36,7 +39,7 @@ function useAction() {
       setSaved(label);
       router.refresh();
     } catch (e) {
-      setError(e instanceof ApiError ? (e.status === 403 ? "You need the admin role to change this." : e.message) : "Request failed");
+      setError(e instanceof ApiError ? (e.status === 403 ? t("settings.adminOnly") : e.message) : t("settings.requestFailed"));
     }
   }
   return { run, error, saved };
@@ -44,6 +47,9 @@ function useAction() {
 
 export function SettingsPanel({ company, profile, policies, budgets, goals, isAdmin }: { company: Company; profile: CompanyProfile | null; policies: Policy[]; budgets: Budget[]; goals: Goal[]; isAdmin: boolean }) {
   const { run, error, saved } = useAction();
+  const t = useT();
+  const tf = useTf();
+  const locale = useLocale();
   const base = `/companies/${company.id}`;
   const list = (s: string) => s.split(/\n|,/).map((x) => x.trim()).filter(Boolean);
 
@@ -52,7 +58,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     const fd = new FormData(e.currentTarget);
     const qs = String(fd.get("quietStart") ?? "");
     const qe = String(fd.get("quietEnd") ?? "");
-    void run("Company settings saved", () =>
+    void run(t("settings.msg.companySaved"), () =>
       browserApi.patch(base, {
         name: String(fd.get("name")),
         autonomyLevel: Number(fd.get("autonomy")) as AutonomyLevel,
@@ -80,7 +86,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       constraints: list(String(fd.get("constraints") ?? "")),
       techStack: list(String(fd.get("techStack") ?? "")),
     };
-    void run("Profile saved", () => browserApi.put(`${base}/profile`, body));
+    void run(t("settings.msg.profileSaved"), () => browserApi.put(`${base}/profile`, body));
   }
 
   function savePolicy(dim: PolicyDimension, e: FormEvent<HTMLFormElement>) {
@@ -90,7 +96,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       const v = String(fd.get(k) ?? "").trim();
       return v ? Number(v) : undefined;
     };
-    void run(`Policy for ${dim} saved`, () =>
+    void run(tf("settings.msg.policySaved", { dim: t(`dimension.${dim}` as MessageKey) }), () =>
       browserApi.put(`${base}/policies`, {
         dimension: dim,
         mode: String(fd.get("mode")),
@@ -103,7 +109,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
   function saveBudget(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    void run("Budget saved", () =>
+    void run(t("settings.msg.budgetSaved"), () =>
       browserApi.put(`${base}/budgets`, {
         category: String(fd.get("category")),
         period: String(fd.get("period")),
@@ -118,7 +124,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
-    void run("Goal added", async () => {
+    void run(t("settings.msg.goalAdded"), async () => {
       await browserApi.post(`${base}/goals`, { title: String(fd.get("title")), metric: String(fd.get("metric") ?? ""), target: String(fd.get("target") ?? ""), horizon: String(fd.get("horizon") ?? ""), priority: Number(fd.get("priority") || 3) });
       form.reset();
     });
@@ -130,23 +136,23 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
 
       {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
       <form onSubmit={saveProfile} id="profile" className="card nb-left-green scroll-mt-20 space-y-3">
-        <h2 className="font-semibold">Company profile</h2>
-        <p className="text-sm text-muted">This is what every agent reads first. Keep it accurate; agents update it too as they learn.</p>
+        <h2 className="font-semibold">{t("settings.profile")}</h2>
+        <p className="text-sm text-muted">{t("settings.profileHelp")}</p>
         <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="block"><span className="label">Name</span><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></label></div>
-          <div><label className="block"><span className="label">Tagline</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
-          <div className="md:col-span-2"><label className="block"><span className="label">Description</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Website</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
-          <div><label className="block"><span className="label">Stage</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s}>{s}</option>)}</select></label></div>
-          <div><label className="block"><span className="label">Business model</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Value proposition</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
-          <div><label className="block"><span className="label">Target customers (one per line)</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Channels (one per line)</span><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Constraints — things agents must never do</span><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></label></div>
-          <div><label className="block"><span className="label">Tech stack</span><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></label></div>
-          <div className="md:col-span-2"><label className="block"><span className="label">Brand voice</span><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.name")}</span><input name="pname" className="input" defaultValue={profile?.name ?? company.name} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.tagline")}</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">{t("settings.descriptionField")}</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.website")}</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
+          <div><label className="block"><span className="label">{t("settings.stage")}</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s} value={s}>{t(`stage.${s}` as MessageKey)}</option>)}</select></label></div>
+          <div><label className="block"><span className="label">{t("settings.businessModel")}</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.valueProposition")}</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.targetCustomers")}</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.channels")}</span><textarea name="channels" className="input" defaultValue={(profile?.channels ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.constraints")}</span><textarea name="constraints" className="input" defaultValue={(profile?.constraints ?? []).join("\n")} /></label></div>
+          <div><label className="block"><span className="label">{t("settings.techStack")}</span><textarea name="techStack" className="input" defaultValue={(profile?.techStack ?? []).join("\n")} /></label></div>
+          <div className="md:col-span-2"><label className="block"><span className="label">{t("settings.brandVoice")}</span><input name="brandVoice" className="input" defaultValue={profile?.brandVoice ?? ""} /></label></div>
         </div>
-        <div className="flex justify-end"><button className="btn btn-primary">Save profile</button></div>
+        <div className="flex justify-end"><button className="btn btn-primary">{t("settings.saveProfile")}</button></div>
       </form>
 
       <div id="brand-kit" className="scroll-mt-20">
@@ -154,114 +160,114 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       </div>
 
       <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue scroll-mt-20 space-y-3">
-        <h2 className="font-semibold">Autonomy &amp; schedule</h2>
+        <h2 className="font-semibold">{t("settings.autonomy")}</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          <div><label className="block"><span className="label">Company name</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
-          <div><label className="block"><span className="label">Timezone (IANA)</span><input name="timezone" className="input" defaultValue={company.timezone} placeholder="UTC" /></label></div>
+          <div><label className="block"><span className="label">{t("settings.companyName")}</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
+          <div><label className="block"><span className="label">{t("settings.timezone")}</span><input name="timezone" className="input" defaultValue={company.timezone} placeholder="UTC" /></label></div>
           <div className="md:col-span-2">
-            <label className="label">Autonomy level</label>
+            <label className="label">{t("settings.autonomyLevel")}</label>
             <div className="grid gap-2 md:grid-cols-5">
               {([0, 1, 2, 3, 4] as AutonomyLevel[]).map((l) => (
                 <label key={l} className="nb-panel-flat flex cursor-pointer items-start gap-2 p-2 text-sm has-[:checked]:border-accent">
                   <input type="radio" name="autonomy" value={l} defaultChecked={company.autonomyLevel === l} className="mt-1" />
-                  <span><span className="font-medium">{l} · {AUTONOMY_LABELS[l]}</span></span>
+                  <span><span className="font-medium">{l} · {t(`autonomy.${l}` as MessageKey)}</span></span>
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-muted">Critical-risk actions always require approval regardless of level. Policies below can be stricter per dimension.</p>
+            <p className="mt-1 text-xs text-muted">{t("settings.autonomyHelp")}</p>
           </div>
-          <div><label className="block"><span className="label">Quiet hours start (HH:MM, local)</span><input name="quietStart" className="input" defaultValue={company.quietHours?.start ?? ""} placeholder="22:00" pattern="\d{2}:\d{2}" /></label></div>
-          <div><label className="block"><span className="label">Quiet hours end</span><input name="quietEnd" className="input" defaultValue={company.quietHours?.end ?? ""} placeholder="07:00" pattern="\d{2}:\d{2}" /></label></div>
+          <div><label className="block"><span className="label">{t("settings.quietStart")}</span><input name="quietStart" className="input" defaultValue={company.quietHours?.start ?? ""} placeholder="22:00" pattern="\d{2}:\d{2}" /></label></div>
+          <div><label className="block"><span className="label">{t("settings.quietEnd")}</span><input name="quietEnd" className="input" defaultValue={company.quietHours?.end ?? ""} placeholder="07:00" pattern="\d{2}:\d{2}" /></label></div>
         </div>
-        <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>Save</button></div>
+        <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>{t("settings.save")}</button></div>
       </form>
 
-      <Card title="Policies" id="policies" className="nb-left-yellow scroll-mt-20">
-        <p className="mb-3 text-sm text-muted">Per-dimension rules evaluated before every tool call. <b>deny</b> blocks outright, <b>approve</b> always asks you, <b>allow</b> lets the agent proceed up to the chosen risk level and within the limits.</p>
+      <Card title={t("settings.policies")} id="policies" className="nb-left-yellow scroll-mt-20">
+        <p className="mb-3 text-sm text-muted">{t("settings.policiesHelp")} <b>{t("policy.mode.deny")}</b> {t("settings.policiesDeny")} <b>{t("policy.mode.approve")}</b> {t("settings.policiesApprove")} <b>{t("policy.mode.allow")}</b> {t("settings.policiesAllow")}</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
             const p = policies.find((x) => x.dimension === d.id);
             return (
               <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
-                <div><div className="font-medium">{d.label}</div><div className="mono text-xs text-muted">{d.id}</div></div>
-                <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label="Mode">{["deny", "approve", "allow"].map((m) => <option key={m}>{m}</option>)}</select>
-                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label="Max risk without approval"><option value="">risk: default</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {r}</option>)}</select>
-                <input name="perActionUsd" className="input" placeholder="$/action" defaultValue={p?.limits.perActionUsd ?? ""} aria-label="Per action USD" />
-                <input name="perDayUsd" className="input" placeholder="$/day" defaultValue={p?.limits.perDayUsd ?? ""} aria-label="Per day USD" />
-                <input name="perDayCount" className="input" placeholder="#/day" defaultValue={p?.limits.perDayCount ?? ""} aria-label="Per day count" />
-                <button className="btn" disabled={!isAdmin}>Save</button>
+                <div><div className="font-medium">{t(`dimension.${d.id}` as MessageKey)}</div><div className="mono text-xs text-muted">{d.id}</div></div>
+                <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select>
+                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {r}</option>)}</select>
+                <input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} />
+                <input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} />
+                <input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} />
+                <button className="btn" disabled={!isAdmin}>{t("settings.save")}</button>
               </form>
             );
           })}
         </div>
       </Card>
 
-      <Card title="Budgets" id="budgets" className="nb-left-orange scroll-mt-20">
-        {budgets.length === 0 ? <Empty>No budgets set — agents cannot spend until a budget exists.</Empty> : (
+      <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange scroll-mt-20">
+        {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
           <table className="mb-4 w-full text-sm">
-            <thead className="text-left text-xs text-muted"><tr><th className="py-1">Category</th><th>Period</th><th>Limit</th><th>Spent</th><th>Reserved</th><th>Remaining</th><th>Hard stop</th></tr></thead>
+            <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
             <tbody>
               {budgets.map((b) => (
                 <tr key={`${b.category}-${b.period}`} className={`border-t border-line ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
-                  <td className="py-1">{b.category}</td><td>{b.period}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? "yes" : "soft"}</td>
+                  <td className="py-1">{b.category}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
-          <select name="category" className="input" aria-label="Category">{BUDGET_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
-          <select name="period" className="input" aria-label="Period" defaultValue="monthly"><option>monthly</option><option>daily</option></select>
-          <input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder="Limit USD" required aria-label="Limit USD" />
-          <input name="soft" type="number" min={1} max={100} className="input" placeholder="Warn at %" defaultValue={80} aria-label="Soft threshold" />
-          <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" name="hardStop" defaultChecked /> hard stop</label>
-          <button className="btn btn-primary" disabled={!isAdmin}>Set</button>
+          <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+          <select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select>
+          <input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} />
+          <input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={t("settings.softThreshold")} />
+          <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
+          <button className="btn btn-primary" disabled={!isAdmin}>{t("settings.set")}</button>
         </form>
       </Card>
 
-      <Card title="Goals" id="goals" className="nb-left-purple scroll-mt-20">
+      <Card title={t("settings.goals")} id="goals" className="nb-left-purple scroll-mt-20">
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <div><span className="font-medium">{g.title}</span> <span className="text-xs text-muted">{g.metric && `${g.metric} → ${g.target}`} {g.horizon} · P{g.priority}</span></div>
-              <div className="flex items-center gap-1"><StatusPill status={g.status} />
-                {g.status === "active" && <button className="btn px-2 py-0.5 text-xs" onClick={() => run("Goal achieved", () => browserApi.patch(`${base}/goals/${g.id}`, { status: "achieved" }))}>Mark achieved</button>}
-                {g.status === "active" ? <button className="btn px-2 py-0.5 text-xs" onClick={() => run("Goal paused", () => browserApi.patch(`${base}/goals/${g.id}`, { status: "paused" }))}>Pause</button> : g.status === "paused" && <button className="btn px-2 py-0.5 text-xs" onClick={() => run("Goal resumed", () => browserApi.patch(`${base}/goals/${g.id}`, { status: "active" }))}>Resume</button>}
+              <div className="flex items-center gap-1"><StatusPill status={g.status} label={statusLabel(locale, g.status)} />
+                {g.status === "active" && <button className="btn px-2 py-0.5 text-xs" onClick={() => run(t("settings.msg.goalAchieved"), () => browserApi.patch(`${base}/goals/${g.id}`, { status: "achieved" }))}>{t("settings.markAchieved")}</button>}
+                {g.status === "active" ? <button className="btn px-2 py-0.5 text-xs" onClick={() => run(t("settings.msg.goalPaused"), () => browserApi.patch(`${base}/goals/${g.id}`, { status: "paused" }))}>{t("settings.pause")}</button> : g.status === "paused" && <button className="btn px-2 py-0.5 text-xs" onClick={() => run(t("settings.msg.goalResumed"), () => browserApi.patch(`${base}/goals/${g.id}`, { status: "active" }))}>{t("settings.resume")}</button>}
               </div>
             </li>
           ))}
         </ul>
         <form onSubmit={addGoal} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
-          <input name="title" className="input" placeholder="Goal, e.g. Reach 100 paying customers" required aria-label="Goal title" />
-          <input name="metric" className="input" placeholder="Metric" aria-label="Metric" />
-          <input name="target" className="input" placeholder="Target" aria-label="Target" />
-          <input name="horizon" className="input" placeholder="Horizon (Q3)" aria-label="Horizon" />
-          <select name="priority" className="input" defaultValue={3} aria-label="Priority">{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select>
-          <button className="btn btn-primary">Add</button>
+          <input name="title" className="input" placeholder={t("settings.goalPlaceholder")} required aria-label={t("settings.goalTitle")} />
+          <input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} />
+          <input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} />
+          <input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} />
+          <select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select>
+          <button className="btn btn-primary">{t("settings.add")}</button>
         </form>
       </Card>
 
-      <Card title="Controls" id="controls" className="nb-left-red scroll-mt-20">
+      <Card title={t("settings.controls")} id="controls" className="nb-left-red scroll-mt-20">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
-            <div className="font-medium">Outbound pause</div>
-            <p className="text-muted">Stops every externally-visible action (email, social, deploys, payments) immediately. In-flight runs pause at their next tool call. Agents can still think, research and draft.</p>
+            <div className="font-medium">{t("settings.outboundPause")}</div>
+            <p className="text-muted">{t("settings.outboundHelp")}</p>
           </div>
-          <button className={`btn ${company.outboundPaused ? "btn-primary" : "btn-danger"}`} disabled={!isAdmin} onClick={() => run(company.outboundPaused ? "Outbound actions resumed" : "Outbound actions paused", () => browserApi.patch(base, { outboundPaused: !company.outboundPaused }))}>
-            {company.outboundPaused ? "Resume outbound actions" : "Pause all outbound actions"}
+          <button className={`btn ${company.outboundPaused ? "btn-primary" : "btn-danger"}`} disabled={!isAdmin} onClick={() => run(company.outboundPaused ? t("settings.msg.outboundResumed") : t("settings.msg.outboundPaused"), () => browserApi.patch(base, { outboundPaused: !company.outboundPaused }))}>
+            {company.outboundPaused ? t("settings.resumeOutbound") : t("settings.pauseOutbound")}
           </button>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <div className="flex-1 text-sm">
-            <div className="font-medium">Company status: <StatusPill status={company.status} /></div>
-            <p className="text-muted">Paused companies do not start new runs or fire schedules. Archiving hides the company but keeps every record.</p>
+            <div className="font-medium">{t("settings.companyStatus")} <StatusPill status={company.status} label={statusLabel(locale, company.status)} /></div>
+            <p className="text-muted">{t("settings.statusHelp")}</p>
           </div>
           {company.status === "active" ? (
-            <button className="btn" disabled={!isAdmin} onClick={() => run("Company paused", () => browserApi.patch(base, { status: "paused" }))}>Pause company</button>
+            <button className="btn" disabled={!isAdmin} onClick={() => run(t("settings.msg.companyPaused"), () => browserApi.patch(base, { status: "paused" }))}>{t("settings.pauseCompany")}</button>
           ) : (
-            <button className="btn btn-primary" disabled={!isAdmin} onClick={() => run("Company active", () => browserApi.patch(base, { status: "active" }))}>Activate company</button>
+            <button className="btn btn-primary" disabled={!isAdmin} onClick={() => run(t("settings.msg.companyActive"), () => browserApi.patch(base, { status: "active" }))}>{t("settings.activateCompany")}</button>
           )}
-          {company.status !== "archived" && <button className="btn btn-danger" disabled={!isAdmin} onClick={() => confirm("Archive this company? Agents stop and it disappears from the list.") && run("Company archived", () => browserApi.patch(base, { status: "archived" }))}>Archive</button>}
+          {company.status !== "archived" && <button className="btn btn-danger" disabled={!isAdmin} onClick={() => confirm(t("settings.archiveConfirm")) && run(t("settings.msg.companyArchived"), () => browserApi.patch(base, { status: "archived" }))}>{t("settings.archiveCompany")}</button>}
         </div>
       </Card>
 
