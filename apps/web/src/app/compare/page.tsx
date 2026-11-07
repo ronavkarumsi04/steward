@@ -38,7 +38,7 @@ const ROWS: { item: string; detail?: string; cells: [Cell, Cell, Cell] }[] = [
   { item: "Workflows and reactions", detail: "Scheduled and event-driven runs you can read and edit.", cells: [yes(), part("Runs alone on paid plans"), yes("Autonomous by default")] },
   { item: "Integrations", cells: [yes("MCP marketplace with allowlists and risk levels"), part("Gmail, Calendar, Sheets, Slack, Notion, HubSpot, Stripe"), none()] },
   { item: "Memory you can correct", detail: "Durable memory and a knowledge graph with revision history.", cells: [yes(), none(), none()] },
-  { item: "Interface in your language", cells: [notYet("English only"), none(), yes()] },
+  { item: "Interface in your language", cells: [part("English and Spanish; more pages each release"), none(), yes()] },
   { item: "Separate organizations", cells: [yes("Isolated per organization; no set limit in beta"), part("1, 3 or 10 businesses by plan"), yes("Thousands of companies")] },
   { item: "Price", cells: [yes("$0 in beta; models at list price"), part("$0 to $200 a month in credits"), none("No public price list")] },
 ];
@@ -115,7 +115,7 @@ export default async function Compare() {
           <h2 id="honest-title" className={s.h2}>
             Where they are ahead, <span>today.</span>
           </h2>
-          <p className={s.sectionLede}>Three lines read Not yet and two Partly on our side. They are on the board, in this order.</p>
+          <p className={s.sectionLede}>Two lines read Not yet and three Partly on our side. They are on the board, in this order.</p>
         </div>
         <ol className={s.conditions}>
           <li>
@@ -136,7 +136,7 @@ export default async function Compare() {
           </li>
           <li>
             <h3 className={s.h3}>Interface in your language</h3>
-            <p>The workspace is English only for now.</p>
+            <p>Pick Spanish under Account and the workspace shell, overview, approvals, runs, inbox, command palette and account page read in Spanish; the remaining pages and other languages follow as the catalog grows.</p>
           </li>
         </ol>
         <p className={s.imprint}>
