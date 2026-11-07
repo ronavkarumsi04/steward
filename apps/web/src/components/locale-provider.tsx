@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { resolveLocale, t, type Locale, type MessageKey } from "@/lib/i18n";
+import { resolveLocale, t, tf, type Locale, type MessageKey } from "@/lib/i18n";
 
 const LocaleContext = createContext<Locale>("en");
 
@@ -21,4 +21,9 @@ export function useLocale(): Locale {
 export function useT(): (key: MessageKey) => string {
   const locale = useLocale();
   return (key) => t(locale, key);
+}
+
+export function useTf(): (key: MessageKey, vars: Record<string, string | number>) => string {
+  const locale = useLocale();
+  return (key, vars) => tf(locale, key, vars);
 }

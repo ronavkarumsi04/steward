@@ -22,5 +22,6 @@ describe("i18n", () => {
     expect(tf("es", "overview.ofTotal", { n: 3, total: 7 })).toBe("3 de 7");
     expect(tf("es", "approvals.none", { status: t("es", "approvals.pending") })).toBe("No hay aprobaciones pendientes.");
     expect(tf("en", "overview.done", {})).toBe("{n} done");
+    expect(tf("es", "shell.paletteShowing", { n: 8, total: 20 })).toBe("Mostrando 8 de 20; sigue escribiendo para acotar.");
   });
 });
