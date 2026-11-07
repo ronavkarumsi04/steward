@@ -16,6 +16,7 @@
  *     a run that is already finished gets no "cancel". A command that would fail is worse than no command.
  */
 import { reviewApproval } from "./approval-review";
+import { t, tf, type Locale, type MessageKey } from "./i18n";
 import type { Agent, Approval, Run, Task } from "./types";
 
 export type PaletteKind = "decide" | "cancel" | "run" | "ask" | "assign" | "review" | "navigate";
@@ -61,6 +62,8 @@ export interface PaletteOptions {
   picking?: { taskId: string; picking: "assign" | "run" };
   /** Injectable clock, so ordering by deadline is testable. */
   now?: number;
+  /** Interface language for labels, facts and questions; "en" when absent. */
+  locale?: Locale;
   /** How many open tasks to consider, newest first. */
   taskLimit?: number;
 }
@@ -75,37 +78,28 @@ const KIND_WEIGHT: Record<PaletteKind, number> = {
   navigate: 0,
 };
 
-const KIND_BADGE: Record<PaletteKind, string> = {
-  decide: "Decide",
-  cancel: "Stop",
-  run: "Run",
-  ask: "Run",
-  assign: "Assign",
-  review: "Open",
-  navigate: "Go to",
-};
 
-export function kindBadge(kind: PaletteKind): string {
-  return KIND_BADGE[kind];
+export function kindBadge(kind: PaletteKind, locale: Locale = "en"): string {
+  return t(locale, `palette.kind.${kind}`);
 }
 
 /** The pages the palette can always reach, whether or not the company's rows loaded. */
-export const NAV: ReadonlyArray<{ suffix: string; label: string; keywords: string; shortcut?: string }> = [
-  { suffix: "", label: "Studio", keywords: "overview home dashboard" },
-  { suffix: "/activity", label: "Activity", keywords: "events live audit timeline", shortcut: "G A" },
-  { suffix: "/projects", label: "Projects", keywords: "repos deployments environments" },
-  { suffix: "/signals", label: "Signals", keywords: "business signals inbox" },
-  { suffix: "/chat", label: "Chat", keywords: "conversation chief of staff" },
-  { suffix: "/growth", label: "Growth", keywords: "leads campaigns sales marketing" },
-  { suffix: "/finance", label: "Finance", keywords: "budget spend cost ledger" },
-  { suffix: "/tasks", label: "Tasks", keywords: "work board todo assign", shortcut: "G T" },
-  { suffix: "/runs", label: "Runs", keywords: "agents execution model tools cancel" },
-  { suffix: "/approvals", label: "Approvals", keywords: "review permission pending decide approve" },
-  { suffix: "/agents", label: "Agents", keywords: "roster schedule automation run" },
-  { suffix: "/knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
-  { suffix: "/graph", label: "Graph", keywords: "knowledge graph entities relations what we know" },
-  { suffix: "/integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
-  { suffix: "/settings", label: "Settings", keywords: "autonomy policy provider models" },
+export const NAV: ReadonlyArray<{ suffix: string; labelKey: MessageKey; label: string; keywords: string; shortcut?: string }> = [
+  { suffix: "", labelKey: "nav.studio", label: "Studio", keywords: "overview home dashboard" },
+  { suffix: "/activity", labelKey: "nav.activity", label: "Activity", keywords: "events live audit timeline", shortcut: "G A" },
+  { suffix: "/projects", labelKey: "nav.projects", label: "Projects", keywords: "repos deployments environments" },
+  { suffix: "/signals", labelKey: "nav.signals", label: "Signals", keywords: "business signals inbox" },
+  { suffix: "/chat", labelKey: "nav.chat", label: "Chat", keywords: "conversation chief of staff" },
+  { suffix: "/growth", labelKey: "nav.growth", label: "Growth", keywords: "leads campaigns sales marketing" },
+  { suffix: "/finance", labelKey: "nav.finance", label: "Finance", keywords: "budget spend cost ledger" },
+  { suffix: "/tasks", labelKey: "nav.tasks", label: "Tasks", keywords: "work board todo assign", shortcut: "G T" },
+  { suffix: "/runs", labelKey: "nav.runs", label: "Runs", keywords: "agents execution model tools cancel" },
+  { suffix: "/approvals", labelKey: "nav.approvals", label: "Approvals", keywords: "review permission pending decide approve" },
+  { suffix: "/agents", labelKey: "nav.agents", label: "Agents", keywords: "roster schedule automation run" },
+  { suffix: "/knowledge", labelKey: "nav.knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
+  { suffix: "/graph", labelKey: "nav.graph", label: "Graph", keywords: "knowledge graph entities relations what we know" },
+  { suffix: "/integrations", labelKey: "nav.integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
+  { suffix: "/settings", labelKey: "nav.settings", label: "Settings", keywords: "autonomy policy provider models" },
 ];
 
 const TERMINAL_RUNS = new Set(["succeeded", "failed", "cancelled"]);
@@ -159,6 +153,9 @@ function activeOwner(task: Task, assignableAgents: Agent[]): Agent | null {
  */
 export function buildPalette(data: PaletteData, options: PaletteOptions = {}): PaletteAction[] {
   const now = options.now ?? Date.now();
+  const L = options.locale ?? "en";
+  const tr = (key: MessageKey) => t(L, key);
+  const trf = (key: MessageKey, vars: Record<string, string | number>) => tf(L, key, vars);
   const base = `/app/c/${data.companyId}`;
   const runsById = new Map(data.runs.map((r) => [r.id, r]));
   const agents = assignable(data.agents);
@@ -170,7 +167,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
     const task = data.tasks.find((t) => t.id === options.picking!.taskId);
     if (!task) return [];
     const picking = options.picking.picking;
-    const verb = picking === "assign" ? "Assign" : "Run";
+    const verb = picking === "assign" ? tr("palette.assignVerb") : tr("palette.runVerb");
     // A disabled owner is not an owner: nothing is working on the task, so there is nobody to take it over from.
     const owner = activeOwner(task, agents);
     for (const agent of agents) {
@@ -190,7 +187,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       const action: PaletteAction = {
         id: `pick:${picking}:${task.id}:${agent.id}`,
         kind: picking,
-        label: `${verb} “${clamp(task.title, 60)}” with ${agent.name}`,
+        label: trf("palette.withAgent", { verb, title: clamp(task.title, 60), agent: agent.name }),
         detail,
         keywords: `${agent.name} ${agent.kind} ${task.title} ${picking} ${picking === "assign" ? "reassign owner" : ""}`,
         target:
@@ -200,14 +197,14 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       };
       if (picking === "run") {
         action.confirm = {
-          question: `Start a run for “${clamp(task.title, 80)}” with ${agent.name}?`,
+          question: trf("palette.startRunQ", { title: clamp(task.title, 80), agent: agent.name }),
           facts: [
-            { label: "Agent", value: `${agent.name} (${agent.kind})` },
-            { label: "What happens", value: "Steward plans the work, uses this agent's tools, and stops for approval wherever your policies require it." },
-            { label: "Cost", value: "Model spend is metered against the company budget; the run page shows what it used." },
-            { label: "If Steward cannot start it", value: "The run is recorded and reported as failed to start — it is not silently dropped." },
+            { label: tr("palette.factAgent"), value: `${agent.name} (${agent.kind})` },
+            { label: tr("palette.factWhat"), value: tr("palette.factWhatRun") },
+            { label: tr("palette.factCost"), value: tr("palette.factCostText") },
+            { label: tr("palette.factIfFail"), value: tr("palette.factIfFailText") },
           ],
-          confirmLabel: "Start the run",
+          confirmLabel: tr("palette.startRun"),
         };
       }
       actions.push(action);
@@ -221,30 +218,30 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
     .sort((a, b) => (Date.parse(a.expiresAt) || 0) - (Date.parse(b.expiresAt) || 0) || (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
   for (const approval of pending) {
     const brief = reviewApproval(approval, { run: approval.runId ? runsById.get(approval.runId) ?? null : null, now });
-    const money = brief.blast.find((b) => b.label === "Money at stake")?.value ?? "No cost estimate was recorded on this request";
+    const money = brief.blast.find((b) => b.label === "Money at stake")?.value ?? tr("palette.noCost");
     const policy = brief.request.policy[0]?.sentence ?? null;
     const facts: PaletteFact[] = [
-      { label: "Asked to", value: approval.action },
-      { label: "Policy reason", value: policy ?? brief.request.narrative ?? "No reason was recorded on this request" },
-      { label: "What it changes", value: approval.affectedSystem },
-      { label: "Money at stake", value: money },
-      { label: "If you approve", value: brief.effect.approve },
-      ...brief.cautions.map((c) => ({ label: "Careful", value: c })),
-      { label: "Before you decide", value: "This approves the request exactly as recorded. To read the payload and the full blast radius first, Escape and pick the Open entry for it." },
+      { label: tr("palette.factAskedTo"), value: approval.action },
+      { label: tr("palette.factPolicy"), value: policy ?? brief.request.narrative ?? tr("palette.noReason") },
+      { label: tr("palette.factChanges"), value: approval.affectedSystem },
+      { label: tr("palette.factMoney"), value: money },
+      { label: tr("palette.factIfApprove"), value: brief.effect.approve },
+      ...brief.cautions.map((c) => ({ label: tr("palette.factCareful"), value: c })),
+      { label: tr("palette.factBefore"), value: tr("palette.factBeforeText") },
     ];
     actions.push({
       id: `decide:${approval.id}`,
       kind: "decide",
-      label: `Approve ${approval.action}`,
+      label: trf("palette.approve", { action: approval.action }),
       detail: `${approval.risk} risk · ${approval.dimension} · ${approval.affectedSystem} · ${lapse(approval.expiresAt, now)}`,
       keywords: `approve yes decide grant ${approval.action} ${approval.dimension} ${approval.affectedSystem}`,
       target: { kind: "approve", approvalId: approval.id },
-      confirm: { question: `Approve ${approval.action}?`, facts, confirmLabel: "Approve it" },
+      confirm: { question: trf("palette.approveQ", { action: approval.action }), facts, confirmLabel: tr("palette.approveIt") },
     });
     actions.push({
       id: `review:${approval.id}`,
       kind: "review",
-      label: `Open ${approval.action}`,
+      label: trf("palette.open", { action: approval.action }),
       detail: `policy reason, payload and blast radius · ${lapse(approval.expiresAt, now)}`,
       keywords: `open review read approval brief payload blast radius ${approval.action}`,
       target: { kind: "navigate", href: `${base}/approvals#${approval.id}` },
@@ -257,20 +254,20 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
     actions.push({
       id: `cancel:${run.id}`,
       kind: "cancel",
-      label: run.intent ? `Cancel “${clamp(run.intent, 60)}”` : `Cancel run ${run.id.slice(0, 8)}`,
-      detail: `${run.id.slice(0, 8)} · ${run.status.replace(/_/g, " ")} · ${usd(run.costUsd)} spent`,
+      label: run.intent ? trf("palette.cancelIntent", { intent: clamp(run.intent, 60) }) : trf("palette.cancelRun", { id: run.id.slice(0, 8) }),
+      detail: trf("palette.cancelDetail", { id: run.id.slice(0, 8), status: run.status.replace(/_/g, " "), cost: usd(run.costUsd) }),
       keywords: `cancel stop abort halt run ${run.intent} ${run.status}`,
       target: { kind: "cancel", runId: run.id },
       confirm: {
-        question: `Cancel run ${run.id.slice(0, 8)}?`,
+        question: trf("palette.cancelQ", { id: run.id.slice(0, 8) }),
         facts: [
-          { label: "Status", value: run.status.replace(/_/g, " ") },
-          { label: "Working on", value: run.intent || "No intent was recorded for this run" },
+          { label: tr("palette.factStatus"), value: run.status.replace(/_/g, " ") },
+          { label: tr("palette.factWorkingOn"), value: run.intent || tr("palette.noIntent") },
           { label: "Run", value: run.id },
           { label: "Spent so far", value: usd(run.costUsd) },
-          { label: "What happens", value: "The workflow is signalled to stop. Steps, model calls and artifacts already recorded stay as the record of what happened." },
+          { label: tr("palette.factWhat"), value: tr("palette.factWhatCancel") },
         ],
-        confirmLabel: "Cancel the run",
+        confirmLabel: tr("palette.cancelIt"),
       },
     });
   }
@@ -285,8 +282,8 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       actions.push({
         id: `run:${task.id}`,
         kind: "run",
-        label: `Run “${clamp(task.title, 60)}”`,
-        detail: `start a run now · ${task.status.replace(/_/g, " ")} · ${task.priority} priority`,
+        label: trf("palette.runTask", { title: clamp(task.title, 60) }),
+        detail: trf("palette.runTaskDetail", { status: task.status.replace(/_/g, " "), priority: task.priority }),
         keywords: `run start execute now task ${task.title} ${task.status}`,
         target: { kind: "pick", taskId: task.id, picking: "run" },
       });
@@ -312,9 +309,9 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
     actions.push({
       id: `nav:${nav.suffix || "studio"}`,
       kind: "navigate",
-      label: nav.label,
+      label: tr(nav.labelKey),
       detail: nav.keywords.split(" ").slice(0, 2).join(" · "),
-      keywords: nav.keywords,
+      keywords: `${nav.keywords} ${nav.label}`,
       target: { kind: "navigate", href: `${base}${nav.suffix}` },
     });
   }
@@ -327,7 +324,8 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
  * `buildPalette` so every other command stays independent of the query: a palette that reshuffles its facts
  * because of a keystroke is a palette whose confirmations cannot be trusted.
  */
-export function instructionCommand(data: { agents: Agent[] }, query: string): PaletteAction | null {
+export function instructionCommand(data: { agents: Agent[] }, query: string, locale: Locale = "en"): PaletteAction | null {
+  const tr = (key: MessageKey) => t(locale, key);
   const text = query.trim();
   if (text.length < 12) return null;
   const agent = defaultAgent(data.agents);
@@ -335,19 +333,19 @@ export function instructionCommand(data: { agents: Agent[] }, query: string): Pa
   return {
     id: `ask:${agent.id}`,
     kind: "ask",
-    label: `Ask ${agent.name} to work on this`,
+    label: tf(locale, "palette.askAgent", { agent: agent.name }),
     detail: clamp(text, 90),
     keywords: `ask run start instruction new run ${agent.name} ${agent.kind} ${text}`,
     target: { kind: "ask", agentId: agent.id, agentName: agent.name, instruction: text },
     confirm: {
       question: `Start a run for “${clamp(text, 80)}”?`,
       facts: [
-        { label: "Agent", value: `${agent.name} (${agent.kind})` },
-        { label: "What happens", value: "Steward plans the work, uses this agent's tools, and stops for approval wherever your policies require it." },
-        { label: "Cost", value: "Model spend is metered against the company budget; the run page shows what it used." },
-        { label: "If Steward cannot start it", value: "The run is recorded and reported as failed to start — it is not silently dropped." },
+        { label: tr("palette.factAgent"), value: `${agent.name} (${agent.kind})` },
+        { label: tr("palette.factWhat"), value: tr("palette.factWhatRun") },
+        { label: tr("palette.factCost"), value: tr("palette.factCostText") },
+        { label: tr("palette.factIfFail"), value: tr("palette.factIfFailText") },
       ],
-      confirmLabel: "Start the run",
+      confirmLabel: tr("palette.startRun"),
     },
   };
 }
@@ -363,12 +361,12 @@ export function instructionCommand(data: { agents: Agent[] }, query: string): Pa
 export function paletteFor(
   data: PaletteData,
   query: string,
-  options: { picking?: { taskId: string; picking: "assign" | "run" }; now?: number } = {},
+  options: PaletteOptions = {},
 ): PaletteAction[] {
-  if (options.picking) return buildPalette(data, { picking: options.picking, now: options.now });
-  const commands = buildPalette(data, { now: options.now });
+  if (options.picking) return buildPalette(data, { picking: options.picking, now: options.now, locale: options.locale });
+  const commands = buildPalette(data, { now: options.now, locale: options.locale });
   if (query.trim().length === 0) return commands;
-  const instruction = rankPalette(commands, query).total === 0 ? instructionCommand(data, query) : null;
+  const instruction = rankPalette(commands, query).total === 0 ? instructionCommand(data, query, options.locale) : null;
   return instruction ? [...commands, instruction] : commands;
 }
 
@@ -431,10 +429,6 @@ export function loadSummary(data: PaletteData): PaletteLoad {
   };
 }
 
-/** "1 run" / "3 runs". The state line is read as a sentence, so it has to be grammatical. */
-function tally(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
 
 /**
  * The one line that says what the palette has to work with, in the words a founder would use.
@@ -444,12 +438,12 @@ function tally(n: number, one: string, many: string): string {
  * dropped — "nothing awaiting a decision" is the reassurance the palette exists to give, and a founder who
  * opens it to check should get an answer rather than an empty line.
  */
-export function stateLine(load: PaletteLoad): string {
-  const decisions =
-    load.approvals === 0 ? "nothing awaiting a decision" : load.approvals === 1 ? "1 awaiting a decision" : `${load.approvals} awaiting decisions`;
+export function stateLine(load: PaletteLoad, locale: Locale = "en"): string {
+  const one = (n: number, single: MessageKey, many: MessageKey) => (n === 1 ? t(locale, single) : tf(locale, many, { n }));
+  const decisions = load.approvals === 0 ? t(locale, "palette.noDecisions") : one(load.approvals, "palette.oneDecision", "palette.nDecisions");
   const parts = [decisions];
-  if (load.runs > 0) parts.push(tally(load.runs, "run in flight", "runs in flight"));
-  if (load.tasks > 0) parts.push(tally(load.tasks, "open task", "open tasks"));
-  parts.push(load.agents === 0 ? "no active agents" : tally(load.agents, "active agent", "active agents"));
+  if (load.runs > 0) parts.push(one(load.runs, "palette.runOne", "palette.runMany"));
+  if (load.tasks > 0) parts.push(one(load.tasks, "palette.taskOne", "palette.taskMany"));
+  parts.push(load.agents === 0 ? t(locale, "palette.noAgents") : one(load.agents, "palette.agentOne", "palette.agentMany"));
   return parts.join(" · ");
 }

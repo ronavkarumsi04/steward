@@ -423,4 +423,14 @@ describe("what the palette says it loaded", () => {
     // Which is the same reason the palette offers no run or assign entry: nothing can be given work.
     expect(buildPalette(data({ agents: [] }), { now: NOW }).some((a) => a.kind === "run" || a.kind === "assign")).toBe(false);
   });
+
+  it("speaks the chosen language for page labels, badges and the state line, still matching English keywords", () => {
+    const es = buildPalette({ companyId: "c1", approvals: [], runs: [], tasks: [], agents: [] }, { locale: "es" });
+    const approvals = es.find((a) => a.id === "nav:/approvals");
+    expect(approvals?.label).toBe("Aprobaciones");
+    expect(approvals?.keywords).toContain("Approvals");
+    expect(kindBadge("cancel", "es")).toBe("Detener");
+    expect(stateLine({ approvals: 2, runs: 1, tasks: 0, agents: 3 }, "es")).toBe("2 esperan una decisión · 1 ejecución en curso · 3 agentes activos");
+    expect(stateLine({ approvals: 0, runs: 0, tasks: 0, agents: 0 })).toBe("nothing awaiting a decision · no active agents");
+  });
 });
