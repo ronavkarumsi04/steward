@@ -119,12 +119,12 @@ export function Pill({ tone = "neutral", className = "", title, children }: { to
   );
 }
 
-export function StatusPill({ status }: { status: RunStatus | TaskStatus | string }) {
+export function StatusPill({ status, label }: { status: RunStatus | TaskStatus | string; label?: string }) {
   const live = LIVE_STATUSES.has(status);
   return (
     <span className={`pill ${TONE_CLASS[statusTone(status)]}`} data-status={status}>
       <span className={`dot ${live ? "dot-live" : ""}`} aria-hidden="true" />
-      {status.replace(/_/g, " ")}
+      {label ?? status.replace(/_/g, " ")}
     </span>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "./locale-provider";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -35,6 +37,7 @@ export function ApprovalCard({
   run?: Pick<Run, "id" | "status"> | null;
   onDecided?: (a: Approval) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [state, setState] = useState(approval);
   const [note, setNote] = useState("");
@@ -299,10 +302,10 @@ export function ApprovalCard({
 
       <section aria-label="If you decide" className="mt-4 space-y-1.5 text-xs leading-relaxed">
         <p>
-          <Pill tone="ok">Approve</Pill> <span className="text-fg-2">{brief.effect.approve}</span>
+          <Pill tone="ok">{t("approvals.approve")}</Pill> <span className="text-fg-2">{brief.effect.approve}</span>
         </p>
         <p>
-          <Pill tone="danger">Deny</Pill> <span className="text-fg-2">{brief.effect.deny}</span>
+          <Pill tone="danger">{t("approvals.deny")}</Pill> <span className="text-fg-2">{brief.effect.deny}</span>
         </p>
       </section>
 
@@ -320,14 +323,14 @@ export function ApprovalCard({
       {pending ? (
         <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
           <input className="input md:flex-1" placeholder="Optional note for the agent / audit log" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note for the agent" />
-          <button className="btn btn-danger" onClick={() => decide("denied")} disabled={busy !== null}>{busy === "denied" ? "…" : "Deny"}</button>
+          <button className="btn btn-danger" onClick={() => decide("denied")} disabled={busy !== null}>{busy === "denied" ? "…" : t("approvals.deny")}</button>
           <button className="btn btn-primary" onClick={() => decide("approved")} disabled={busy !== null || blocked}>
-            {busy === "approved" ? "…" : changed ? "Approve the edited payload" : "Approve"}
+            {busy === "approved" ? "…" : changed ? t("approvals.approveEdited") : t("approvals.approve")}
           </button>
         </div>
       ) : (
         <p className="mt-3 text-xs text-muted">
-          {state.status === "approved" ? "Approved" : state.status === "denied" ? "Denied" : state.status === "expired" ? "Lapsed before a decision" : "Withdrawn"}
+          {state.status === "approved" ? t("approvals.wasApproved") : state.status === "denied" ? t("approvals.wasDenied") : state.status === "expired" ? t("approvals.lapsed") : t("approvals.withdrawn")}
           {state.resolvedBy ? <> by <span className="mono">{state.resolvedBy.slice(0, 8)}</span></> : null}
           {state.resolvedAt ? <> <Ago iso={state.resolvedAt} /></> : null}
           {state.resolution && typeof state.resolution.note === "string" && state.resolution.note ? <> — {String(state.resolution.note)}</> : null}

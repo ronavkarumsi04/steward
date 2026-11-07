@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "./locale-provider";
+
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 /* ---------- Toasts ---------- */
@@ -86,6 +88,7 @@ export function ThemeToggle() {
     if (stored === "dark" || stored === "light") setChoice(stored);
   }, []);
 
+  const t = useT();
   const cycle = () => {
     const next: ThemeChoice = choice === "system" ? "light" : choice === "light" ? "dark" : "system";
     setChoice(next);
@@ -96,9 +99,9 @@ export function ThemeToggle() {
 
   const icon = choice === "light" ? "☀" : choice === "dark" ? "☾" : "◐";
   return (
-    <button type="button" className="btn btn-sm border border-fg shadow-e1" onClick={cycle} title={`Theme: ${choice} (click to change)`} aria-label={`Theme: ${choice}. Click to switch.`}>
+    <button type="button" className="btn btn-sm border border-fg shadow-e1" onClick={cycle} title={`${t("theme.label")}: ${t(`theme.${choice}`)}`} aria-label={`${t("theme.label")}: ${t(`theme.${choice}`)}. ${t("theme.switch")}`}>
       <span aria-hidden="true">{icon}</span>
-      <span className="hidden sm:inline capitalize">{choice}</span>
+      <span className="hidden sm:inline">{t(`theme.${choice}`)}</span>
     </button>
   );
 }

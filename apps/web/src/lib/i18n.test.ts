@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOCALES, resolveLocale, t } from "./i18n";
+import { LOCALES, resolveLocale, t, tf } from "./i18n";
 
 describe("i18n", () => {
   it("resolves region tags and unknown languages", () => {
@@ -15,5 +15,12 @@ describe("i18n", () => {
     }
     expect(t("es", "nav.approvals")).toBe("Aprobaciones");
     expect(t("en", "top.signOut")).toBe("Sign out");
+  });
+
+  it("fills placeholders in the translator's word order and leaves unknown ones visible", () => {
+    expect(tf("en", "overview.ofTotal", { n: 3, total: 7 })).toBe("3 of 7");
+    expect(tf("es", "overview.ofTotal", { n: 3, total: 7 })).toBe("3 de 7");
+    expect(tf("es", "approvals.none", { status: t("es", "approvals.pending") })).toBe("No hay aprobaciones pendientes.");
+    expect(tf("en", "overview.done", {})).toBe("{n} done");
   });
 });

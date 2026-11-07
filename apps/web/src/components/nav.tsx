@@ -57,7 +57,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         </div>
 
         {org && (
-          <nav aria-label="Organization" className="segmented order-3 w-full overflow-x-auto sm:order-none sm:w-auto">
+          <nav aria-label={t("shell.orgNav")} className="segmented order-3 w-full overflow-x-auto sm:order-none sm:w-auto">
             {ORG_LINKS.map(([slug, label, Glyph]) => {
               const href = `/app/org/${org.organizationId}/${slug}`;
               const active = path.startsWith(href);

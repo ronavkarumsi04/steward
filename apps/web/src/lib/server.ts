@@ -1,8 +1,10 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { ApiError, createClient, type ApiClient } from "./api";
 import type { Me } from "./types";
+import { resolveLocale, type Locale } from "./i18n";
 import { serverTransport } from "./server-transport";
 
 const transport = serverTransport();
@@ -19,9 +21,15 @@ export async function serverApi(): Promise<ApiClient> {
   return createClient({ baseUrl: `${API_URL}/v1`, cookie, fetchImpl: serverFetch });
 }
 
-export async function getMe(): Promise<Me> {
+/** Memoized per request: the layout and the page both ask, and the answer cannot change between them. */
+export const getMe = cache(async (): Promise<Me> => {
   const api = await serverApi();
   return api.get<Me>("/auth/me");
+});
+
+/** The signed-in person's interface language, for server components; "en" when nobody is signed in. */
+export async function getLocale(): Promise<Locale> {
+  return resolveLocale((await getMe()).user?.locale);
 }
 
 /**

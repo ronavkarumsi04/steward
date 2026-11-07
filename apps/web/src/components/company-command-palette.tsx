@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "./locale-provider";
+
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
@@ -43,6 +45,7 @@ function shortId(id: string): string {
  *     palette says so and offers pages only, rather than an empty list that looks like "nothing to do".
  */
 export function CompanyCommandPalette({ companyId }: { companyId: string }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -316,7 +319,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
         onClick={openPalette}
         aria-haspopup="dialog"
       >
-        <span>Search or act…</span>
+        <span>{t("shell.searchOrAct")}</span>
         <kbd className="kbd mono shrink-0 border border-line px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
       </button>
       {open && (
@@ -342,7 +345,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onPaletteKeyDown}
                 className="nb-command-input w-full border border-line bg-panel px-3 py-2 text-sm font-medium text-fg outline-none placeholder:text-neutral-600 focus:ring-2 focus:ring-black focus:ring-offset-2"
-                placeholder={picking ? "Choose the agent…" : "Search pages, approvals, runs and tasks — or type an instruction…"}
+                placeholder={picking ? t("shell.paletteChooseAgent") : t("shell.paletteHint")}
                 aria-label={picking ? "Choose the agent" : "Search or type a command"}
                 // The combobox pattern: the listbox is the popup this input controls, and the highlighted row is
                 // announced through aria-activedescendant rather than by moving focus off the input. While a
@@ -382,7 +385,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
             ) : (
               <div id="command-palette-results" role="listbox" className="nb-command-results max-h-[52vh] overflow-y-auto p-2">
                 {matches.length === 0 ? (
-                  <p className="nb-command-empty px-3 py-8 text-center text-sm font-semibold text-muted">Nothing matches that.</p>
+                  <p className="nb-command-empty px-3 py-8 text-center text-sm font-semibold text-muted">{t("shell.paletteEmpty")}</p>
                 ) : (
                   matches.map((action, i) => (
                     <button
@@ -418,9 +421,9 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
 
             <footer className="nb-command-footer flex flex-wrap items-center justify-between gap-2 border-t-2 border-line px-3 py-2 text-[11px] font-semibold text-muted">
               {confirming ? (
-                <span>Enter confirms · Esc back</span>
+                <span>{t("shell.paletteKeys")}</span>
               ) : picking ? (
-                <span>Enter picks the agent · Esc back to the list</span>
+                <span>{t("shell.palettePickKeys")}</span>
               ) : (
                 <span>↑↓ navigate · Enter run · Esc close</span>
               )}
