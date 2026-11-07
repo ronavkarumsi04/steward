@@ -66,7 +66,7 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
 
   return (
     <nav
-      className="-mx-1 flex gap-0.5 overflow-x-auto px-1 py-1 md:mx-0 md:flex-col md:gap-4 md:overflow-visible md:px-0 md:py-0"
+      className="-mx-2 flex gap-0.5 overflow-x-auto px-2 py-1 md:mx-0 md:flex-col md:gap-4 md:overflow-visible md:px-0 md:py-0"
       aria-label={t("shell.companyMenu")}
     >
       {GROUPS.map(({ label: groupLabel, items }) => (
@@ -87,7 +87,7 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
                 key={href}
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className="nav-item shrink-0 justify-between"
+                className="nav-item shrink-0 justify-between scroll-mx-2"
                 onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
               >
                 <span className="flex items-center gap-2.5">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getLocale, serverApi } from "@/lib/server";
-import { t, tf, type Locale, type MessageKey } from "@/lib/i18n";
+import { statusLabel, t, tf, type Locale, type MessageKey } from "@/lib/i18n";
 import type { Agent, Run } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { Card, Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
@@ -40,11 +40,11 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
                   <tr key={r.id}>
                     <td className="max-w-md font-medium"><Link className="line-clamp-2 hover:text-accent" href={`/app/c/${companyId}/runs/${r.id}`} title={r.intent || undefined}>{r.intent || t(locale, "runs.noIntent")}</Link></td>
                     <td className="text-muted">{name(r.agentId)}</td>
-                    <td><StatusPill status={r.status} /></td>
+                    <td><StatusPill status={r.status} label={statusLabel(locale, r.status)} /></td>
                     <td className="tnum whitespace-nowrap text-xs text-muted">{progress(r, locale)}</td>
                     <td className="tnum text-right">{usd(r.costUsd)}</td>
                     <td className="tnum text-right text-muted">{(r.inputTokens + r.outputTokens).toLocaleString()}</td>
-                    <td className="tnum text-right text-xs text-muted">{ago(r.createdAt)}</td>
+                    <td className="tnum text-right text-xs text-muted">{ago(r.createdAt, locale)}</td>
                   </tr>
                 ))}
               </tbody>

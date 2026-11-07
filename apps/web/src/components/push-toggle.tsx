@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { Icon } from "./icons";
+import { useT } from "./locale-provider";
 
 type Status = "checking" | "unsupported" | "unavailable" | "off" | "on" | "denied";
 
@@ -17,6 +18,7 @@ function toKey(base64: string): Uint8Array {
  * the subscription with the API. The state shown is the browser's real state, read on mount, never remembered.
  */
 export function PushToggle() {
+  const t = useT();
   const [status, setStatus] = useState<Status>("checking");
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,22 +103,22 @@ export function PushToggle() {
           <Icon.Approvals size={16} />
         </span>
         <div className="min-w-0">
-        <p className="font-medium">Tell this device when a decision is waiting</p>
+        <p className="font-medium">{t("push.title")}</p>
         <p className="text-xs text-muted">
-          {status === "unavailable" && "Notifications are not set up on this deployment."}
-          {status === "denied" && "This browser has blocked notifications for Steward. Allow them in the browser's site settings, then reload."}
-          {status === "off" && "A notification on this device for every new approval, in any of your companies."}
-          {status === "on" && "On for this device."}
+          {status === "unavailable" && t("push.unavailable")}
+          {status === "denied" && t("push.denied")}
+          {status === "off" && t("push.off")}
+          {status === "on" && t("push.on")}
         </p>
         {note && <p className="mt-1 text-xs" role="status">{note}</p>}
         </div>
       </div>
       <div className="flex shrink-0 gap-2">
-        {status === "off" && <button type="button" className="btn btn-primary" disabled={busy} onClick={turnOn}>Turn on</button>}
+        {status === "off" && <button type="button" className="btn btn-primary" disabled={busy} onClick={turnOn}>{t("push.turnOn")}</button>}
         {status === "on" && (
           <>
-            <button type="button" className="btn btn-sm" disabled={busy} onClick={sendTest}>Send a test</button>
-            <button type="button" className="btn btn-sm" disabled={busy} onClick={turnOff}>Turn off</button>
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={sendTest}>{t("push.sendTest")}</button>
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={turnOff}>{t("push.turnOff")}</button>
           </>
         )}
       </div>

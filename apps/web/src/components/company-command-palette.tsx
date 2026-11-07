@@ -307,7 +307,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const countsLine = loadError
     ? `Live company state is unavailable (${loadError}) — pages only.`
     : loading && !data
-      ? "Loading what is waiting…"
+      ? t("palette.loading")
       : summary
         ? stateLine(summary, locale)
         : "";
@@ -380,7 +380,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                     {busy ? "…" : confirming.confirm!.confirmLabel}
                   </button>
                   <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming(null)}>
-                    Back
+                    {t("palette.back")}
                   </button>
                 </div>
               </div>

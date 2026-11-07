@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { useToast } from "./feedback";
+import { useT } from "./locale-provider";
 
 function errorText(err: unknown) {
   if (err instanceof ApiError) return err.message;
@@ -14,6 +15,7 @@ function errorText(err: unknown) {
 export function MarketingConsentToggle({ optedIn }: { optedIn: boolean }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [on, setOn] = useState(optedIn);
   const [busy, setBusy] = useState(false);
 
@@ -36,8 +38,8 @@ export function MarketingConsentToggle({ optedIn }: { optedIn: boolean }) {
     <label className="flex items-start gap-3 text-sm">
       <input type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={on} disabled={busy} onChange={(e) => void toggle(e.target.checked)} />
       <span>
-        <span className="font-medium">Send me occasional product news by email.</span>
-        <span className="mt-1 block text-muted">Optional. Turning this off never affects your account, your agents, or service messages such as security alerts and password resets.</span>
+        <span className="font-medium">{t("privacy.marketing")}</span>
+        <span className="mt-1 block text-muted">{t("privacy.marketingHelp")}</span>
       </span>
     </label>
   );
@@ -46,6 +48,7 @@ export function MarketingConsentToggle({ optedIn }: { optedIn: boolean }) {
 export function DeleteAccountForm() {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function DeleteAccountForm() {
     const fd = new FormData(e.currentTarget);
     try {
       await browserApi.del("/privacy/account", { confirm: String(fd.get("confirm")), password: String(fd.get("password")) });
-      toast("ok", "Your account is deleted.");
+      toast("ok", t("privacy.deleted"));
       router.replace("/");
       router.refresh();
     } catch (err) {
@@ -69,7 +72,7 @@ export function DeleteAccountForm() {
   if (!open) {
     return (
       <button type="button" className="btn btn-ghost h-10 border-danger text-danger" onClick={() => setOpen(true)}>
-        Delete my account
+        {t("privacy.deleteButton")}
       </button>
     );
   }
@@ -81,16 +84,16 @@ export function DeleteAccountForm() {
       </p>
       <div>
         <label className="label" htmlFor="confirm">
-          Type <span className="font-mono normal-case">delete my account</span> to confirm
+          {t("privacy.confirmBefore")} <span className="font-mono normal-case">delete my account</span> {t("privacy.confirmAfter")}
         </label>
         <input id="confirm" name="confirm" className="input" required autoComplete="off" />
       </div>
       <div>
         <label className="label" htmlFor="password">
-          Your password
+          {t("privacy.password")}
         </label>
         <input id="password" name="password" type="password" className="input" required autoComplete="current-password" />
-        <p className="hint">A stolen session must not be enough to destroy your account, so we re-check your password.</p>
+        <p className="hint">{t("privacy.passwordHint")}</p>
       </div>
       {error && (
         <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">
@@ -100,10 +103,10 @@ export function DeleteAccountForm() {
       <div className="flex flex-wrap gap-2">
         <button type="submit" className="btn h-10 border-danger text-danger" disabled={busy}>
           {busy && <span className="spinner" aria-hidden="true" />}
-          Permanently delete
+          {t("privacy.deleteNow")}
         </button>
         <button type="button" className="btn btn-ghost h-10" disabled={busy} onClick={() => setOpen(false)}>
-          Cancel
+          {t("privacy.cancel")}
         </button>
       </div>
     </form>
