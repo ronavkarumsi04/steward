@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
-import { AUTONOMY_LABELS } from "@steward/schema";
 import { workspaceArrival } from "@/lib/arrivals";
-import { serverApi, tryApi } from "@/lib/server";
+import { serverApi, tryApi, getLocale } from "@/lib/server";
+import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, Task, UsageRow } from "@/lib/types";
 import { buildAttentionQueue } from "@/lib/attention";
 import { mostUrgent } from "@/lib/approval-review";
@@ -36,6 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ companyId
 
 export default async function CompanyOverviewPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
+  const locale = await getLocale();
   const api = await serverApi();
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
@@ -100,21 +101,21 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
     <div className="space-y-6">
       <header className="nb-hero rise-in flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <div className="nb-section-label mb-2">COMMAND CENTER</div>
+          <div className="nb-section-label mb-2">{t(locale, "overview.eyebrow")}</div>
           <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">{company.name}</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || "No profile yet — add one in Settings."}</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || t(locale, "overview.noProfile")}</p>
         </div>
         <dl className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
           <div className="nb-panel-flat nb-accent-purple px-3 py-2">
-            <dt className="nb-section-label text-[10px]">Autonomy</dt>
-            <dd className="mt-1 text-sm font-bold">L{company.autonomyLevel} · {AUTONOMY_LABELS[company.autonomyLevel]}</dd>
+            <dt className="nb-section-label text-[10px]">{t(locale, "overview.autonomy")}</dt>
+            <dd className="mt-1 text-sm font-bold">L{company.autonomyLevel} · {t(locale, `autonomy.${company.autonomyLevel}` as MessageKey)}</dd>
           </div>
           <div className="nb-panel-flat nb-accent-blue px-3 py-2">
-            <dt className="nb-section-label text-[10px]">Enabled agents</dt>
-            <dd className="tnum mt-1 text-sm font-bold">{agents.filter((a) => a.enabled).length} of {agents.length}</dd>
+            <dt className="nb-section-label text-[10px]">{t(locale, "overview.enabledAgents")}</dt>
+            <dd className="tnum mt-1 text-sm font-bold">{tf(locale, "overview.ofTotal", { n: agents.filter((a) => a.enabled).length, total: agents.length })}</dd>
           </div>
           <div className="nb-panel-flat nb-accent-orange px-3 py-2">
-            <dt className="nb-section-label text-[10px]">Timezone</dt>
+            <dt className="nb-section-label text-[10px]">{t(locale, "overview.timezone")}</dt>
             <dd className="mt-1 text-sm font-bold">{company.timezone}</dd>
           </div>
         </dl>
@@ -142,21 +143,21 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
 
       <div className="nb-bento rise-in grid gap-3 sm:grid-cols-2 xl:grid-cols-4" style={delay(4)}>
         <div className="nb-metric nb-accent-blue">
-          <Stat label="Open tasks" value={openTasks} hint={`${taskCounts.done ?? 0} done`} href={`${base}/tasks`} />
+          <Stat label={t(locale, "overview.openTasks")} value={openTasks} hint={tf(locale, "overview.done", { n: taskCounts.done ?? 0 })} href={`${base}/tasks`} />
         </div>
         <div className="nb-metric nb-accent-yellow">
           <Stat
-            label="Pending approvals"
+            label={t(locale, "overview.pendingApprovals")}
             value={overview.pendingApprovals}
-            hint={overview.pendingApprovals ? <span className="text-warn">Needs your decision</span> : "All clear"}
+            hint={overview.pendingApprovals ? <span className="text-warn">{t(locale, "overview.needsDecision")}</span> : t(locale, "overview.allClear")}
             href={`${base}/approvals`}
           />
         </div>
         <div className="nb-metric nb-accent-purple">
-          <Stat label="AI spend · 30d" value={usd(spend30)} hint={aiBudget ? `${calls30} calls · limit ${usd(aiBudget.limitUsd)}/${aiBudget.period}` : `${calls30} calls`} />
+          <Stat label={t(locale, "overview.aiSpend")} value={usd(spend30)} hint={aiBudget ? tf(locale, "overview.callsLimit", { n: calls30, limit: usd(aiBudget.limitUsd), period: aiBudget.period }) : tf(locale, "overview.calls", { n: calls30 })} />
         </div>
         <div className="nb-metric nb-accent-green">
-          <Stat label="Active goals" value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? "No goals yet"} href={`${base}/settings#goals`} />
+          <Stat label={t(locale, "overview.activeGoals")} value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? t(locale, "overview.noGoalsYet")} href={`${base}/settings#goals`} />
         </div>
       </div>
 
@@ -188,21 +189,21 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
       </section>
 
       <section className="nb-panel-flat nb-accent-blue rise-in" style={delay(5)}>
-        <div className="nb-section-label mb-3">MANUAL TASK LAUNCHER</div>
+        <div className="nb-section-label mb-3">{t(locale, "overview.launcher")}</div>
         <QuickStart companyId={companyId} agents={agents} />
       </section>
 
       <div className="rise-in grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" style={delay(6)}>
         <div className="nb-left-purple nb-accent-blue min-w-0">
-          <Card title="Live activity" action={<Link className="btn btn-ghost btn-sm" href={`${base}/activity`}>All activity <Icon.ChevronRight size={14} /></Link>}>
+          <Card title={t(locale, "overview.liveActivity")} action={<Link className="btn btn-ghost btn-sm" href={`${base}/activity`}>{t(locale, "overview.allActivity")} <Icon.ChevronRight size={14} /></Link>}>
             <LiveFeed companyId={companyId} initial={events.events} compact />
           </Card>
         </div>
         <div className="min-w-0 space-y-4">
           <div className="nb-left-yellow nb-accent-orange">
-            <Card title="Approvals waiting" action={<Link className="btn btn-ghost btn-sm" href={`${base}/approvals`}>Review <Icon.ChevronRight size={14} /></Link>}>
+            <Card title={t(locale, "overview.approvalsWaiting")} action={<Link className="btn btn-ghost btn-sm" href={`${base}/approvals`}>{t(locale, "overview.review")} <Icon.ChevronRight size={14} /></Link>}>
               {approvals.approvals.length === 0 ? (
-                <Empty icon={<Icon.Check size={20} />}>No approvals pending.</Empty>
+                <Empty icon={<Icon.Check size={20} />}>{t(locale, "overview.noApprovals")}</Empty>
               ) : (
                 <ul className="space-y-2 text-sm">
                   {approvals.approvals.map((a) => (
@@ -224,9 +225,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
             </Card>
           </div>
           <div className="nb-left-blue nb-accent-purple">
-            <Card title="Recent runs" action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>All runs <Icon.ChevronRight size={14} /></Link>}>
+            <Card title={t(locale, "overview.recentRuns")} action={<Link className="btn btn-ghost btn-sm" href={`${base}/runs`}>{t(locale, "overview.allRuns")} <Icon.ChevronRight size={14} /></Link>}>
               {runs.runs.length === 0 ? (
-                <Empty icon={<Icon.Runs size={20} />}>No runs yet.</Empty>
+                <Empty icon={<Icon.Runs size={20} />}>{t(locale, "overview.noRuns")}</Empty>
               ) : (
                 <ul className="-mx-2 text-sm">
                   {runs.runs.slice(0, 6).map((r) => (
@@ -245,9 +246,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
             </Card>
           </div>
           <div className="nb-left-green nb-accent-green">
-            <Card title="Goals" action={<Link className="btn btn-ghost btn-sm" href={`${base}/settings#goals`}>Edit <Icon.ChevronRight size={14} /></Link>}>
+            <Card title={t(locale, "overview.goals")} action={<Link className="btn btn-ghost btn-sm" href={`${base}/settings#goals`}>{t(locale, "overview.edit")} <Icon.ChevronRight size={14} /></Link>}>
               {goals.length === 0 ? (
-                <Empty>No goals. Agents work best with 1–3 measurable goals.</Empty>
+                <Empty>{t(locale, "overview.noGoals")}</Empty>
               ) : (
                 <ul className="space-y-2 text-sm">
                   {goals.map((g) => (

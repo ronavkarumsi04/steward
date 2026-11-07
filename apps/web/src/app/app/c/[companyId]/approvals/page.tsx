@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { serverApi } from "@/lib/server";
+import { getLocale, serverApi } from "@/lib/server";
+import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { Approval, Run } from "@/lib/types";
 import { ApprovalsList } from "@/components/approvals-list";
 import { Icon } from "@/components/icons";
 import { Empty, PageHeader } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Approvals" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLocale(), "approvals.title") };
+}
 
 export default async function ApprovalsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<{ status?: string }> }) {
   const { companyId } = await params;
   const { status = "pending" } = await searchParams;
   const api = await serverApi();
+  const locale = await getLocale();
   // The run behind a request is what makes a decision meaningful or pointless: a run that already finished
   // cannot be resumed, and the surface has to be able to say so. One list call answers it for every card.
   const [{ approvals }, { runs }] = await Promise.all([
@@ -22,19 +26,19 @@ export default async function ApprovalsPage({ params, searchParams }: { params: 
   return (
     <div>
       <PageHeader
-        eyebrow="Control"
-        title="Approvals"
-        description="Agents pause here before doing anything your policies mark as requiring approval. Each request shows the rule that stopped it, the exact payload that will execute and what it touches; approving resumes the paused workflow, denying tells the agent to find another path."
+        eyebrow={t(locale, "approvals.eyebrow")}
+        title={t(locale, "approvals.title")}
+        description={t(locale, "approvals.description")}
         action={
-          <nav aria-label="Filter approvals" className="segmented">
+          <nav aria-label={t(locale, "approvals.filter")} className="segmented">
             {["pending", "approved", "denied", "expired"].map((s) => (
-              <Link key={s} href={`/app/c/${companyId}/approvals?status=${s}`} aria-current={s === status ? "page" : undefined} className="capitalize">{s}</Link>
+              <Link key={s} href={`/app/c/${companyId}/approvals?status=${s}`} aria-current={s === status ? "page" : undefined} className="capitalize">{t(locale, `approvals.${s}` as MessageKey)}</Link>
             ))}
           </nav>
         }
       />
       {approvals.length === 0 ? (
-        <Empty icon={<Icon.Check size={20} />}>No {status} approvals.</Empty>
+        <Empty icon={<Icon.Check size={20} />}>{tf(locale, "approvals.none", { status: ["pending", "approved", "denied", "expired"].includes(status) ? t(locale, `approvals.${status}` as MessageKey) : status })}</Empty>
       ) : (
         <ApprovalsList companyId={companyId} approvals={approvals} runsById={runsById} />
       )}
