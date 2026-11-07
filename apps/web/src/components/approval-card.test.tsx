@@ -14,7 +14,7 @@ const base: Approval = {
 };
 
 describe("ApprovalCard for an outbox action", () => {
-  const post: Approval = { ...base, action: "social.publish", dimension: "social_publish", affectedSystem: "linkedin", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess." } };
+  const post: Approval = { ...base, action: "social.publish", dimension: "social_publish", affectedSystem: "linkedin", reason: "social_publish actions require approval at autonomy level 2", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess." } };
 
   it("shows the post as text with its channel and length, and folds the JSON and blast radius away", () => {
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: post }));
@@ -24,12 +24,14 @@ describe("ApprovalCard for an outbox action", () => {
     expect(html).toContain("Raw payload");
     expect(html.indexOf("&quot;network&quot;: &quot;linkedin&quot;")).toBeGreaterThan(html.indexOf("Raw payload"));
     expect(html).toMatch(/<details[^>]*aria-label="Blast radius"(?![^>]*open)/);
+    expect(html).toContain("What this rule means");
   });
 
   it("keeps the decoded-fields view for any other action", () => {
     const deploy: Approval = { ...base, action: "deploy.production", dimension: "deploy", affectedSystem: "vercel", payload: { target: "production" } };
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: deploy }));
     expect(html).not.toContain("Post to everyone");
+    expect(html).not.toContain("What this rule means");
     expect(html).toMatch(/<details[^>]*aria-label="Blast radius"[^>]*open/);
   });
 });
