@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { GrowthPipeline } from "@/components/growth-pipeline";
-import { serverApi } from "@/lib/server";
+import { getLocale, serverApi } from "@/lib/server";
+import { t } from "@/lib/i18n";
 import type { GrowthSnapshot } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Growth" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLocale(), "growth.eyebrow") };
+}
 
 export default async function GrowthPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
