@@ -158,7 +158,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     return c.json({ user, memberships: c.get("memberships") ?? [], pendingAgreements: pendingAgreements(accepted) });
   });
 
-  defineRoute(app, reg, { method: "patch", path: "/auth/me", tag: "auth", summary: "Update the signed-in user's own preferences (interface language)", body: z.object({ locale: z.enum(LOCALES) }) }, async (c, body) => {
+  defineRoute(app, reg, { method: "patch", path: "/auth/me", tag: "auth", summary: "Update the signed-in user's own preferences (interface language)", body: z.object({ locale: z.enum(LOCALES) }) }, async (c, { body }) => {
     const user = requireUser(c);
     await c.get("deps").auth.setLocale(user.id, body.locale);
     c.header("cache-control", "no-store");
