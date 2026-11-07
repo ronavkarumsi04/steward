@@ -9,7 +9,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ActivityPage({ params }: { params: Promise<{ companyId: string }> }) {
-  const locale = await getLocale();
   const { companyId } = await params;
   const api = await serverApi();
   const [{ events }, { projects }] = await Promise.all([
