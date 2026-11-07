@@ -26,7 +26,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
     <div className="flex min-h-screen flex-col">
       <TopNav me={me} orgId={company.organizationId} />
       <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-4 sm:px-5 md:flex-row md:gap-6 md:py-6">
-        <aside aria-label={t(locale, "shell.companyNav")} className="relative z-[var(--z-nav)] md:sticky md:top-[4.25rem] md:w-[248px] md:shrink-0 md:self-start">
+        <aside aria-label={t(locale, "shell.companyNav")} className="relative z-[var(--z-sidebar)] md:sticky md:top-[4.25rem] md:w-[248px] md:shrink-0 md:self-start">
           <div className="nb-sidebar-shell rounded-xl border border-line p-2">
             <Link href={`/app/c/${company.id}`} className="flex items-center gap-3 border border-line bg-panel p-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-line bg-accent-soft text-fg">

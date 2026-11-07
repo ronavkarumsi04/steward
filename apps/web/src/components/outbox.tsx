@@ -53,7 +53,7 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
         <Pill tone={item.kind === "social" ? "accent" : "neutral"}>{item.kind === "social" ? item.network : item.kind}</Pill>
         <span className="font-medium">{item.kind === "social" ? t("outbox.postToEveryone") : tf("outbox.to", { to: item.to || "—" })}</span>
         {item.subject ? <span className="truncate text-muted">· {item.subject}</span> : null}
-        <span className="ml-auto text-xs text-faint">waiting since {approval.createdAt.slice(0, 10)}</span>
+        <span className="ml-auto text-xs text-faint">{tf("outbox.waitingSince", { date: approval.createdAt.slice(0, 10) })}</span>
       </div>
       <div className="mt-3 border border-line bg-paper p-3 text-sm" style={{ fontFamily: item.kind === "email" ? undefined : "inherit" }}>
         {editing ? (
@@ -63,7 +63,7 @@ function OutboxRow({ companyId, approval, onDone }: { companyId: string; approva
         )}
         {limit !== undefined ? <p className={`mt-2 text-right text-xs ${over ? "text-danger" : "text-faint"}`}>{text.length} / {limit}</p> : null}
       </div>
-      {approval.reason ? <p className="mt-2 text-xs text-muted">Held because: {approval.reason}</p> : null}
+      {approval.reason ? <p className="mt-2 text-xs text-muted">{tf("outbox.heldBecause", { reason: approval.reason })}</p> : null}
       {(approval.warnings ?? []).map((w) => (
         <p key={w} role="note" className="nb-panel-flat nb-left-orange mt-2 px-3 py-2 text-xs leading-relaxed text-fg-2">{w}</p>
       ))}

@@ -136,7 +136,7 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
                 <label key={accent} className="flex cursor-pointer items-center gap-2 border border-line px-2 py-1 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
                   <input type="radio" name="accent" value={accent} checked={kit.accent === accent} onChange={() => patch({ accent })} className="sr-only" />
                   <span aria-hidden className="inline-block h-4 w-4" style={{ background: BRAND_ACCENT_HEX[accent] }} />
-                  <span className="capitalize">{accent}</span>
+                  <span>{t(`accent.${accent}` as MessageKey)}</span>
                 </label>
               ))}
             </div>

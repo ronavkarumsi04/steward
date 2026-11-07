@@ -13,6 +13,7 @@ import { Icon } from "./icons";
 import { useToast } from "./feedback";
 
 export function ConversationList({ companyId, conversations, activeId }: { companyId: string; conversations: Conversation[]; activeId?: string }) {
+  const locale = useLocale();
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -39,7 +40,7 @@ export function ConversationList({ companyId, conversations, activeId }: { compa
             <li key={c.id}>
               <Link href={`/app/c/${companyId}/chat/${c.id}`} className={`block truncate border px-3 py-2 ${c.id === activeId ? "border-line bg-panel-2 text-fg" : "border-transparent text-muted hover:border-line hover:bg-panel-2 hover:text-fg"}`}>
                 {c.title || t("chat.new")}
-                <span className="block text-xs text-muted"><Ago iso={c.updatedAt} /></span>
+                <span className="block text-xs text-muted"><Ago iso={c.updatedAt} locale={locale} /></span>
               </Link>
             </li>
           ))}
@@ -81,7 +82,7 @@ export function ChatStarters({ companyId }: { companyId: string }) {
         <div className="nb-section-label mb-2">{t("chat.chief")}</div>
         <h2 className="text-2xl font-black leading-tight tracking-tight">{t("chat.headline")}</h2>
         <p className="mt-2 text-sm text-muted">
-          Every message becomes a durable run: it plans, uses the tools your policies allow, stops for approval when it must, and reports back here with what it produced.
+          {t("chat.explainer")}
         </p>
       </div>
       <ul className="grid gap-2 sm:grid-cols-2" aria-label={t("chat.suggested")}>
@@ -169,7 +170,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
       <header className="mb-3 flex items-center justify-between border-b border-line pb-2">
         <div>
           <h1 className="font-semibold">{conversation.title || t("chat.new")}</h1>
-          <p className="text-xs text-muted">Talking to {agent?.name ?? "your Chief of Staff"} · every reply is a durable run you can inspect</p>
+          <p className="text-xs text-muted">{tf("chat.talkingTo", { agent: agent?.name ?? t("chat.yourChief") })}</p>
         </div>
         {activeRun && (
           <Link href={`/app/c/${companyId}/runs/${activeRun.id}`} className="flex items-center gap-2 text-xs text-muted hover:text-fg">
@@ -184,7 +185,7 @@ export function ChatView({ companyId, conversation, initialMessages, agents }: {
             <div className={`max-w-[80%] border border-line px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "nb-accent-purple" : m.role === "assistant" ? "bg-panel-2" : "text-muted"}`}>
               {m.content}
               <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-accent-fg/70" : "text-muted"}`}>
-                <Ago iso={m.createdAt} />
+                <Ago iso={m.createdAt} locale={locale} />
                 {m.runId && m.role !== "user" && <> · <Link className="underline" href={`/app/c/${companyId}/runs/${m.runId}`}>{t("chat.run")}</Link></>}
               </div>
             </div>

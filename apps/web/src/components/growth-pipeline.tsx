@@ -148,10 +148,10 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         </div>
         <form onSubmit={createCampaign} className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-6 sm:p-5">
           <div className="lg:col-span-2"><label className="label">{t("growth.campaignName")}</label><input name="campaignName" aria-label={t("growth.campaignName")} className="input" placeholder={t("growth.campaignNamePlaceholder")} required maxLength={200} /></div>
-          <div><label className="label">{t("growth.channel")}</label><select name="channel" aria-label={t("growth.channelLabel")} className="input"><option value="email">Email</option><option value="social">Social</option><option value="ads">Ads plan</option></select></div>
+          <div><label className="label">{t("growth.channel")}</label><select name="channel" aria-label={t("growth.channelLabel")} className="input"><option value="email">{t("growth.channelEmail")}</option><option value="social">{t("growth.channelSocial")}</option><option value="ads">{t("growth.channelAds")}</option></select></div>
           <div><label className="label">{t("growth.budgetContext")}</label><input name="budgetUsd" aria-label={t("growth.budgetLabel")} className="input tnum" type="number" min={0} step="0.01" placeholder="$" /></div>
           <div className="lg:col-span-2"><label className="label">{t("growth.audience")}</label><input name="audience" aria-label={t("growth.audienceLabel")} className="input" placeholder={t("growth.audiencePlaceholder")} maxLength={2000} /></div>
-          <div className="sm:col-span-2 lg:col-span-5"><label className="label">{t("growth.objective")}</label><input name="objective" aria-label={t("growth.objectiveLabel")} className="input" placeholder="Book 5 discovery calls and learn the top objection" maxLength={2000} /></div>
+          <div className="sm:col-span-2 lg:col-span-5"><label className="label">{t("growth.objective")}</label><input name="objective" aria-label={t("growth.objectiveLabel")} className="input" placeholder={t("growth.objectivePlaceholder")} maxLength={2000} /></div>
           <button className="btn btn-primary min-h-10 self-end" disabled={busy !== null}>{busy === "campaign-create" ? t("growth.creating") : t("growth.createCampaign")}</button>
         </form>
         {initial.campaigns.length === 0 ? (
