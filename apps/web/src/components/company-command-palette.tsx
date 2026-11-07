@@ -1,6 +1,6 @@
 "use client";
 
-import { useT, useTf } from "./locale-provider";
+import { useLocale, useT, useTf } from "./locale-provider";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,6 +47,7 @@ function shortId(id: string): string {
 export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const t = useT();
   const tf = useTf();
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -83,8 +84,8 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     }
   }, [companyId]);
 
-  const navOnly = useMemo(() => buildPalette({ companyId, ...EMPTY_DATA }), [companyId]);
-  const actions = useMemo(() => (data ? paletteFor(data, query, picking ? { picking } : {}) : navOnly), [data, navOnly, picking, query]);
+  const navOnly = useMemo(() => buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale]);
+  const actions = useMemo(() => (data ? paletteFor(data, query, picking ? { picking, locale } : { locale }) : navOnly), [data, locale, navOnly, picking, query]);
   const { matches, total } = useMemo(() => rankPalette(actions, query), [actions, query]);
 
   useEffect(() => {
@@ -308,7 +309,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     : loading && !data
       ? "Loading what is waiting…"
       : summary
-        ? stateLine(summary)
+        ? stateLine(summary, locale)
         : "";
 
   return (
@@ -402,10 +403,10 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-2">
                           <Pill tone={KIND_TONE[action.kind]} className="text-[10px]">
-                            {kindBadge(action.kind)}
+                            {kindBadge(action.kind, locale)}
                           </Pill>
                           <span className="font-bold">{action.label}</span>
-                          {action.confirm && <span className="text-[10px] font-semibold text-muted">asks first</span>}
+                          {action.confirm && <span className="text-[10px] font-semibold text-muted">{t("shell.asksFirst")}</span>}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-muted">{action.detail}</span>
                       </span>
