@@ -179,10 +179,10 @@ export function ago(iso: string | null | undefined, locale: Locale = "en"): stri
   return relativeSpan(locale, span, future);
 }
 
-export function Ago({ iso, className }: { iso: string | null | undefined; className?: string }) {
+export function Ago({ iso, className, locale = "en" }: { iso: string | null | undefined; className?: string; locale?: Locale }) {
   return (
     <time dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined} className={className} suppressHydrationWarning>
-      {ago(iso)}
+      {ago(iso, locale)}
     </time>
   );
 }
