@@ -148,6 +148,13 @@
       "when": 1794003850305,
       "tag": "0020_approval_warnings",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794009976945,
+      "tag": "0021_user_locale",
+      "breakpoints": true
     }
   ]
 }

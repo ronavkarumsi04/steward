@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "./icons";
+import { useT } from "./locale-provider";
 
 /**
  * Grouped by when a founder reaches for them, not by what the code calls them: the things that change
@@ -10,55 +11,56 @@ import { Icon } from "./icons";
  */
 const GROUPS = [
   {
-    label: "TODAY",
+    label: "nav.today",
     items: [
-      ["", "Studio", Icon.Overview],
-      ["/approvals", "Approvals", Icon.Approvals],
-      ["/runs", "Runs", Icon.Runs],
-      ["/tasks", "Tasks", Icon.Tasks],
-      ["/chat", "Chat", Icon.Chat],
-      ["/activity", "Activity", Icon.Activity],
+      ["", "nav.studio", Icon.Overview],
+      ["/approvals", "nav.approvals", Icon.Approvals],
+      ["/runs", "nav.runs", Icon.Runs],
+      ["/tasks", "nav.tasks", Icon.Tasks],
+      ["/chat", "nav.chat", Icon.Chat],
+      ["/activity", "nav.activity", Icon.Activity],
     ],
   },
   {
-    label: "WORK",
+    label: "nav.work",
     items: [
-      ["/projects", "Projects", Icon.Company],
+      ["/projects", "nav.projects", Icon.Company],
       // The repository this company works in: read it, propose a change, hand the proposal to an agent.
-      ["/code", "Code", Icon.Code],
+      ["/code", "nav.code", Icon.Code],
       // Pages an agent looks at while the founder watches — a competitor, a directory, a signup flow.
-      ["/browser", "Browser", Icon.Browser],
+      ["/browser", "nav.browser", Icon.Browser],
       // The standing work, drawn: the reaction rules and agent schedules above, as one picture.
-      ["/workflows", "Workflows", Icon.Workflow],
-      ["/signals", "Signals", Icon.Signals],
+      ["/workflows", "nav.workflows", Icon.Workflow],
+      ["/signals", "nav.signals", Icon.Signals],
     ],
   },
   {
-    label: "BUSINESS",
+    label: "nav.business",
     items: [
-      ["/growth", "Growth", Icon.Growth],
-      ["/finance", "Finance", Icon.Finance],
+      ["/growth", "nav.growth", Icon.Growth],
+      ["/finance", "nav.finance", Icon.Finance],
       // The company's own website. "Studio" above is the company overview, so this is labelled for what a
       // founder would look for, even though the page itself is called the Site Studio.
-      ["/site", "Website", Icon.Company],
+      ["/site", "nav.website", Icon.Company],
     ],
   },
   {
-    label: "MEMORY & SETUP",
+    label: "nav.setup",
     items: [
-      ["/knowledge", "Knowledge", Icon.Knowledge],
+      ["/knowledge", "nav.knowledge", Icon.Knowledge],
       // The same knowledge as one thing: every kind of row, and every claim somebody made about one.
-      ["/graph", "Graph", Icon.Graph],
-      ["/agents", "Agents", Icon.Agents],
+      ["/graph", "nav.graph", Icon.Graph],
+      ["/agents", "nav.agents", Icon.Agents],
       // Other people's tools, installed on purpose: what each server offers, and who may call it.
-      ["/mcp", "Marketplace", Icon.Plug],
-      ["/integrations", "Integrations", Icon.Integrations],
-      ["/settings", "Settings", Icon.Settings],
+      ["/mcp", "nav.marketplace", Icon.Plug],
+      ["/integrations", "nav.integrations", Icon.Integrations],
+      ["/settings", "nav.settings", Icon.Settings],
     ],
   },
 ] as const;
 
 export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: { companyId: string; pendingApprovals: number; activeRuns?: number }) {
+  const t = useT();
   const path = usePathname();
   const base = `/app/c/${companyId}`;
 
@@ -69,15 +71,15 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
     >
       {GROUPS.map(({ label: groupLabel, items }) => (
         <div key={groupLabel} className="flex shrink-0 gap-0.5 md:flex-col md:gap-1">
-          <span className="hidden px-2 text-[10px] font-bold tracking-widest md:block">{groupLabel}</span>
+          <span className="hidden px-2 text-[10px] font-bold tracking-widest md:block">{t(groupLabel)}</span>
           {items.map(([suffix, label, Glyph]) => {
             const href = `${base}${suffix}`;
             const active = suffix === "" ? path === base : path.startsWith(href);
             const badge =
               suffix === "/approvals" && pendingApprovals > 0
-                ? { n: pendingApprovals, tone: "pill-warn", label: `${pendingApprovals} pending` }
+                ? { n: pendingApprovals, tone: "pill-warn", label: `${pendingApprovals} ${t("nav.pending")}` }
                 : suffix === "/runs" && activeRuns > 0
-                  ? { n: activeRuns, tone: "pill-ok", label: `${activeRuns} running` }
+                  ? { n: activeRuns, tone: "pill-ok", label: `${activeRuns} ${t("nav.running")}` }
                   : null;
 
             return (
@@ -89,7 +91,7 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
               >
                 <span className="flex items-center gap-2.5">
                   <Glyph size={18} />
-                  {label}
+                  {t(label)}
                 </span>
                 {badge !== null && (
                   <span className={`pill ${badge.tone} min-w-6 justify-center px-1.5 py-0 text-[11px]`} aria-label={badge.label}>
