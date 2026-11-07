@@ -138,7 +138,7 @@ export default async function AccountPage() {
           </ul>
         )}
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          {T("account.contactBefore")} <Link href="/legal/privacy" className="font-medium text-accent hover:underline">{T("account.privacyPolicy")}</Link> page — we log it and answer within the period the law allows.
+          {T("account.contactBefore")} <Link href="/legal/privacy" className="font-medium text-accent hover:underline">{T("account.privacyPolicy")}</Link>{T("account.contactAfter")}
         </p>
       </section>
 
@@ -147,7 +147,7 @@ export default async function AccountPage() {
           {T("account.delete")}
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          {T("account.deleteBefore")} <Link href="/legal/retention" className="font-medium text-accent hover:underline">{T("account.retentionPolicy")}</Link>: it lists exactly what deletion removes and the two things it keeps.
+          {T("account.deleteBefore")} <Link href="/legal/retention" className="font-medium text-accent hover:underline">{T("account.retentionPolicy")}</Link>{T("account.deleteAfter")}
         </p>
         <div className="mt-3">
           <DeleteAccountForm />

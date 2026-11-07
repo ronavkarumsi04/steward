@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { relativeSpan, type Locale } from "@/lib/i18n";
 import type { ReactNode } from "react";
 import type { RiskLevel, RunStatus, TaskStatus } from "@steward/schema";
 
@@ -167,7 +168,7 @@ export function usd(v: string | number | null | undefined): string {
   return `$${n.toFixed(n < 1 ? 4 : 2)}`;
 }
 
-export function ago(iso: string | null | undefined): string {
+export function ago(iso: string | null | undefined, locale: Locale = "en"): string {
   if (!iso) return "—";
   const diff = Date.now() - new Date(iso).getTime();
   const future = diff < 0;
@@ -175,7 +176,7 @@ export function ago(iso: string | null | undefined): string {
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
   const span = s < 60 ? `${s}s` : m < 60 ? `${m}m` : h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`;
-  return future ? `in ${span}` : `${span} ago`;
+  return relativeSpan(locale, span, future);
 }
 
 export function Ago({ iso, className }: { iso: string | null | undefined; className?: string }) {

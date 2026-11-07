@@ -16,7 +16,7 @@
  *     a run that is already finished gets no "cancel". A command that would fail is worse than no command.
  */
 import { reviewApproval } from "./approval-review";
-import { t, tf, type Locale, type MessageKey } from "./i18n";
+import { statusLabel, t, tf, type Locale, type MessageKey } from "./i18n";
 import type { Agent, Approval, Run, Task } from "./types";
 
 export type PaletteKind = "decide" | "cancel" | "run" | "ask" | "assign" | "review" | "navigate";
@@ -120,13 +120,13 @@ function minutesUntil(iso: string, now: number): number | null {
   return Number.isFinite(t) ? Math.round((t - now) / 60_000) : null;
 }
 
-function lapse(iso: string, now: number): string {
+function lapse(iso: string, now: number, locale: Locale): string {
   const minutes = minutesUntil(iso, now);
-  if (minutes === null) return "no deadline recorded";
+  if (minutes === null) return t(locale, "palette.noDeadline");
   const past = minutes <= 0;
   const abs = Math.abs(minutes);
   const span = abs < 60 ? `${abs}m` : abs < 48 * 60 ? `${Math.floor(abs / 60)}h` : `${Math.floor(abs / (48 * 60))}d`;
-  return past ? `lapsed ${span} ago` : `lapses in ${span}`;
+  return tf(locale, past ? "palette.lapsed" : "palette.lapses", { span });
 }
 
 /** Only agents that can actually be given work. A disabled agent is not offered as an owner. */
@@ -233,7 +233,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       id: `decide:${approval.id}`,
       kind: "decide",
       label: trf("palette.approve", { action: approval.action }),
-      detail: `${approval.risk} risk · ${approval.dimension} · ${approval.affectedSystem} · ${lapse(approval.expiresAt, now)}`,
+      detail: trf("palette.approvalDetail", { risk: t(L, `risk.${approval.risk}` as MessageKey), dimension: approval.dimension, system: approval.affectedSystem, lapse: lapse(approval.expiresAt, now, L) }),
       keywords: `approve yes decide grant ${approval.action} ${approval.dimension} ${approval.affectedSystem}`,
       target: { kind: "approve", approvalId: approval.id },
       confirm: { question: trf("palette.approveQ", { action: approval.action }), facts, confirmLabel: tr("palette.approveIt") },
@@ -242,7 +242,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       id: `review:${approval.id}`,
       kind: "review",
       label: trf("palette.open", { action: approval.action }),
-      detail: `policy reason, payload and blast radius · ${lapse(approval.expiresAt, now)}`,
+      detail: trf("palette.openDetail", { lapse: lapse(approval.expiresAt, now, L) }),
       keywords: `open review read approval brief payload blast radius ${approval.action}`,
       target: { kind: "navigate", href: `${base}/approvals#${approval.id}` },
     });
@@ -255,13 +255,13 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       id: `cancel:${run.id}`,
       kind: "cancel",
       label: run.intent ? trf("palette.cancelIntent", { intent: clamp(run.intent, 60) }) : trf("palette.cancelRun", { id: run.id.slice(0, 8) }),
-      detail: trf("palette.cancelDetail", { id: run.id.slice(0, 8), status: run.status.replace(/_/g, " "), cost: usd(run.costUsd) }),
+      detail: trf("palette.cancelDetail", { id: run.id.slice(0, 8), status: statusLabel(L, run.status), cost: usd(run.costUsd) }),
       keywords: `cancel stop abort halt run ${run.intent} ${run.status}`,
       target: { kind: "cancel", runId: run.id },
       confirm: {
         question: trf("palette.cancelQ", { id: run.id.slice(0, 8) }),
         facts: [
-          { label: tr("palette.factStatus"), value: run.status.replace(/_/g, " ") },
+          { label: tr("palette.factStatus"), value: statusLabel(L, run.status) },
           { label: tr("palette.factWorkingOn"), value: run.intent || tr("palette.noIntent") },
           { label: "Run", value: run.id },
           { label: "Spent so far", value: usd(run.costUsd) },
@@ -283,7 +283,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
         id: `run:${task.id}`,
         kind: "run",
         label: trf("palette.runTask", { title: clamp(task.title, 60) }),
-        detail: trf("palette.runTaskDetail", { status: task.status.replace(/_/g, " "), priority: task.priority }),
+        detail: trf("palette.runTaskDetail", { status: statusLabel(L, task.status), priority: t(L, `priority.${task.priority}` as MessageKey) }),
         keywords: `run start execute now task ${task.title} ${task.status}`,
         target: { kind: "pick", taskId: task.id, picking: "run" },
       });
@@ -295,8 +295,8 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
         actions.push({
           id: `assign:${task.id}`,
           kind: "assign",
-          label: owner ? `Reassign “${clamp(task.title, 60)}”` : `Assign “${clamp(task.title, 60)}”`,
-          detail: owner ? `${owner.name} has it · ${task.status.replace(/_/g, " ")}` : `no active owner · ${task.status.replace(/_/g, " ")}`,
+          label: trf(owner ? "palette.reassign" : "palette.assignTask", { title: clamp(task.title, 60) }),
+          detail: owner ? trf("palette.hasIt", { owner: owner.name, status: statusLabel(L, task.status) }) : trf("palette.noOwner", { status: statusLabel(L, task.status) }),
           keywords: `assign reassign owner hand over delegate ${owner?.name ?? ""} task ${task.title} ${task.status}`,
           target: { kind: "pick", taskId: task.id, picking: "assign" },
         });
@@ -310,7 +310,7 @@ export function buildPalette(data: PaletteData, options: PaletteOptions = {}): P
       id: `nav:${nav.suffix || "studio"}`,
       kind: "navigate",
       label: tr(nav.labelKey),
-      detail: nav.keywords.split(" ").slice(0, 2).join(" · "),
+      detail: tr(`navHint.${nav.suffix.slice(1) || "studio"}` as MessageKey),
       keywords: `${nav.keywords} ${nav.label}`,
       target: { kind: "navigate", href: `${base}${nav.suffix}` },
     });
@@ -338,7 +338,7 @@ export function instructionCommand(data: { agents: Agent[] }, query: string, loc
     keywords: `ask run start instruction new run ${agent.name} ${agent.kind} ${text}`,
     target: { kind: "ask", agentId: agent.id, agentName: agent.name, instruction: text },
     confirm: {
-      question: `Start a run for “${clamp(text, 80)}”?`,
+      question: tf(locale, "palette.startInstructionQ", { text: clamp(text, 80) }),
       facts: [
         { label: tr("palette.factAgent"), value: `${agent.name} (${agent.kind})` },
         { label: tr("palette.factWhat"), value: tr("palette.factWhatRun") },
