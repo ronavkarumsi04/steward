@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useLocale, useT, useTf } from "./locale-provider";
+import type { MessageKey } from "@/lib/i18n";
 import { useMemo, useState, type ReactNode } from "react";
 import { browserApi, ApiError } from "@/lib/api";
 import { useLiveEvents } from "@/lib/use-events";
@@ -10,9 +12,12 @@ import { Ago, Card, Empty, Json, PageHeader, Pill } from "./ui";
 import { Icon } from "./icons";
 
 type View = "all" | "attention" | EventCategory;
-const VIEWS: Array<[View, string]> = [["all", "All"], ["attention", "Needs attention"], ["runs", "Runs & tasks"], ["tools", "Tools"], ["business", "Business"], ["governance", "Governance"], ["other", "Other"]];
+const VIEWS: Array<[View, MessageKey]> = [["all", "activity.view.all"], ["attention", "activity.view.attention"], ["runs", "activity.view.runs"], ["tools", "activity.view.tools"], ["business", "activity.view.business"], ["governance", "activity.view.governance"], ["other", "activity.view.other"]];
 
 export function ActivityCenter({ companyId, initial, projects }: { companyId: string; initial: StewardEvent[]; projects: Project[] }) {
+  const locale = useLocale();
+  const t = useT();
+  const tf = useTf();
   const { events: live, connected } = useLiveEvents(companyId, { initial, max: 500 });
   const [older, setOlder] = useState<StewardEvent[]>([]);
   const [view, setView] = useState<View>("all");
@@ -50,49 +55,49 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
       setOlder((current) => [...current, ...rows]);
       setHasOlder(rows.length >= 200);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Older activity could not be loaded");
+      setError(err instanceof ApiError ? err.message : t("activity.olderFailed"));
     } finally { setBusy(false); }
   }
 
   return (
     <div>
       <PageHeader
-        eyebrow="Operations"
-        title="Activity"
-        description="A live, durable timeline of what Steward, your team, integrations, tools and policies are doing. Drill into correlated runs and projects without losing the event trail."
-        action={<div className="flex flex-wrap gap-2"><Pill tone={connected ? "ok" : "warn"}>{connected ? "Live" : "Reconnecting"}</Pill><Pill tone={attention.length ? "warn" : "neutral"}>{attention.length} need attention</Pill></div>}
+        eyebrow={t("activity.eyebrow")}
+        title={t("activity.title")}
+        description={t("activity.description")}
+        action={<div className="flex flex-wrap gap-2"><Pill tone={connected ? "ok" : "warn"}>{connected ? t("activity.live") : t("activity.reconnecting")}</Pill><Pill tone={attention.length ? "warn" : "neutral"}>{tf("activity.needAttention", { n: attention.length })}</Pill></div>}
       />
 
       {error && <p role="alert" className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Metric label="Loaded events" value={events.length.toLocaleString()} hint="Live + paged history" />
-        <Metric label="Needs attention" value={attention.length.toLocaleString()} hint="Approvals, failures, budget and provider issues" tone={attention.length ? "warn" : undefined} />
-        <Metric label="Latest sequence" value={events[0] ? `#${events[0].seq}` : "—"} hint={events[0] ? <>Updated <Ago iso={events[0].createdAt} /></> : "No activity yet"} />
+        <Metric label={t("activity.loadedEvents")} value={events.length.toLocaleString()} hint={t("activity.loadedHint")} />
+        <Metric label={t("activity.needsAttention")} value={attention.length.toLocaleString()} hint={t("activity.needsAttentionHint")} tone={attention.length ? "warn" : undefined} />
+        <Metric label={t("activity.latestSeq")} value={events[0] ? `#${events[0].seq}` : "—"} hint={events[0] ? <>{t("activity.updated")} <Ago iso={events[0].createdAt} locale={locale} /></> : t("activity.noActivity")} />
       </div>
 
       <Card className="mb-5 p-4 nb-left-purple">
         <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_200px]">
-          <label className="sr-only" htmlFor="activity-search">Search activity</label>
-          <input id="activity-search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search event type, message, tool, status…" />
-          <label className="sr-only" htmlFor="activity-actor">Actor</label>
-          <select id="activity-actor" className="input" value={actor} onChange={(e) => setActor(e.target.value)}><option value="all">All actors</option>{actors.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-          <label className="sr-only" htmlFor="activity-project">Project</label>
-          <select id="activity-project" className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}><option value="all">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
+          <label className="sr-only" htmlFor="activity-search">{t("activity.search")}</label>
+          <input id="activity-search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("activity.searchPlaceholder")} />
+          <label className="sr-only" htmlFor="activity-actor">{t("activity.actor")}</label>
+          <select id="activity-actor" className="input" value={actor} onChange={(e) => setActor(e.target.value)}><option value="all">{t("activity.allActors")}</option>{actors.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+          <label className="sr-only" htmlFor="activity-project">{t("activity.project")}</label>
+          <select id="activity-project" className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}><option value="all">{t("activity.allProjects")}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Activity category">
-          {VIEWS.map(([value, label]) => <button key={value} className={`btn btn-sm ${view === value ? "btn-primary" : ""}`} onClick={() => setView(value)}>{label}{value === "attention" && attention.length ? ` · ${attention.length}` : ""}</button>)}
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("activity.category")}>
+          {VIEWS.map(([value, label]) => <button key={value} className={`btn btn-sm ${view === value ? "btn-primary" : ""}`} onClick={() => setView(value)}>{t(label)}{value === "attention" && attention.length ? ` · ${attention.length}` : ""}</button>)}
         </div>
       </Card>
 
       <Card className="p-0 nb-left-blue">
-        {visible.length === 0 ? <div className="p-4"><Empty icon={<Icon.Activity size={20} />}>No activity matches these filters.</Empty></div> : (
+        {visible.length === 0 ? <div className="p-4"><Empty icon={<Icon.Activity size={20} />}>{t("activity.noMatch")}</Empty></div> : (
           <ol className="divide-y divide-line">
             {visible.map((event) => <EventRow key={event.seq} companyId={companyId} event={event} project={projects.find((project) => project.id === event.correlation.projectId)} />)}
           </ol>
         )}
         {events.length > 0 && hasOlder && (
-          <div className="border-t border-line p-3 text-center"><button className="btn btn-sm" disabled={busy} onClick={loadOlder}>{busy ? "Loading…" : "Load older activity"}</button></div>
+          <div className="border-t border-line p-3 text-center"><button className="btn btn-sm" disabled={busy} onClick={loadOlder}>{busy ? t("activity.loading") : t("activity.loadOlder")}</button></div>
         )}
       </Card>
     </div>
@@ -100,27 +105,29 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
 }
 
 function EventRow({ companyId, event, project }: { companyId: string; event: StewardEvent; project?: Project }) {
+  const t = useT();
+  const locale = useLocale();
   const attention = eventNeedsAttention(event);
   const category = eventCategory(event);
   const links = correlationHref(companyId, event);
   return (
     <li className="px-4 py-3.5 sm:px-5" data-event-type={event.type} data-event-seq={event.seq}>
       <div className="flex gap-3">
-        <div className="hidden w-20 shrink-0 pt-0.5 text-right sm:block"><div className="mono tnum text-xs text-faint">#{event.seq}</div><div className="mt-0.5 text-xs text-muted"><Ago iso={event.createdAt} /></div></div>
+        <div className="hidden w-20 shrink-0 pt-0.5 text-right sm:block"><div className="mono tnum text-xs text-faint">#{event.seq}</div><div className="mt-0.5 text-xs text-muted"><Ago iso={event.createdAt} locale={locale} /></div></div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mono text-xs font-semibold text-accent">{event.type}</span>
             <span className="pill text-muted">{category}</span>
-            {attention && <Pill tone="warn">attention</Pill>}
+            {attention && <Pill tone="warn">{t("activity.attention")}</Pill>}
             <span className="text-xs text-muted">{actorLabel(event.actor)}</span>
-            <span className="sm:hidden text-xs text-faint"><Ago iso={event.createdAt} /></span>
+            <span className="sm:hidden text-xs text-faint"><Ago iso={event.createdAt} locale={locale} /></span>
           </div>
           <p className="mt-1 text-sm leading-6 text-fg-2">{summarizeEvent(event)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {project && <Link className="pill text-accent hover:underline" href={`/app/c/${companyId}/projects/${project.id}`}>{project.name}</Link>}
             {links.filter((link) => link.label !== "Project" || !project).map((link) => <Link key={`${link.label}:${link.href}`} className="text-accent hover:underline" href={link.href}>{link.label}</Link>)}
           </div>
-          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none text-muted hover:text-fg">Inspect event</summary><div className="mt-2 grid gap-2 lg:grid-cols-3"><JsonBlock label="Payload" value={event.payload} /><JsonBlock label="Actor" value={event.actor} /><JsonBlock label="Correlation" value={event.correlation} /></div></details>
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none text-muted hover:text-fg">{t("activity.inspect")}</summary><div className="mt-2 grid gap-2 lg:grid-cols-3"><JsonBlock label={t("activity.payload")} value={event.payload} /><JsonBlock label={t("activity.actorBlock")} value={event.actor} /><JsonBlock label={t("activity.correlation")} value={event.correlation} /></div></details>
         </div>
       </div>
     </li>

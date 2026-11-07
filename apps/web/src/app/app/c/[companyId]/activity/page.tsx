@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import { serverApi } from "@/lib/server";
+import { getLocale, serverApi } from "@/lib/server";
+import { t } from "@/lib/i18n";
 import type { Project, StewardEvent } from "@/lib/types";
 import { ActivityCenter } from "@/components/activity-center";
 
-export const metadata: Metadata = { title: "Activity" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: t(await getLocale(), "activity.title") };
+}
 
 export default async function ActivityPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
