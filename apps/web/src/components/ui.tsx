@@ -21,12 +21,12 @@ export function Card({
   return (
     <section id={id} className={`card min-w-0 ${className}`}>
       {(title || action) && (
-        <header className="mb-3 flex items-start justify-between gap-3">
+        <header className="panel-heading">
           <div className="min-w-0">
-            {title && <h2 className="text-xs font-bold uppercase leading-6 tracking-wider text-fg">{title}</h2>}
-            {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
+            {title && <h2>{title}</h2>}
+            {description && <p>{description}</p>}
           </div>
-          {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+          {action && <div className="flex max-w-full flex-wrap items-center gap-2">{action}</div>}
         </header>
       )}
       {children}
@@ -36,11 +36,11 @@ export function Card({
 
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <header className="desk-heading">
       <div className="min-w-0">
-        {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
-        <h1 className="text-3xl font-extrabold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
+        {eyebrow && <span className="sr-only">{eyebrow}</span>}
+        <h1 className="desk-title">{title}</h1>
+        {description && <p className="desk-description">{description}</p>}
       </div>
       {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
     </header>
@@ -49,7 +49,7 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
 
 export function Empty({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="card-inset flex flex-col items-center justify-center gap-2 px-4 py-8 text-center text-sm text-muted">
+    <div className="empty-note">
       {icon && (
         <div className="text-faint" aria-hidden="true">
           {icon}

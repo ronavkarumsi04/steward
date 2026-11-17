@@ -6,7 +6,9 @@
 
 Public surfaces (landing, sign-in/up, invite, password reset, legal) are a pad of triplicate carbonless work orders. The `.paper` class in `src/app/globals.css` scopes the world's tokens for those pages; it is always light stock.
 
-The authenticated workspace uses the same world through the `:root` tokens: paper ground `#f1eee5`, sheet panels `#fbfaf5`, ink `#17181c`, carbon-blue accent `#2b3990`, canary for the selected nav row and warnings, square corners, no resting shadows, Archivo and Plex Mono. The top bar is the pad's binding strip (`.binding-bar`, always dark ink). Dark mode is a night-shift carbon: `#111216` ground, `#191a20` panels, `#eeebe2` ink and `#a9b6ff` carbon accent. Section accents are a 2px top rule, never a side tab.
+The public entry is an editorial spread: the founder's instruction and account entry on the left, one explicitly illustrative filed order on the right. Below desktop they stack in reading order, action first. Pricing, Compare and the entry action remain available without JavaScript at every width.
+
+The workspace is a working ledger, not a second landing page. Paper ground `#f1eee5`, sheet `#fbfaf5`, ink `#17181c`, carbon-blue action `#2b3990`. Use a rule between readings, not a second card. Reserve canary for selection or a decision, not routine metadata. The binding bar is always dark. Dark mode has `#111216` ground, `#191a20` panels, `#eeebe2` ink and `#a9b6ff` action.
 
 ## Tokens (`.paper`)
 
@@ -23,11 +25,11 @@ The authenticated workspace uses the same world through the `:root` tokens: pape
 | Copy edges | `--wo-edge` | `#a9a391` |
 | Binding strip | `--wo-binding` | `#17181c` |
 
-Red is never decoration: only serials and approvals. Corners are square; depth comes from real stacked copies, never offset shadows.
+Public documents keep a square edge; workspace controls use 4px corners and grouped surfaces 8–12px. Give floating layers a soft shadow; use a 1px rule to separate adjacent readings.
 
 ## Type
 
-- Archivo (variable, `wdth` axis), self-hosted via `next/font`. Display: weight 800, `font-stretch: 115–118%`. Form labels: 12px, weight 650, `font-stretch: 75%`, uppercase, `.09em` tracking. Body: 17px / 1.55.
+- Source Serif 4 for public display text and the quoted instruction. Archivo for operational headings, body and controls. Both self-hosted by Next at build time; do not preload the display font into workspaces.
 - IBM Plex Mono for carbon fill (anything an agent or a person "wrote" onto a form): 15px, carbon blue.
 
 ## Components
@@ -40,4 +42,8 @@ Work-order sheet (stub, perforation, form head, ruled field grid), leaf (next sh
 
 ## Motion
 
-One stamp landing (opacity/transform, 380ms, expo-out) and a 150ms copy lift. Both off under `prefers-reduced-motion`. `[data-motion]` on the pad reflects the preference.
+Use the shared 150ms feedback curve. A public spread arrives once; it never animates the ledger as if a run were actually taking place. Disable motion under `prefers-reduced-motion`.
+
+## Layout contract
+
+`--control-target: 44px` (not rem-scaled); `--measure: 66ch`; `--body-leading: 1.6`; `--display-tracking: -.035em`; `--section-space: clamp(80px, 8vw, 128px)`. The workspace side rail becomes vertical at 1024px and scrolls inside the available viewport. Sticky offsets follow the rendered global header, including when labels wrap. Review public entry and workspace controls at 375, 768 and 1440px.
