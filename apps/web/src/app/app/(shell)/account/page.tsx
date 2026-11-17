@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LEGAL_DOCUMENTS } from "@steward/legal";
 import { LanguageSelect } from "@/components/language-select";
 import { DeleteAccountForm, MarketingConsentToggle } from "@/components/privacy-controls";
+import { SignOutEverywhere } from "@/components/security-controls";
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { PendingAgreement } from "@/lib/types";
@@ -140,6 +141,12 @@ export default async function AccountPage() {
         <p className="mt-3 text-xs leading-relaxed text-muted">
           {T("account.contactBefore")} <Link href="/legal/privacy" className="font-medium text-accent hover:underline">{T("account.privacyPolicy")}</Link>{T("account.contactAfter")}
         </p>
+      </section>
+
+      <section className="card p-5" aria-labelledby="security">
+        <h2 id="security" className="text-[15px] font-semibold">{T("account.security")}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{T("account.securityHelp")}</p>
+        <div className="mt-3"><SignOutEverywhere /></div>
       </section>
 
       <section className="card border-danger p-5" aria-labelledby="danger">
