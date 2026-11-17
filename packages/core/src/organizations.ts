@@ -1,4 +1,5 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { generateToken, hashToken } from "@steward/crypto";
 import { auditLog, invitations, memberships, organizations, users, type DbOrTx } from "@steward/db";
 import type { Role } from "@steward/schema";
@@ -59,7 +60,7 @@ export class OrganizationService {
   async provisionFounderOrganization(input: { name: string; ownerEmail: string; operatorUserId: string | null }) {
     const name = input.name.trim();
     const ownerEmail = input.ownerEmail.trim().toLowerCase();
-    if (!name || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) throw new Error("A name and valid owner email are required");
+    if (!name || name.length > 120 || !z.email().safeParse(ownerEmail).success) throw new Error("A name and valid owner email are required");
     return this.db.transaction(async (tx) => {
       const organization = await createOrganizationTx(tx, name);
       const { token, hash } = generateToken("inv");

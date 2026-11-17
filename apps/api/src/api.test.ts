@@ -346,6 +346,9 @@ describe("founder organization provisioning", () => {
     await expect(provisionFounder([], "https://app.test", service)).rejects.toThrow("Usage:");
     await expect(provisionFounder(["--org", "", "--owner-email", existing.email], "https://app.test", service)).rejects.toThrow("Usage:");
     await expect(service.provisionFounderOrganization({ name, ownerEmail: "invalid", operatorUserId: null })).rejects.toThrow("valid owner email");
+    const invalidName = `Invalid CLI ${uniq()}`;
+    await expect(provisionFounder(["--org", invalidName, "--owner-email", "founder@example.com/"], "https://app.test", service)).rejects.toThrow("valid owner email");
+    expect((await core.pool.query("select id from organizations where name=$1", [invalidName])).rows).toEqual([]);
   });
 
   d("provisioning returns a handoff link when email delivery fails and validates input", async () => {
