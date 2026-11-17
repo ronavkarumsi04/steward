@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, missingPlanTools, missingToolsNote, settleDelegation, toolHolders, verificationEvidence, type RunContextBundle, type Verification } from "./runtime.js";
+import { AgentRuntime, missingPlanTools, missingToolsNote, RunBudgetExhaustedError, settleDelegation, toolHolders, verificationEvidence, type RunContextBundle, type Verification } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -117,6 +117,53 @@ describe("AgentRuntime cancellation", () => {
       expect.anything(),
       expect.objectContaining({ toolName: "test.first", status: "failed" }),
     );
+  });
+});
+
+describe("explicit per-run budget", () => {
+  function setup(costUsd: string, budgetUsdPerRun: number) {
+    const chat = vi.fn();
+    const steps = vi.fn(async () => [] as unknown[]);
+    const finishStep = vi.fn();
+    const registryGet = vi.fn();
+    const services = {
+      scope: { organizationId: "org-1", companyId: "company-1", actor: { type: "system", component: "test" } },
+      gateway: { chat },
+      runs: {
+        get: vi.fn(async () => ({ id: "run-1", agentId: "agent-1", costUsd, plan: null, status: "executing" })),
+        steps,
+        toolCallsFor: vi.fn(async () => []),
+        setStatus: vi.fn(),
+        beginStep: vi.fn(async () => ({ id: "step-1" })),
+        finishStep,
+      },
+      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom" })) },
+    } as unknown as AgentServices;
+    const runtime = new AgentRuntime(services, { get: registryGet } as unknown as ToolRegistry);
+    const ctx: RunContextBundle = { systemPrompt: "system", userPrompt: "user", toolNames: [], routingPolicy: { requirements: { preference: "balanced" }, fallbackChain: [] }, maxIterations: 1, budgetUsdPerRun };
+    return { ctx, runtime, chat, steps, finishStep, registryGet };
+  }
+
+  it("blocks planning before sending a request when the founder sets $0", async () => {
+    const { ctx, runtime, chat } = setup("0", 0);
+    await expect(runtime.plan("run-1", ctx)).rejects.toBeInstanceOf(RunBudgetExhaustedError);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it("blocks the verifier at an exhausted budget", async () => {
+    const { ctx, runtime, chat } = setup("0.10", 0.1);
+    await expect(runtime.verify("run-1", ctx, "done")).rejects.toBeInstanceOf(RunBudgetExhaustedError);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it("does not resume an approved tool when its run has spent the budget", async () => {
+    const { ctx, runtime, chat, steps, finishStep, registryGet } = setup("0.11", 0.1);
+    steps.mockResolvedValue([{ id: "pending", kind: "approval", status: "running", input: { approvalId: "approval-1", toolName: "test.tool", toolCallId: "call-1", args: {} } }]);
+    const outcome = await runtime.iterate("run-1", ctx, { approvalId: "approval-1", toolCallId: "call-1", status: "approved" });
+    expect(outcome).toEqual({ kind: "budget_exhausted", detail: "Run budget of $0.10 reached" });
+    expect(finishStep).toHaveBeenCalledWith(expect.anything(), "pending", { status: "skipped", error: "Run budget of $0.10 reached" });
+    expect(registryGet).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
   });
 });
 

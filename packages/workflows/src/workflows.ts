@@ -1,6 +1,6 @@
-import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, patched, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
-import { endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
-import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
+import { ActivityFailure, ApplicationFailure, condition, defineQuery, defineSignal, executeChild, patched, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
+import { budgetEnding, endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
+import { APPROVAL_SIGNAL, CANCEL_SIGNAL, RUN_BUDGET_EXHAUSTED, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
 
 const APPROVAL_TIMEOUT = "3 days";
 
@@ -127,13 +127,16 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
         case "retry":
           throw ApplicationFailure.retryable(ending.error, "ProviderFailure");
         case "finish":
-          return finish({ status: ending.status, finalText: ending.finalText, error: ending.error, verification: ending.verification ?? undefined });
+          return finish({ status: ending.status, finalText: ending.finalText, error: ending.error, verification: ending.verification ?? undefined, budgetExhausted: ending.budgetExhausted });
       }
     }
   } catch (e) {
     if (isCancellation(e)) {
       await CancellationScope.nonCancellable(() => bookkeeping.finalize({ ...input, outcome: { status: "cancelled", error: "workflow cancelled" } }));
       throw e;
+    }
+    if (e instanceof ActivityFailure && e.cause instanceof ApplicationFailure && e.cause.type === RUN_BUDGET_EXHAUSTED) {
+      return cancelRequested ? finishCancelled() : finish(budgetEnding(e.cause.message));
     }
     await bookkeeping.finalize({ ...input, outcome: { status: "failed", error: failureMessage(e) } });
     return { status: "failed" };

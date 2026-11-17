@@ -14,8 +14,8 @@
  * task transitions, the trail.
  */
 import { ProviderError } from "@steward/ai";
-import { AgentRuntime, buildToolRegistry, type AgentServiceFactory, type IterationOutcome } from "@steward/agents";
-import { endingFor, MAX_PROVIDER_RETRIES } from "@steward/workflows";
+import { AgentRuntime, buildToolRegistry, RunBudgetExhaustedError, type AgentServiceFactory, type IterationOutcome } from "@steward/agents";
+import { budgetEnding, endingFor, MAX_PROVIDER_RETRIES } from "@steward/workflows";
 import { renderScorecard, scoreSuite, SUITE, type BackendName, type EvalCase, type RunEvidence, type Scorecard } from "@steward/evals";
 import type { TenantScope } from "@steward/schema";
 import type { StubScript } from "./stub-provider.js";
@@ -143,7 +143,12 @@ async function drive(opts: { services: AgentServiceFactory; scope: TenantScope; 
   };
 
   const ctx = await attempts(() => rt.buildContext(runId));
-  await attempts(() => rt.plan(runId, ctx));
+  const endIfBudgetStop = async (e: unknown): Promise<undefined> => {
+    if (!(e instanceof RunBudgetExhaustedError)) throw e;
+    await rt.finalize(runId, budgetEnding(e.message));
+    return undefined;
+  };
+  if (!await attempts(() => rt.plan(runId, ctx)).catch(endIfBudgetStop)) return;
 
   let resume: Parameters<AgentRuntime["iterate"]>[2];
   for (let guard = 0; guard <= ctx.maxIterations + MAX_PROVIDER_RETRIES; guard++) {
@@ -161,11 +166,12 @@ async function drive(opts: { services: AgentServiceFactory; scope: TenantScope; 
       continue;
     }
 
-    const verification = outcome.kind === "done" ? await rt.verify(runId, ctx, outcome.finalText) : undefined;
+    const verification = outcome.kind === "done" ? await rt.verify(runId, ctx, outcome.finalText).catch(endIfBudgetStop) : undefined;
+    if (outcome.kind === "done" && !verification) return;
     const ending = endingFor(outcome, verification);
     if (ending.action === "continue") continue;
     if (ending.action === "retry") continue; // Retried by the next iterate, as the activity retry would.
-    await rt.finalize(runId, { status: ending.status, finalText: ending.finalText, verification: verification, error: ending.error });
+    await rt.finalize(runId, { status: ending.status, finalText: ending.finalText, verification, error: ending.error, budgetExhausted: ending.budgetExhausted });
     return;
   }
   throw new Error(`run ${runId} did not reach an ending within its iteration budget`);

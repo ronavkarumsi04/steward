@@ -4,7 +4,7 @@ import { ApplicationFailure } from "@temporalio/common";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { Worker, bundleWorkflowCode, type WorkflowBundle } from "@temporalio/worker";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type IterationOutcome } from "./types.js";
+import { APPROVAL_SIGNAL, CANCEL_SIGNAL, RUN_BUDGET_EXHAUSTED, STATUS_QUERY, type AgentActivities, type IterationOutcome } from "./types.js";
 
 const input = { runId: "run-1", scope: { organizationId: "org", companyId: "co" } };
 const ctx = { systemPrompt: "s", userPrompt: "u", toolNames: [], routingPolicy: {}, maxIterations: 10, budgetUsdPerRun: null };
@@ -117,6 +117,25 @@ describe("agentRunWorkflow", () => {
     const { result, calls } = await run([{ kind: "budget_exhausted", detail: "AI budget hit" }]);
     expect(result.status).toBe("needs_review");
     expect((calls.finalize![0] as { error: string }).error).toBe("AI budget hit");
+  }, 60_000);
+
+  it.each(["planning", "verification"] as const)("finalizes budget exhaustion during %s without retrying", async (phase) => {
+    const detail = "Run budget of $0.10 reached";
+    let attempts = 0;
+    const stop = async () => {
+      attempts++;
+      throw ApplicationFailure.nonRetryable(detail, RUN_BUDGET_EXHAUSTED);
+    };
+    const { result, calls } = await run(
+      [{ kind: "done", finalText: "done" }],
+      undefined,
+      phase === "verification" ? stop : undefined,
+      phase === "planning" ? stop : undefined,
+    );
+    expect(attempts).toBe(1);
+    expect(calls.iterate?.length ?? 0).toBe(phase === "planning" ? 0 : 1);
+    expect(result.status).toBe("needs_review");
+    expect(calls.finalize).toEqual([{ status: "needs_review", error: detail, finalText: `Stopped: ${detail}`, budgetExhausted: true }]);
   }, 60_000);
 
   it("cancels on signal while waiting for an approval", async () => {
