@@ -28,7 +28,10 @@
   }
   .run-intent span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
   .run-intent svg { flex: none; }
-  .run-register summary { padding-block: 12px; min-height: var(--control-target); color: var(--muted); cursor: pointer; font-size: .875rem; }
+  .run-register details { margin-top: 8px; }
+  .run-register summary { width: fit-content; padding: 12px 8px; min-height: var(--control-target); color: var(--muted); cursor: pointer; font-size: .875rem; }
+  .run-register summary:focus-visible { outline-offset: -3px; }
+  .run-register details[open] dl { padding: 8px; }
   .run-register dt { color: var(--muted); }
   .chat-spread { display: grid; gap: 16px; }
   .chat-directory { display: flex; flex-direction: column; gap: 12px; padding: 8px; height: 100%; }
