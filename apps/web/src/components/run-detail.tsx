@@ -13,6 +13,7 @@ import { RunTimeline } from "./run-timeline";
 import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
+const FINISHED = new Set([...TERMINAL, "needs_review"]);
 
 /** Run inspector: re-fetches whenever a correlated event arrives so it stays live without polling. */
 /** Where a founder's eye should land: what this run produced, from the tool ledger, not from the step titles. */
@@ -45,6 +46,11 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
   // The server's snapshot time is also the first client render's time. Reading Date.now() during
   // hydration changed running verdicts and elapsed text before React could attach to the document.
   const [snapshotAt, setSnapshotAt] = useState(observedAt);
+  const previousStatus = useRef(initial.run.status);
+  useEffect(() => {
+    if (!FINISHED.has(previousStatus.current) && FINISHED.has(detail.run.status)) router.refresh();
+    previousStatus.current = detail.run.status;
+  }, [detail.run.status, router]);
   const updateDetail = useCallback((next: RunDetail) => {
     setDetail(next);
     setSnapshotAt(Date.now());
