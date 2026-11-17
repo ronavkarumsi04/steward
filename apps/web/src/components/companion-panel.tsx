@@ -90,7 +90,8 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
       {pairing ? (
         <div className="nb-panel-flat nb-left-purple mt-3 p-3 text-sm">
           <p>Pairing code for <strong>{pairing.name}</strong> (valid until {new Date(pairing.expiresAt).toLocaleTimeString()}). Run on that machine:</p>
-          <pre className="mono mt-2 overflow-auto border border-line bg-panel-2 p-3 text-xs text-fg">{`npm i -g @openai/codex @steward/companion\ncodex login\nsteward-companion pair --server ${serverUrl} --code ${pairing.code}\nsteward-companion run`}</pre>
+          <p className="mt-2 text-xs text-muted">Requires Node.js 22+, Git, pnpm 10.32.1, and repository access. The companion is not on npm yet; install from source. If setup takes over 10 minutes, generate a fresh pairing code.</p>
+          <pre className="mono mt-2 overflow-auto border border-line bg-panel-2 p-3 text-xs text-fg">{`npm i -g @openai/codex\ngit clone https://github.com/ronavkarumsi04/steward.git\ncd steward\npnpm install --frozen-lockfile --filter @steward/companion...\npnpm --filter @steward/companion build\ncd apps/companion\nnpm pack\nnpm i -g ./steward-companion-0.1.0.tgz\ncodex login\nsteward-companion pair --server ${serverUrl} --code ${pairing.code}\nsteward-companion run`}</pre>
           <p className="mt-2 text-xs text-muted">The code works once. The device key is printed to that machine only and saved with owner-only permissions.</p>
           <button className="btn mt-2" onClick={() => setPairing(null)}>Done</button>
         </div>
