@@ -11,7 +11,7 @@ import test from "node:test";
 const exec = promisify(execFile);
 
 async function check(readiness, requireExecutions = true, {
-  cwd, env: overrides, apiSha = "abcdef1", db = "ok", webDeployment, webStatus = 200,
+  cwd, env: overrides, apiSha = "abcdef1", db = "ok", webDeployment, webStatus = 200, scopedWebStatus = webStatus,
 } = {}) {
   const requests = [];
   const server = createServer((req, res) => {
@@ -24,7 +24,9 @@ async function check(readiness, requireExecutions = true, {
       : req.url === "/ready" ? readiness
       : req.url.startsWith("/v13/deployments/") ? webDeployment
       : { ok: db === "ok", db, commit: apiSha, temporal: "disabled" };
-    res.statusCode = req.url === "/ready" && !readiness?.ok ? 503 : req.url.startsWith("/v13/deployments/") ? webStatus : 200;
+    res.statusCode = req.url === "/ready" && !readiness?.ok ? 503
+      : req.url.startsWith("/v13/deployments/") ? req.url.includes("?teamId=") ? scopedWebStatus : webStatus
+      : 200;
     res.end(typeof body === "string" ? body : JSON.stringify(body));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -112,6 +114,16 @@ test("revision checks never turn a failed database probe into a pass", async () 
   const result = await check(null, false, { db: "down" });
   assert.equal(result.code, 1, result.stdout);
   assert.match(result.stdout, /FAIL.*GET \/health.*db: down/);
+});
+
+test("web verification supports tokens accepted only without a team parameter", async (t) => {
+  const { cwd, web } = revisions(t);
+  for (const scopedWebStatus of [403, 404]) {
+    const result = await check(null, false, { cwd, env: { EXPECT_WEB: web }, webDeployment: production(web), scopedWebStatus });
+    assert.equal(result.code, 0, result.stdout);
+    assert.deepEqual(result.requests.filter(({ path }) => path.startsWith("/v13/deployments/")).map(({ path }) => path),
+      ["/v13/deployments/127.0.0.1?teamId=test-team", "/v13/deployments/127.0.0.1"]);
+  }
 });
 
 test("disabled, idle, inconsistent and unreachable verifiers cannot pass", async () => {

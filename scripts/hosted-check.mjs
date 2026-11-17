@@ -115,9 +115,14 @@ async function checkWebRevision() {
   const api = (process.env.VERCEL_API ?? "https://api.vercel.com").replace(/\/$/, "");
   const team = process.env.VERCEL_TEAM ?? DEFAULT_VERCEL_TEAM;
   const query = team ? `?teamId=${encodeURIComponent(team)}` : "";
-  const deployment = await request(`${api}/v13/deployments/${encodeURIComponent(hostname)}${query}`, {
+  const getDeployment = (suffix) => request(`${api}/v13/deployments/${encodeURIComponent(hostname)}${suffix}`, {
     headers: { authorization: `Bearer ${token}` },
   });
+  let deployment = await getDeployment(query);
+  if (query && (deployment.status === 403 || deployment.status === 404)) {
+    const unscoped = await getDeployment("");
+    if (unscoped.status === 200) deployment = unscoped;
+  }
   if (deployment.status !== 200 || deployment.json?.readyState !== "READY" || deployment.json?.target !== "production") {
     bad(`web revision is unverified: Vercel has no confirmed READY production deployment for ${hostname} (HTTP ${deployment.status})`);
     return;
