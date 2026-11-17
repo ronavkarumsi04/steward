@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import { workspaceArrival } from "@/lib/arrivals";
 import { serverApi, tryApi, getLocale } from "@/lib/server";
-import { t, tf, type MessageKey } from "@/lib/i18n";
+import { statusLabel, t, tf, type MessageKey } from "@/lib/i18n";
 import type { Approval, Artifact, CompanyOverview, Document, Integration, Run, StewardEvent, Task, UsageRow } from "@/lib/types";
 import { buildAttentionQueue } from "@/lib/attention";
 import { mostUrgent } from "@/lib/approval-review";
@@ -99,22 +99,21 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-6">
-      <header className="nb-hero rise-in flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="desk-heading rise-in">
         <div className="min-w-0">
-          <div className="nb-section-label mb-2">{t(locale, "overview.eyebrow")}</div>
-          <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">{company.name}</h1>
+          <h1 className="desk-title">{company.name}</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">{profile?.tagline || profile?.description || t(locale, "overview.noProfile")}</p>
         </div>
-        <dl className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
-          <div className="nb-panel-flat nb-accent-purple px-3 py-2">
+        <dl className="desk-details">
+          <div>
             <dt className="nb-section-label text-[10px]">{t(locale, "overview.autonomy")}</dt>
             <dd className="mt-1 text-sm font-bold">L{company.autonomyLevel} · {t(locale, `autonomy.${company.autonomyLevel}` as MessageKey)}</dd>
           </div>
-          <div className="nb-panel-flat nb-accent-blue px-3 py-2">
+          <div>
             <dt className="nb-section-label text-[10px]">{t(locale, "overview.enabledAgents")}</dt>
             <dd className="tnum mt-1 text-sm font-bold">{tf(locale, "overview.ofTotal", { n: agents.filter((a) => a.enabled).length, total: agents.length })}</dd>
           </div>
-          <div className="nb-panel-flat nb-accent-orange px-3 py-2">
+          <div>
             <dt className="nb-section-label text-[10px]">{t(locale, "overview.timezone")}</dt>
             <dd className="mt-1 text-sm font-bold">{company.timezone}</dd>
           </div>
@@ -141,24 +140,16 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
         </div>
       )}
 
-      <div className="nb-bento rise-in grid gap-3 sm:grid-cols-2 xl:grid-cols-4" style={delay(4)}>
-        <div className="nb-metric nb-accent-blue">
-          <Stat label={t(locale, "overview.openTasks")} value={openTasks} hint={tf(locale, "overview.done", { n: taskCounts.done ?? 0 })} href={`${base}/tasks`} />
-        </div>
-        <div className="nb-metric nb-accent-yellow">
-          <Stat
-            label={t(locale, "overview.pendingApprovals")}
-            value={overview.pendingApprovals}
-            hint={overview.pendingApprovals ? <span className="text-warn">{t(locale, "overview.needsDecision")}</span> : t(locale, "overview.allClear")}
-            href={`${base}/approvals`}
-          />
-        </div>
-        <div className="nb-metric nb-accent-purple">
-          <Stat label={t(locale, "overview.aiSpend")} value={usd(spend30)} hint={aiBudget ? tf(locale, "overview.callsLimit", { n: calls30, limit: usd(aiBudget.limitUsd), period: aiBudget.period }) : tf(locale, "overview.calls", { n: calls30 })} />
-        </div>
-        <div className="nb-metric nb-accent-green">
-          <Stat label={t(locale, "overview.activeGoals")} value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? t(locale, "overview.noGoalsYet")} href={`${base}/settings#goals`} />
-        </div>
+      <div className="desk-stats rise-in" style={delay(4)}>
+        <Stat label={t(locale, "overview.openTasks")} value={openTasks} hint={tf(locale, "overview.done", { n: taskCounts.done ?? 0 })} href={`${base}/tasks`} />
+        <Stat
+          label={t(locale, "overview.pendingApprovals")}
+          value={overview.pendingApprovals}
+          hint={overview.pendingApprovals ? <span className="text-warn">{t(locale, "overview.needsDecision")}</span> : t(locale, "overview.allClear")}
+          href={`${base}/approvals`}
+        />
+        <Stat label={t(locale, "overview.aiSpend")} value={usd(spend30)} hint={aiBudget ? tf(locale, "overview.callsLimit", { n: calls30, limit: usd(aiBudget.limitUsd), period: aiBudget.period }) : tf(locale, "overview.calls", { n: calls30 })} />
+        <Stat label={t(locale, "overview.activeGoals")} value={goals.filter((g) => g.status === "active").length} hint={goals[0]?.title ?? t(locale, "overview.noGoalsYet")} href={`${base}/settings#goals`} />
       </div>
 
       <section className="nb-panel-flat nb-accent-purple rise-in" style={delay(5)}>
@@ -214,7 +205,7 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium">{a.action}</span>
-                          <span className="tnum shrink-0 text-xs text-muted">{ago(a.createdAt)}</span>
+                          <span className="tnum shrink-0 text-xs text-muted">{ago(a.createdAt, locale)}</span>
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted">{a.reason}</div>
                       </Link>
@@ -235,9 +226,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
                       <Link href={`${base}/runs/${r.id}`} className="nb-panel-flat nb-accent-blue block border px-2 py-2 transition-colors duration-150 hover:nb-accent-purple">
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate font-medium">{r.intent || agentName(agents, r.agentId)}</span>
-                          <StatusPill status={r.status} />
+                          <StatusPill status={r.status} label={statusLabel(locale, r.status)} />
                         </div>
-                        <div className="tnum mt-0.5 text-xs text-muted">{agentName(agents, r.agentId)} · {usd(r.costUsd)} · {ago(r.createdAt)}</div>
+                        <div className="tnum mt-0.5 text-xs text-muted">{agentName(agents, r.agentId)} · {usd(r.costUsd)} · {ago(r.createdAt, locale)}</div>
                       </Link>
                     </li>
                   ))}

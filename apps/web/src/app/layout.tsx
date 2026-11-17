@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/feedback";
 import { NavigationTransitions } from "@/components/navigation-transitions";
-import { Archivo, IBM_Plex_Mono } from "next/font/google";
+import { Archivo, IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
+const editorial = Source_Serif_4({ subsets: ["latin"], weight: "500", variable: "--font-editorial", display: "swap", preload: false });
 const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex-mono", display: "swap" });
 
@@ -37,7 +38,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
+    // THEME_INIT can set the root data-theme before hydration. Descendant content still hydrates normally.
+    <html lang="en" suppressHydrationWarning className={`${archivo.variable} ${plexMono.variable} ${editorial.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>

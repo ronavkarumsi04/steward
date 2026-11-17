@@ -4,7 +4,8 @@ import { getLocale, serverApi } from "@/lib/server";
 import { statusLabel, t, tf, type Locale, type MessageKey } from "@/lib/i18n";
 import type { Agent, Run } from "@/lib/types";
 import { Icon } from "@/components/icons";
-import { Card, Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
+import { Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
+import { runsHref } from "@/lib/run-filters";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "runs.title") };
@@ -25,12 +26,36 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? "agent";
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow={t(locale, "runs.eyebrow")} title={t(locale, "runs.title")} description={t(locale, "runs.description")} action={<FilterLinks locale={locale} companyId={companyId} current={status} />} />
-      <Card className="p-0 nb-left-purple">
+      <PageHeader title={t(locale, "runs.title")} description={t(locale, "runs.description")} />
+      <FilterLinks locale={locale} companyId={companyId} taskId={taskId} current={status} />
         {runs.length === 0 ? (
-          <div className="p-4"><Empty icon={<Icon.Runs size={20} />}>{t(locale, "runs.none")}</Empty></div>
+          <Empty icon={<Icon.Runs size={20} />}>
+            {t(locale, "runs.none")}
+            {status && <Link className="ml-2 text-accent underline" href={runsHref(companyId, undefined, taskId)}>{t(locale, "runs.clearStatus")}</Link>}
+          </Empty>
         ) : (
-          <div className="table-wrap">
+          <>
+          <ul className="run-register md:hidden">
+            {runs.map((r) => (
+              <li key={r.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                  <StatusPill status={r.status} label={statusLabel(locale, r.status)} />
+                  <span>{ago(r.createdAt, locale)}</span>
+                </div>
+                <Link className="run-intent" href={`/app/c/${companyId}/runs/${r.id}`}>
+                  <span>{r.intent || t(locale, "runs.noIntent")}</span><Icon.ArrowRight size={16} />
+                </Link>
+                <div className="text-sm text-muted">{name(r.agentId)} · {progress(r, locale)}</div>
+                <details><summary>{t(locale, "runs.usage")}</summary>
+                  <dl className="flex flex-wrap gap-6 text-sm">
+                    <div><dt>{t(locale, "runs.colCost")}</dt><dd className="tnum">{usd(r.costUsd)}</dd></div>
+                    <div><dt>{t(locale, "runs.colTokens")}</dt><dd className="tnum">{(r.inputTokens + r.outputTokens).toLocaleString(locale)}</dd></div>
+                  </dl>
+                </details>
+              </li>
+            ))}
+          </ul>
+          <div className="table-wrap hidden md:block">
             <table className="table">
               <thead>
                 <tr><th>{t(locale, "runs.colIntent")}</th><th>{t(locale, "runs.colAgent")}</th><th>{t(locale, "runs.colStatus")}</th><th>{t(locale, "runs.colProgress")}</th><th className="text-right">{t(locale, "runs.colCost")}</th><th className="text-right">{t(locale, "runs.colTokens")}</th><th className="text-right">{t(locale, "runs.colStarted")}</th></tr>
@@ -43,15 +68,15 @@ export default async function RunsPage({ params, searchParams }: { params: Promi
                     <td><StatusPill status={r.status} label={statusLabel(locale, r.status)} /></td>
                     <td className="tnum whitespace-nowrap text-xs text-muted">{progress(r, locale)}</td>
                     <td className="tnum text-right">{usd(r.costUsd)}</td>
-                    <td className="tnum text-right text-muted">{(r.inputTokens + r.outputTokens).toLocaleString()}</td>
+                    <td className="tnum text-right text-muted">{(r.inputTokens + r.outputTokens).toLocaleString(locale)}</td>
                     <td className="tnum text-right text-xs text-muted">{ago(r.createdAt, locale)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
-      </Card>
     </div>
   );
 }
@@ -66,13 +91,13 @@ function progress(r: Run, locale: Locale): string {
   return [iters, dur ? (r.finishedAt ? dur : tf(locale, "runs.soFar", { dur })) : ""].filter(Boolean).join(" · ") || "—";
 }
 
-function FilterLinks({ companyId, current, locale }: { companyId: string; current?: string; locale: Locale }) {
+function FilterLinks({ companyId, current, taskId, locale }: { companyId: string; current?: string; taskId?: string; locale: Locale }) {
   const opts = [undefined, "executing,planning,building_context,verifying", "waiting_approval,waiting_budget,needs_review", "succeeded", "failed,cancelled"];
   const labels = ["all", "active", "waiting", "succeeded", "failed"];
   return (
-    <nav aria-label={t(locale, "runs.filter")} className="segmented">
+    <nav aria-label={t(locale, "runs.filter")} className="segmented max-w-full flex-wrap">
       {opts.map((o, i) => (
-        <Link key={labels[i]} href={o ? `/app/c/${companyId}/runs?status=${o}` : `/app/c/${companyId}/runs`} aria-current={current === o ? "page" : undefined} className="capitalize">{t(locale, `runs.${labels[i]}` as MessageKey)}</Link>
+        <Link key={labels[i]} href={runsHref(companyId, o, taskId)} aria-current={current === o ? "page" : undefined} className="capitalize">{t(locale, `runs.${labels[i]}` as MessageKey)}</Link>
       ))}
     </nav>
   );

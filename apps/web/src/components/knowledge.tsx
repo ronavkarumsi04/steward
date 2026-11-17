@@ -219,8 +219,8 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
     } finally { setBusy(null); }
   }
 
-  const tabs: Array<[Tab, string, number]> = [
-    ["playbooks", "Playbooks", playbooks.length],
+  const tabs: Array<[Tab, MessageKey, number]> = [
+    ["playbooks", "knowledge.tab.playbooks", playbooks.length],
     ["documents", "knowledge.tab.documents", regularDocuments.length],
     ["decisions", "knowledge.tab.decisions", decisions.length],
     ["memory", "knowledge.tab.memory", memories.length],
@@ -249,7 +249,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
     <div className="space-y-5">
       <div className="flex flex-wrap gap-1">
         {tabs.map(([id, label, n]) => (
-          <button key={id} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} onClick={() => { setTab(id); setOpen(null); setHistory(null); }}>{t(label as MessageKey)} <span className="text-muted">{n}</span></button>
+          <button key={id} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-pressed={tab === id} onClick={() => { setTab(id); setOpen(null); setHistory(null); }}>{t(label)} <span className="text-muted">{n}</span></button>
         ))}
       </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -257,7 +257,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
       {tab === "playbooks" && (
         <Card className="nb-left-purple" title={t("knowledge.companyPlaybooks")} action={canManagePlaybooks ? <button className="btn btn-primary" onClick={() => beginNew("playbook")}>{t("knowledge.newPlaybook")}</button> : undefined}>
           <div className="nb-panel-flat nb-left-purple mb-4 p-3 text-sm leading-6 text-muted">
-            Playbooks are admin-managed operating instructions. Company-wide playbooks apply to every matching agent; project playbooks apply only while an agent is working inside that project. Agents can read them automatically but cannot rewrite them through <span className="mono">document.write</span>.
+            {tf("knowledge.playbookScopeHelp", { tool: "document.write" })}
           </div>
           {!canManagePlaybooks && <p className="mb-4 text-xs text-faint">{t("knowledge.playbooksAdmin")}</p>}
           {open?.kind === "playbook" && (
@@ -265,7 +265,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
               <input name="title" className="input" placeholder={t("knowledge.playbookTitlePlaceholder")} defaultValue={open.title} required disabled={!canManagePlaybooks} />
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.scope")}</span><select name="projectId" className="input" defaultValue={open.projectId ?? ""} disabled={!canManagePlaybooks}><option value="">{t("knowledge.companyWide")}</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.status}</option>)}</select></label>
-                <div className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.agentRoles")} <span className="text-faint">{t("knowledge.noneAllRoles")}</span></span><div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-line bg-panel p-2">{AGENT_ROLES.map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="checkbox" name="agentKinds" value={value} defaultChecked={open.agentKinds.includes(value)} disabled={!canManagePlaybooks} /> <span>{t(label as MessageKey)}</span></label>)}</div></div>
+                <div className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.agentRoles")} <span className="text-faint">{t("knowledge.noneAllRoles")}</span></span><div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-line bg-panel p-2">{AGENT_ROLES.map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="checkbox" name="agentKinds" value={value} defaultChecked={open.agentKinds.includes(value)} disabled={!canManagePlaybooks} /> <span>{t(label)}</span></label>)}</div></div>
               </div>
               <textarea name="content" className="input mono min-h-72" defaultValue={open.content ?? ""} placeholder={t("knowledge.playbookContentPlaceholder")} required disabled={!canManagePlaybooks} />
               <div className="flex flex-wrap justify-end gap-2">{open.id && <button type="button" className="btn" disabled={busy !== null} onClick={() => loadHistory(open.id)}>{busy === `history:${open.id}` ? "Loading…" : "Version history"}</button>}<button type="button" className="btn" onClick={() => { setOpen(null); setHistory(null); }}>{t("knowledge.cancel")}</button>{canManagePlaybooks && <button className="btn btn-primary" disabled={busy !== null}>{busy === "save" ? "Saving…" : open.id ? t("knowledge.saveNewVersion") : t("knowledge.createPlaybook")}</button>}</div>
@@ -274,7 +274,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
           )}
           {playbooks.length === 0 ? <Empty>{t("knowledge.noPlaybooks")}</Empty> : (
             <ul className="divide-y divide-line">
-              {playbooks.map((d) => <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><button className="min-w-0 flex-1 text-left" disabled={busy === d.id} onClick={() => openDocument(d)}><div className="font-medium hover:text-accent">{d.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="pill">{projectName(d.projectId)}</span><span>{d.agentKinds.length ? d.agentKinds.map((k) => AGENT_ROLES.find(([v]) => v === k)?.[1] ?? k).join(", ") : t("knowledge.allAgentRoles")}</span></div></button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}
+              {playbooks.map((d) => <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><button className="min-w-0 flex-1 text-left" disabled={busy === d.id} onClick={() => openDocument(d)}><div className="font-medium hover:text-accent">{d.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="pill">{projectName(d.projectId)}</span><span>{d.agentKinds.length ? d.agentKinds.map((k) => { const role = AGENT_ROLES.find(([v]) => v === k); return role ? t(role[1]) : k; }).join(", ") : t("knowledge.allAgentRoles")}</span></div></button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}
             </ul>
           )}
         </Card>

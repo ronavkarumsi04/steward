@@ -66,12 +66,12 @@ export function CompanySidebar({ companyId, pendingApprovals, activeRuns = 0 }: 
 
   return (
     <nav
-      className="-mx-2 flex gap-0.5 overflow-x-auto px-2 py-1 md:mx-0 md:flex-col md:gap-4 md:overflow-visible md:px-0 md:py-0"
+      className="-mx-2 flex gap-0.5 overflow-x-auto px-2 py-1 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-0 lg:py-0"
       aria-label={t("shell.companyMenu")}
     >
       {GROUPS.map(({ label: groupLabel, items }) => (
-        <div key={groupLabel} className="flex shrink-0 gap-0.5 md:flex-col md:gap-1">
-          <span className="hidden px-2 text-[10px] font-bold tracking-widest md:block">{t(groupLabel)}</span>
+        <div key={groupLabel} className="flex shrink-0 gap-0.5 lg:flex-col lg:gap-1">
+          <span className="hidden px-2 text-[10px] font-bold tracking-widest lg:block">{t(groupLabel)}</span>
           {items.map(([suffix, label, Glyph]) => {
             const href = `${base}${suffix}`;
             const active = suffix === "" ? path === base : path.startsWith(href);

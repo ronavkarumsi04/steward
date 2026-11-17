@@ -56,8 +56,8 @@ export function Skeleton({ className = "", label }: { className?: string; label?
 export function PageSkeleton() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-4 px-3 py-6 sm:px-5" role="status" aria-live="polite" aria-label="Loading page">
-      <Skeleton className="h-8 w-72" />
-      <Skeleton className="h-4 w-96" />
+      <Skeleton className="h-8 w-72 max-w-full" />
+      <Skeleton className="h-4 w-96 max-w-full" />
       <div className="grid gap-3 sm:grid-cols-3">
         <Skeleton className="h-24" />
         <Skeleton className="h-24" />
