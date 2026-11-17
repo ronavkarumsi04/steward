@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import { Icon } from "./icons";
 
 export interface InviteContext {
   token: string;
@@ -57,13 +56,10 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
 
   return (
     <form onSubmit={onSubmit} className="access-card rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
-      <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
-          <Icon.Logo size={36} />
-        </Link>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
+      <div className="access-title">
+        <h1>{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted">
-          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Welcome back to your company workspace." : "Your company, your tools, your control."}
+          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Use your workspace email and password." : "Create a workspace for your company and its agents."}
         </p>
       </div>
       {mode === "register" && (
