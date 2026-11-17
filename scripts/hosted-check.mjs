@@ -1,24 +1,23 @@
 #!/usr/bin/env node
 /**
- * The hosted deployment, checked from the outside: the product, the API served by the same deployment, and
- * which commit that deployment is running.
+ * Read-only checks for the public site and proxied API. /health identifies the API build, not Vercel's web build.
  *
- *   pnpm hosted:check                       # BASE=… EXPECT=auto|any|<sha> to point it elsewhere
+ *   pnpm hosted:check                       # BASE=… EXPECT=auto|any|<sha>
+ *   EXPECT_WEB=auto pnpm hosted:check       # also check Vercel's production alias (requires VERCEL_TOKEN)
  *
- * `EXPECT=auto` (the default) compares the commit the deployment reports against this checkout's HEAD,
- * because that is the fact nothing outside could see: every check was green while the hosted instance
- * served a five-day-old build, and the difference only showed up by hand. `EXPECT=any` checks that it is up
- * without claiming to know which commit should be there — for a deliberately older deployment, or a
- * checkout without git. Read-only: no account, no token, no state written anywhere.
+ * `EXPECT=auto` (default) compares the API build inputs against HEAD. `EXPECT=any` skips API revision
+ * comparison, not health. `EXPECT_WEB=auto|<sha>` verifies the web revision independently.
  *
  * Node rather than bash+python: this has to run on the machines the repository is worked on, and
  * `python3` on Windows is a Windows Store stub that exits non-zero rather than parsing the JSON, which
  * turns every field into "?" and every check into a lie. Node 24 is a prerequisite of the repo.
  */
 import { execFileSync } from "node:child_process";
+import { DEFAULT_VERCEL_TEAM } from "./deploy-production.mjs";
 
 const BASE = (process.env.BASE ?? "https://steward-eosin.vercel.app").replace(/\/$/, "");
 const EXPECT = process.env.EXPECT ?? "auto";
+const EXPECT_WEB = process.env.EXPECT_WEB;
 const REQUIRE_EXECUTIONS = process.env.REQUIRE_EXECUTIONS === "1";
 
 let pass = 0;
@@ -38,9 +37,9 @@ const bad = (title, detail) => {
 /** One request, one status, one body. A connection that never answered is reported with the reason instead
  *  of as an empty body on a status that was never received. Redirects are not followed: a 302 into a login
  *  page is the deployment saying "not here", not a 200. */
-async function request(path, init) {
+async function request(url, init) {
   try {
-    const res = await fetch(`${BASE}${path}`, { redirect: "manual", signal: AbortSignal.timeout(30_000), ...init });
+    const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(30_000), ...init });
     const body = await res.text();
     let json;
     try {
@@ -54,33 +53,76 @@ async function request(path, init) {
   }
 }
 
-const get = (path) => request(path);
-const post = (path, body) => request(path, { method: "POST", headers: { "content-type": "application/json" }, body });
+const get = (path) => request(`${BASE}${path}`);
+const revision = (value) => typeof value === "string" && /^[0-9a-f]{7,40}$/i.test(value) ? value.toLowerCase() : null;
+const short = (sha) => sha.slice(0, 7);
 
-/**
- * The files the commits between two revisions changed, when every one of them is a file no build reads.
- *
- * A Vercel project answers this question for itself before every build: `ignoreCommand` in
- * `apps/web/vercel.json` is `npx turbo-ignore`, so a merge that touches nothing the web app (or its
- * dependencies) consumes is not deployed at all — Vercel cancels it with `ignored-build-step`. That makes
- * "the deployment is not HEAD" a normal, correct state after a docs-only merge, and calling it drift would
- * leave this check red after every such merge, which is how a check stops being read.
- *
- * This is the conservative half of that rule and nothing more: docs, workflows and helper scripts, and
- * markdown cannot change what is served; anything else is treated as if it could. Being wrong here means
- * complaining about a deployment that was in fact current, never staying quiet about one that is not.
- */
-function changedSince(from, to) {
+function expectedRevision(expect) {
+  if (expect !== "auto") return revision(expect);
   try {
-    const files = execFileSync("git", ["diff", "--name-only", `${from}..${to}`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
-    if (files.length === 0) return { kind: "same", files };
-    const unread = files.filter((f) => /^(docs|\.github|scripts)\//.test(f) || /\.md$/.test(f));
-    return { kind: unread.length === files.length ? "unread" : "relevant", files };
+    return revision(execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim());
   } catch {
-    // The revision is not in this checkout (a shallow clone, or a deployment built from somewhere else), so
-    // the question cannot be answered here; the caller says that instead of assuming either way.
-    return { kind: "unknown", files: [] };
+    return null;
   }
+}
+
+function affectsBuild(component, file) {
+  if (/^(docs|\.github|scripts)\//.test(file) || /\.md$/.test(file)) return false;
+  if (file.startsWith("apps/")) {
+    // The web build can embed the API; the standalone backend never reads web sources.
+    return file.startsWith("apps/api/") ||
+      file.startsWith(component === "API" ? "apps/worker/" : "apps/web/");
+  }
+  if (file.startsWith("infra/")) {
+    return component === "API" && file !== "infra/docker/web.Dockerfile";
+  }
+  return true;
+}
+
+function checkRevision(component, reported, expect) {
+  const deployed = revision(reported);
+  if (expect === "any" && component === "API") {
+    ok(`API revision not compared${deployed ? ` (running ${short(deployed)})` : ""}`);
+    return;
+  }
+  const expected = expectedRevision(expect);
+  if (!expected || !deployed) {
+    bad(`${component} revision cannot be checked: ${!expected ? "expected revision does not name a valid commit" : "deployment did not report a valid commit"}`);
+    return;
+  }
+  if (deployed.startsWith(expected) || expected.startsWith(deployed)) {
+    ok(`${component} is running ${short(deployed)}`);
+    return;
+  }
+  try {
+    const files = execFileSync("git", ["diff", "--no-renames", "--name-only", "-z", deployed, expected, "--"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+      .split("\0").filter((file) => file && affectsBuild(component, file));
+    const comparison = `${component} is running ${short(deployed)}; expected ${short(expected)}`;
+    if (files.length === 0) ok(`${comparison}; both have the same build inputs`);
+    else bad(`${comparison}, but build inputs differ`, files.slice(0, 3).join(", "));
+  } catch {
+    bad(`${component} revision is unverified: git could not compare ${short(deployed)} with ${short(expected)}`);
+  }
+}
+
+async function checkWebRevision() {
+  const token = process.env.VERCEL_TOKEN?.trim();
+  if (!token) {
+    bad("web revision is unverified: EXPECT_WEB requires VERCEL_TOKEN");
+    return;
+  }
+  const hostname = new URL(BASE).hostname;
+  const api = (process.env.VERCEL_API ?? "https://api.vercel.com").replace(/\/$/, "");
+  const team = process.env.VERCEL_TEAM ?? DEFAULT_VERCEL_TEAM;
+  const query = team ? `?teamId=${encodeURIComponent(team)}` : "";
+  const deployment = await request(`${api}/v13/deployments/${encodeURIComponent(hostname)}${query}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (deployment.status !== 200 || deployment.json?.readyState !== "READY" || deployment.json?.target !== "production") {
+    bad(`web revision is unverified: Vercel has no confirmed READY production deployment for ${hostname} (HTTP ${deployment.status})`);
+    return;
+  }
+  checkRevision("web", deployment.json.gitSource?.sha ?? deployment.json.meta?.githubCommitSha, EXPECT_WEB);
 }
 
 step(`the product, on the public origin (${BASE})`);
@@ -118,70 +160,24 @@ if (legal.status === 200 && documents.length >= 1 && required.length >= 1 && una
   );
 }
 
-// A wrong password has to be refused as a wrong password. That is what proves the API reached its database
-// rather than answering from a fixture, and it needs no account: the address is random and does not exist.
-const login = await post("/api/v1/auth/login", JSON.stringify({ email: `hosted-check-${Date.now()}@example.com`, password: "not-the-password-000000" }));
-const loginCode = login.json?.error?.code;
-if (login.status === 401 && loginCode === "invalid_credentials") {
-  ok("POST /api/v1/auth/login -> 401 invalid_credentials");
+const auth = await get("/api/v1/auth/config");
+if (auth.status === 200 && typeof auth.json?.signupOpen === "boolean" && typeof auth.json?.inviteOnly === "boolean") {
+  ok("GET /api/v1/auth/config -> 200, signup policy available");
 } else {
-  bad(`POST /api/v1/auth/login -> HTTP ${login.status} (${loginCode ?? "no error code"})`, login.body);
+  bad(`GET /api/v1/auth/config -> HTTP ${auth.status}, expected signup policy`, auth.body);
 }
-
-step("which commit is running");
 
 const health = await get("/health");
 if (health.status === 200 && health.json?.ok === true && health.json?.db === "ok") {
   ok("GET /health -> ok, db ok");
+  checkRevision("API", health.json.commit, EXPECT);
 } else {
   bad(`GET /health -> HTTP ${health.status} (ok: ${health.json?.ok}, db: ${health.json?.db})`, health.body);
 }
 
-const reported = typeof health.json?.commit === "string" ? health.json.commit : null;
-const expected =
-  EXPECT === "auto"
-    ? (() => {
-        try {
-          return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        } catch {
-          return null;
-        }
-      })()
-    : EXPECT;
-const short = (sha) => String(sha ?? "").trim().slice(0, 7).toLowerCase();
-
-if (health.status !== 200 || health.json === null) {
-  // The health answer itself is already reported above. Saying "no commit" here as well would blame the
-  // build for an answer that never arrived — a deployment behind Vercel Authentication answers 302, and its
-  // HTML would otherwise be read as an old build with an honest-looking second failure on top.
-  bad("which commit is running cannot be checked: /health did not answer with JSON");
-} else if (reported === null) {
-  bad("the deployment reports no commit: it was built before /health carried one, so which commit is being served cannot be checked");
-} else if (EXPECT === "any") {
-  ok(`the deployment is running ${reported === "unknown" ? "an unnamed commit (built without VERCEL_GIT_COMMIT_SHA or GIT_COMMIT_SHA)" : reported} (not compared)`);
-} else if (short(expected) === "") {
-  bad(`EXPECT=${EXPECT} but there is no commit to compare against; use EXPECT=any if that is intended`);
-} else if (reported === "unknown") {
-  bad(`the deployment cannot name its commit, so it cannot be compared against ${short(expected)}`);
-} else if (reported === short(expected)) {
-  ok(`the deployment is running ${reported}`);
-} else {
-  const diff = changedSince(reported, short(expected));
-  if (diff.kind === "unread") {
-    // Vercel's own ignoreCommand cancels exactly these builds, so a deployment that is behind by them is
-    // current in the only sense that matters: nothing a build reads has changed.
-    const shown = diff.files.slice(0, 3).join(", ");
-    ok(`the deployment is running ${reported}, and the ${diff.files.length} file(s) changed after it are ones no build reads (${shown}${diff.files.length > 3 ? ", …" : ""})`);
-  } else if (diff.kind === "same") {
-    ok(`the deployment is running ${reported}, whose tree is the same as this checkout's ${short(expected)}`);
-  } else if (diff.kind === "relevant") {
-    // Direction-free on purpose: the expected commit can be older than the deployed one as easily as newer
-    // (that is what pointing the check at a past release does), and a sentence that names the wrong direction
-    // is worse than one that only says the two are not the same commit.
-    bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
-  } else {
-    bad(`the deployment is running ${reported} and this checkout is at ${short(expected)}; whether they differ in anything a build reads cannot be checked from here (git could not compare ${reported} with ${short(expected)})`);
-  }
+if (EXPECT_WEB) {
+  step("the web revision serving the production alias");
+  await checkWebRevision();
 }
 
 if (REQUIRE_EXECUTIONS) {
