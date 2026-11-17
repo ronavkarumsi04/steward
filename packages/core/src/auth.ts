@@ -5,7 +5,7 @@ import { agreements, emailVerifications, memberships, oauthIdentities, organizat
 import type { Role } from "@steward/schema";
 
 export class AuthError extends Error {
-  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch" | "signup_closed", message?: string) {
+  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "owner_invite_requires_provisioning" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch" | "signup_closed", message?: string) {
     super(message ?? code);
     this.name = "AuthError";
   }
@@ -56,6 +56,16 @@ export function slugify(input: string): string {
   return s || "workspace";
 }
 
+export async function createOrganizationTx(tx: Parameters<Parameters<Db["transaction"]>[0]>[0], name: string) {
+  // Insert-or-skip keeps concurrent registrations from racing on the slug.
+  for (let i = 0; i < 6; i++) {
+    const slug = i === 0 ? slugify(name) : `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`;
+    const [org] = await tx.insert(organizations).values({ name, slug }).onConflictDoNothing({ target: organizations.slug }).returning();
+    if (org) return org;
+  }
+  throw new Error("Could not find a free workspace slug after six tries");
+}
+
 export class AuthService {
   constructor(private readonly db: DbOrTx) {}
 
@@ -100,16 +110,9 @@ export class AuthService {
   }
 
   private async createOrganizationTx(tx: Parameters<Parameters<Db["transaction"]>[0]>[0], userId: string, name: string) {
-    // Insert-or-skip rather than check-then-insert: two people named the same signing up at once (or two
-    // test files doing so) would otherwise both pass the check and one would hit org_slug_idx.
-    let org: typeof organizations.$inferSelect | undefined;
-    for (let i = 0; i < 6 && !org; i++) {
-      const slug = i === 0 ? slugify(name) : `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`;
-      [org] = await tx.insert(organizations).values({ name, slug }).onConflictDoNothing({ target: organizations.slug }).returning();
-    }
-    if (!org) throw new Error("Could not find a free workspace slug after six tries");
-    await tx.insert(memberships).values({ organizationId: org!.id, userId, role: "owner" });
-    return org!;
+    const org = await createOrganizationTx(tx, name);
+    await tx.insert(memberships).values({ organizationId: org.id, userId, role: "owner" });
+    return org;
   }
 
   async createOrganization(userId: string, name: string) {
