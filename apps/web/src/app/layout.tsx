@@ -38,7 +38,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${plexMono.variable} ${editorial.variable}`}>
+    // THEME_INIT can set the root data-theme before hydration. Descendant content still hydrates normally.
+    <html lang="en" suppressHydrationWarning className={`${archivo.variable} ${plexMono.variable} ${editorial.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
