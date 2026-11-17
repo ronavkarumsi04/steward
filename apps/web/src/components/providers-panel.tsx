@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type CSSProperties, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
 import { providerCheckMessage, type ProviderCheckResult } from "@/lib/provider-check";
@@ -116,7 +116,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           </div>
           <div><label className="block"><span className="label">Label</span><input name="label" className="input" placeholder={info?.displayName ?? "My provider"} /></label></div>
           {info?.authMethod === "api_key" || info?.authMethod === "azure_api_key" ? (
-            <div className="md:col-span-2"><label className="block"><span className="label">API key</span><input name="secret" type="password" autoComplete="off" className="input mono" required /></label></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">API key</span><SecretInput name="secret" required /></label></div>
           ) : info?.authMethod === "aws_sigv4" ? (
             <div className="md:col-span-2"><label className="block"><span className="label">AWS credentials (JSON)</span><textarea name="secretConfig" className="input mono" placeholder='{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}' required /></label></div>
           ) : info?.authMethod === "gcp_service_account" ? (
@@ -139,7 +139,10 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           <div><label className="block"><span className="label">Priority (lower is preferred)</span><input name="priority" type="number" min={0} max={1000} defaultValue={100} className="input" /></label></div>
           {info?.authMethod === "azure_api_key" && <div className="md:col-span-2"><label className="block"><span className="label">Extra config (JSON)</span><textarea name="config" className="input mono" placeholder='{"apiVersion":"2024-10-21","deployments":{"gpt-4o":"my-deployment"}}' /></label></div>}
         </div>
-        <div className="flex justify-end"><button className="btn btn-primary" disabled={busy === "add" || !isAdmin}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button></div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {!isAdmin && <p id="add-provider-role-note" className="text-sm text-muted">Only owners and admins can add providers. Ask one of them to add this key.</p>}
+          <button className="btn btn-primary" disabled={busy === "add" || !isAdmin} aria-describedby={isAdmin ? undefined : "add-provider-role-note"}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button>
+        </div>
       </form>
 
       <Card title={`Available models (${models.length})`} className="nb-left-blue">
@@ -176,5 +179,30 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
     </div>
+  );
+}
+
+const noSubscription = () => () => {};
+
+// A type="password" field makes browsers offer to save the key as a login.
+// Mask a text field instead, falling back to password where masking is unsupported.
+function SecretInput({ name, required }: { name: string; required?: boolean }) {
+  const canMask = useSyncExternalStore(noSubscription, () => CSS.supports("-webkit-text-security", "disc"), () => true);
+  return (
+    <input
+      name={name}
+      type={canMask ? "text" : "password"}
+      className="input mono"
+      style={canMask ? ({ WebkitTextSecurity: "disc" } as CSSProperties) : undefined}
+      required={required}
+      autoComplete="off"
+      autoCapitalize="off"
+      autoCorrect="off"
+      spellCheck={false}
+      data-1p-ignore=""
+      data-lpignore="true"
+      data-bwignore=""
+      data-form-type="other"
+    />
   );
 }
