@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolDefinition, ToolRegistry } from "@steward/tools";
-import { AgentRuntime, missingPlanTools, missingToolsNote, settleDelegation, toolHolders, verificationEvidence, type RunContextBundle, type Verification } from "./runtime.js";
+import { AgentRuntime, missingPlanTools, missingToolsNote, RunBudgetExhaustedError, settleDelegation, toolHolders, verificationEvidence, type RunContextBundle, type Verification } from "./runtime.js";
 import type { AgentServices } from "./services.js";
 
 describe("AgentRuntime cancellation", () => {
@@ -117,6 +117,80 @@ describe("AgentRuntime cancellation", () => {
       expect.anything(),
       expect.objectContaining({ toolName: "test.first", status: "failed" }),
     );
+  });
+});
+
+describe("explicit per-run budget", () => {
+  function setup(costUsd: string, budgetUsdPerRun: number) {
+    const chat = vi.fn();
+    const steps = vi.fn(async () => [] as unknown[]);
+    const finishStep = vi.fn();
+    const registryGet = vi.fn();
+    const services = {
+      scope: { organizationId: "org-1", companyId: "company-1", actor: { type: "system", component: "test" } },
+      gateway: { chat },
+      runs: {
+        get: vi.fn(async () => ({ id: "run-1", agentId: "agent-1", costUsd, plan: null, status: "executing" })),
+        steps,
+        toolCallsFor: vi.fn(async () => []),
+        setStatus: vi.fn(),
+        beginStep: vi.fn(async () => ({ id: "step-1" })),
+        finishStep,
+      },
+      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom" })) },
+      budgets: { assertAvailable: vi.fn() },
+    } as unknown as AgentServices;
+    const runtime = new AgentRuntime(services, { get: registryGet, list: () => [] } as unknown as ToolRegistry);
+    const ctx: RunContextBundle = { systemPrompt: "system", userPrompt: "user", toolNames: [], routingPolicy: { requirements: { preference: "balanced" }, fallbackChain: [] }, maxIterations: 1, budgetUsdPerRun };
+    return { ctx, runtime, chat, steps, finishStep, registryGet, setCost: (cost: string) => { costUsd = cost; } };
+  }
+
+  it("blocks planning before sending a request when the founder sets $0", async () => {
+    const { ctx, runtime, chat } = setup("0", 0);
+    await expect(runtime.plan("run-1", ctx)).rejects.toBeInstanceOf(RunBudgetExhaustedError);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it("blocks the verifier at an exhausted budget", async () => {
+    const { ctx, runtime, chat } = setup("0.10", 0.1);
+    await expect(runtime.verify("run-1", ctx, "done")).rejects.toBeInstanceOf(RunBudgetExhaustedError);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it("preserves a completed text-only answer when the billed response crosses the run budget", async () => {
+    const { ctx, runtime, chat, finishStep, registryGet, setCost } = setup("0.08", 0.1);
+    const finalText = "Three customers requested CSV export.";
+    chat.mockImplementationOnce(async () => {
+      setCost("0.11");
+      return { text: finalText, toolCalls: [], provider: "test", model: "test", finishReason: "stop", usage: { inputTokens: 20, outputTokens: 10 } };
+    });
+    const outcome = await runtime.iterate("run-1", ctx);
+    expect(finishStep).toHaveBeenCalledWith(expect.anything(), "step-1", expect.objectContaining({ status: "succeeded", output: expect.objectContaining({ text: finalText }) }));
+    expect(outcome).toEqual({ kind: "budget_exhausted", detail: "Run budget of $0.10 reached", finalText });
+    expect(chat).toHaveBeenCalledOnce();
+    expect(registryGet).not.toHaveBeenCalled();
+  });
+
+  it.each(["plan", "verify"] as const)("records the successful %s step before reporting exhaustion", async (phase) => {
+    const { ctx, runtime, chat, finishStep, setCost } = setup("0.08", 0.1);
+    const output = phase === "plan" ? { objective: "Summarize feedback", steps: [] } : { passed: true, score: 100, summary: "Summarized" };
+    chat.mockImplementationOnce(async () => {
+      setCost("0.11");
+      return { text: JSON.stringify(output), provider: "test", model: "test" };
+    });
+    const result = phase === "plan" ? runtime.plan("run-1", ctx) : runtime.verify("run-1", ctx, "done");
+    await expect(result).rejects.toBeInstanceOf(RunBudgetExhaustedError);
+    expect(finishStep).toHaveBeenCalledExactlyOnceWith(expect.anything(), "step-1", expect.objectContaining({ status: "succeeded" }));
+  });
+
+  it("does not resume an approved tool when its run has spent the budget", async () => {
+    const { ctx, runtime, chat, steps, finishStep, registryGet } = setup("0.11", 0.1);
+    steps.mockResolvedValue([{ id: "pending", kind: "approval", status: "running", input: { approvalId: "approval-1", toolName: "test.tool", toolCallId: "call-1", args: {} } }]);
+    const outcome = await runtime.iterate("run-1", ctx, { approvalId: "approval-1", toolCallId: "call-1", status: "approved" });
+    expect(outcome).toEqual({ kind: "budget_exhausted", detail: "Run budget of $0.10 reached" });
+    expect(finishStep).toHaveBeenCalledWith(expect.anything(), "pending", { status: "skipped", error: "Run budget of $0.10 reached" });
+    expect(registryGet).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
   });
 });
 

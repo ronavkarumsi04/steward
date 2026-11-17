@@ -1,8 +1,8 @@
 import { Context, ApplicationFailure } from "@temporalio/activity";
 import { ProviderError } from "@steward/ai";
-import { AgentRuntime, buildToolRegistry, registryWithMcpTools, type AgentServiceFactory, type RunContextBundle as RuntimeContext } from "@steward/agents";
+import { AgentRuntime, buildToolRegistry, registryWithMcpTools, RunBudgetExhaustedError, type AgentServiceFactory, type RunContextBundle as RuntimeContext } from "@steward/agents";
 import type { ApprovalSignal, CoreContext } from "@steward/core";
-import { runWorkflowId, type AgentActivities, type AgentRunInput, type WorkflowScope } from "@steward/workflows";
+import { RUN_BUDGET_EXHAUSTED, runWorkflowId, type AgentActivities, type AgentRunInput, type WorkflowScope } from "@steward/workflows";
 import type { TenantScope } from "@steward/schema";
 import type { SandboxProvider } from "@steward/sandbox";
 
@@ -87,6 +87,9 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
       const stop = heartbeatLoop();
       try {
         return await (await runtimeFor(input)).verify(input.runId, asRuntimeCtx(input.ctx), input.finalText, signal, attemptDeadline());
+      } catch (e) {
+        if (e instanceof RunBudgetExhaustedError) throw classify(e);
+        throw e;
       } finally {
         stop();
       }
@@ -147,6 +150,7 @@ export function createActivities(opts: { core: CoreContext; factory: AgentServic
 function classify(e: unknown): unknown {
   if (e instanceof ApplicationFailure) return e;
   const msg = e instanceof Error ? e.message : String(e);
+  if (e instanceof RunBudgetExhaustedError) return ApplicationFailure.nonRetryable(msg, RUN_BUDGET_EXHAUSTED);
   if (e instanceof ProviderError && !e.retryable) return ApplicationFailure.nonRetryable(`${e.provider}: ${msg}`, "NonRetryable");
   if (/not found in scope|Agent .* not found|Company not found/.test(msg)) return ApplicationFailure.nonRetryable(msg, "NonRetryable");
   return e;
