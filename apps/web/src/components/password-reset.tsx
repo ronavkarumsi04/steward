@@ -5,16 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { friendly } from "./auth-form";
-import { Icon } from "./icons";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div className="access-card rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
-      <div className="mb-6 text-center">
-        <Link href="/" className="inline-flex border border-transparent p-1 hover:border-line" aria-label="Steward home">
-          <Icon.Logo size={36} />
-        </Link>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h1>
+      <div className="access-title">
+        <h1>{title}</h1>
         <p className="mt-1 text-sm text-muted">{subtitle}</p>
       </div>
       {children}
