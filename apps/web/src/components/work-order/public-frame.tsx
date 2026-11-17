@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getAuthConfig } from "@/lib/server";
-import { StewardMark } from "@/components/brand";
+import { Masthead } from "./masthead";
 import { Icon } from "@/components/icons";
 import { Pad } from "@/components/work-order/pad";
 import s from "@/components/work-order/work-order.module.css";
@@ -22,30 +22,7 @@ export async function PublicFrame({ current, children }: { current: "pricing" | 
       <a className={s.skip} href="#main">
         Skip to content
       </a>
-      <header className={s.binding}>
-        <nav className={s.bindingInner} aria-label="Primary">
-          <Link href="/" className={s.brand} aria-label="Steward home">
-            <StewardMark size={22} /> Steward
-          </Link>
-          <div className={s.navLinks}>
-            <Link href="/#how">How it works</Link>
-            <Link href="/pricing" aria-current={current === "pricing" ? "page" : undefined}>
-              Pricing
-            </Link>
-            <Link href="/compare" aria-current={current === "compare" ? "page" : undefined}>
-              Compare
-            </Link>
-          </div>
-          <div className={s.navActions}>
-            <Link href="/login" className={s.navSignIn}>
-              Sign in
-            </Link>
-            <Link href={entry.href} className={s.navCta}>
-              {entry.label}
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <Masthead current={current} href={entry.href} label={entry.label} />
 
       <main id="main" className={s.pad}>
         {children}

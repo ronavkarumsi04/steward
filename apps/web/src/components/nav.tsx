@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { browserApi } from "@/lib/api";
 import type { Me } from "@/lib/types";
 import { Icon } from "./icons";
@@ -21,6 +21,20 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   const router = useRouter();
   const path = usePathname();
   const [busy, setBusy] = useState(false);
+  const header = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    const root = document.documentElement.style;
+    const sync = () => root.setProperty("--workspace-header-height", `${element.offsetHeight}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      root.removeProperty("--workspace-header-height");
+    };
+  }, []);
   const org = me.memberships.find((m) => m.organizationId === orgId) ?? me.memberships[0];
 
   async function logout() {
@@ -34,7 +48,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
   }
 
   return (
-    <header className="binding-bar sticky top-0 z-[var(--z-nav)]">
+    <header ref={header} className="binding-bar sticky top-0 z-[var(--z-nav)]">
       <div className="mx-auto flex min-h-16 max-w-[1440px] flex-wrap items-center py-2 justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <Link
@@ -57,15 +71,14 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         </div>
 
         {org && (
-          <nav aria-label={t("shell.orgNav")} className="segmented order-3 w-full overflow-x-auto sm:order-none sm:w-auto">
+          <nav aria-label={t("shell.orgNav")} className="segmented order-3 w-full overflow-x-auto lg:order-none lg:w-auto">
             {ORG_LINKS.map(([slug, label, Glyph]) => {
               const href = `/app/org/${org.organizationId}/${slug}`;
               const active = path.startsWith(href);
               return (
                 <Link key={slug} href={href} aria-current={active ? "page" : undefined} className="gap-1.5">
                   <Glyph size={16} />
-                  <span className="hidden sm:inline">{t(label)}</span>
-                  <span className="sr-only sm:hidden">{t(label)}</span>
+                  <span>{t(label)}</span>
                 </Link>
               );
             })}
