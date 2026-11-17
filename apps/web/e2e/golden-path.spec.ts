@@ -136,6 +136,11 @@ test("register → onboarding → dashboard → tasks → settings → providers
   const runBody = (await runResponse.json().catch(() => null)) as { message?: string; run?: { id: string } } | null;
   const runRecorded = runResponse.status() === 201 || /recorded as/i.test(runBody?.message ?? "");
   if (runRecorded) {
+    await expect.poll(async () => {
+      const detail = await page.request.get(`/api/v1/companies/${companyId}/runs/${runBody!.run!.id}`);
+      expect(detail.status()).toBe(200);
+      return (await detail.json()).run.status;
+    }, { timeout: 30_000 }).toBe("failed");
     await page.goto(`${companyUrl}/runs/${runBody!.run!.id}`);
     await page.waitForURL(/\/runs\/[0-9a-f-]+$/);
     await expect(page.getByRole("region", { name: "Run inspection" })).toBeVisible();
