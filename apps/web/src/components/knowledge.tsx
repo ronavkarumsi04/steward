@@ -257,7 +257,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
       {tab === "playbooks" && (
         <Card className="nb-left-purple" title={t("knowledge.companyPlaybooks")} action={canManagePlaybooks ? <button className="btn btn-primary" onClick={() => beginNew("playbook")}>{t("knowledge.newPlaybook")}</button> : undefined}>
           <div className="nb-panel-flat nb-left-purple mb-4 p-3 text-sm leading-6 text-muted">
-            Playbooks are admin-managed operating instructions. Company-wide playbooks apply to every matching agent; project playbooks apply only while an agent is working inside that project. Agents can read them automatically but cannot rewrite them through <span className="mono">document.write</span>.
+            {tf("knowledge.playbookScopeHelp", { tool: "document.write" })}
           </div>
           {!canManagePlaybooks && <p className="mb-4 text-xs text-faint">{t("knowledge.playbooksAdmin")}</p>}
           {open?.kind === "playbook" && (
