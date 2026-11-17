@@ -1,5 +1,32 @@
 # Hosted release and server transport — 2026-10-02
 
+## Current state — historical topology superseded
+
+This is a dated release record. The embedded Vercel API, disabled Temporal and unavailable executions
+described below are historical, not the current production configuration.
+
+The current hosted topology is Vercel web with the API and worker on Oracle and Temporal connected.
+The public Vercel origin proxies `/health` and `/ready` to the Oracle API. Read-only GET checks at
+`https://steward-eosin.vercel.app` for this documentation update returned:
+
+```text
+GET /health
+{"ok":true,"version":"0.1.0","commit":"846f0c7","db":"ok","temporal":"connected"}
+GET /ready
+{"ok":true,"version":"0.1.0","commit":"846f0c7","db":"ok","temporal":"connected","executions":"ready"}
+```
+
+Access is invite-only; the closed-signup policy recorded in this release is not an open-signup promise.
+See [registration policy](DEPLOY.md#4-sign-up-policy), [web/API routing](DEPLOY.md#2-web-on-vercel)
+and [worker operations](WORKER_DEPLOYMENT.md) rather than reusing the historical embedded settings below.
+The deploy guide still includes embedded-hosting snapshots; those are not a current production inventory.
+
+As documented in [readiness semantics](DEPLOY.md#availability-versus-execution-readiness), readiness
+checks the database, Temporal namespace and recent workflow/activity pollers. It does not establish
+successful model/tool execution, browser availability, email delivery, backup recovery or a complete
+founder-to-production loop. Those were not exercised by this GET-only documentation check. No deployment
+or production write was performed, and no current repository-variable settings were inspected.
+
 ## Release actually exercised
 
 The owning Vercel team/project was authenticated through Composio. An encrypted GitHub Actions
@@ -82,12 +109,13 @@ on this follow-up and its merge must still pass; the previous PR success does no
 
 The new deployment's runtime-log request returned an empty sample. It does not prove there are no errors.
 
-## Observability and remaining service limits
+## Historical observability and remaining service limits
 
 The deployment checks API returned no external checks. The generic drains endpoint returned 404; the
 integration-drains endpoint denied access. Neither result proves drains are absent. Runtime logs are readable,
 but a bounded sample is not a complete error scan or monitoring/retention guarantee.
 
-No production Temporal worker, browser host, model provider, delivered email, full backup restore or complete
-founder-to-production agent loop was exercised. Production execution remains UNVERIFIED until those services
-are provisioned and a real approval-governed run is verified. Production database content was not rewritten.
+At this release checkpoint, no production Temporal worker, browser host, model provider, delivered email,
+full backup restore or complete founder-to-production agent loop was exercised. Production execution
+remained UNVERIFIED pending those services and verification of a real approval-governed run.
+Production database content was not rewritten.
