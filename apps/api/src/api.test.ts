@@ -523,6 +523,10 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
       expect(Number((await services.runs.get(scope, runId))?.costUsd)).toBe(0.016);
       const outcome = await rt.iterate(runId, ctx);
       expect(Number((await services.runs.get(scope, runId))?.costUsd)).toBe(0.032);
+      expect((await services.runs.steps(scope, runId)).find((step) => step.kind === "model_call")).toMatchObject({
+        status: "succeeded",
+        output: { toolCalls: [expect.objectContaining({ name: "document.write" })] },
+      });
       expect(await services.runs.toolCallsFor(scope, runId)).toEqual([]);
       expect(outcome).toMatchObject({ kind: "budget_exhausted" });
       const ending = endingFor(outcome);

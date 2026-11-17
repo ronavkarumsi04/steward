@@ -119,6 +119,19 @@ describe("agentRunWorkflow", () => {
     expect((calls.finalize![0] as { error: string }).error).toBe("AI budget hit");
   }, 60_000);
 
+  it("publishes an answer that used the remaining budget without calling the verifier", async () => {
+    const finalText = "Three customers requested CSV export.";
+    const detail = "Run budget of $0.10 reached";
+    let verifications = 0;
+    const { result, calls } = await run([{ kind: "budget_exhausted", detail, finalText }], undefined, async () => {
+      verifications++;
+      throw new Error("The verifier must not run");
+    });
+    expect(verifications).toBe(0);
+    expect(result.status).toBe("needs_review");
+    expect(calls.finalize).toMatchObject([{ status: "needs_review", error: detail, finalText }]);
+  }, 60_000);
+
   it.each(["planning", "verification"] as const)("finalizes budget exhaustion during %s without retrying", async (phase) => {
     const detail = "Run budget of $0.10 reached";
     let attempts = 0;
@@ -135,7 +148,7 @@ describe("agentRunWorkflow", () => {
     expect(attempts).toBe(1);
     expect(calls.iterate?.length ?? 0).toBe(phase === "planning" ? 0 : 1);
     expect(result.status).toBe("needs_review");
-    expect(calls.finalize).toEqual([{ status: "needs_review", error: detail, finalText: `Stopped: ${detail}`, budgetExhausted: true }]);
+    expect(calls.finalize).toEqual([{ status: "needs_review", error: detail, finalText: phase === "planning" ? `Stopped: ${detail}` : "done", budgetExhausted: true }]);
   }, 60_000);
 
   it("cancels on signal while waiting for an approval", async () => {

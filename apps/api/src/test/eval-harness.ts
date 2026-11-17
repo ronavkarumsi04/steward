@@ -143,9 +143,9 @@ async function drive(opts: { services: AgentServiceFactory; scope: TenantScope; 
   };
 
   const ctx = await attempts(() => rt.buildContext(runId));
-  const endIfBudgetStop = async (e: unknown): Promise<undefined> => {
+  const endIfBudgetStop = async (e: unknown, finalText?: string): Promise<undefined> => {
     if (!(e instanceof RunBudgetExhaustedError)) throw e;
-    await rt.finalize(runId, budgetEnding(e.message));
+    await rt.finalize(runId, budgetEnding(e.message, finalText));
     return undefined;
   };
   if (!await attempts(() => rt.plan(runId, ctx)).catch(endIfBudgetStop)) return;
@@ -166,7 +166,7 @@ async function drive(opts: { services: AgentServiceFactory; scope: TenantScope; 
       continue;
     }
 
-    const verification = outcome.kind === "done" ? await rt.verify(runId, ctx, outcome.finalText).catch(endIfBudgetStop) : undefined;
+    const verification = outcome.kind === "done" ? await rt.verify(runId, ctx, outcome.finalText).catch((e: unknown) => endIfBudgetStop(e, outcome.finalText)) : undefined;
     if (outcome.kind === "done" && !verification) return;
     const ending = endingFor(outcome, verification);
     if (ending.action === "continue") continue;

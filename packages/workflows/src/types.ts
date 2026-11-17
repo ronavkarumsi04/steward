@@ -35,7 +35,7 @@ export type IterationOutcome =
   | { kind: "continue" }
   | { kind: "done"; finalText: string }
   | { kind: "needs_approval"; approvalId: string; toolCallId: string; toolName: string }
-  | { kind: "budget_exhausted"; detail: string }
+  | { kind: "budget_exhausted"; detail: string; finalText?: string }
   | { kind: "failed"; error: string; retryable: boolean };
 
 export interface ApprovalResumption {

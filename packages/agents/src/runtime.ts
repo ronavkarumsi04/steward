@@ -103,7 +103,7 @@ export type IterationOutcome =
   | { kind: "continue" }
   | { kind: "done"; finalText: string }
   | { kind: "needs_approval"; approvalId: string; toolCallId: string; toolName: string }
-  | { kind: "budget_exhausted"; detail: string }
+  | { kind: "budget_exhausted"; detail: string; finalText?: string }
   | { kind: "failed"; error: string; retryable: boolean };
 
 export class RunBudgetExhaustedError extends Error {
@@ -251,8 +251,9 @@ export class AgentRuntime {
     await check();
     try {
       return await this.s.gateway.chat(request, { ...options, beforeChatAttempt: check });
-    } finally {
-      if (!request.signal?.aborted) await check();
+    } catch (e) {
+      if (!request.signal?.aborted && !(e instanceof RunBudgetExhaustedError)) await check();
+      throw e;
     }
   }
 
@@ -341,6 +342,7 @@ export class AgentRuntime {
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "planning");
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "plan", title: "Plan the work" });
+    let plan: Plan;
     try {
       const res = await this.chatWithinRunBudget(runId, ctx,
         {
@@ -356,14 +358,20 @@ export class AgentRuntime {
         },
         { policy: ctx.routingPolicy, purpose: "planning", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
-      const plan = parseStructured(res, Plan);
+      plan = parseStructured(res, Plan);
       await this.s.runs.setStatus({ ...this.scope, actor }, runId, "executing", { plan });
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: { plan, model: `${res.provider}/${res.model}` } });
-      return plan;
     } catch (e) {
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: errMsg(e) });
+      if (!signal?.aborted && !(e instanceof RunBudgetExhaustedError)) {
+        const stop = await this.currentBudgetStop(runId, ctx);
+        if (stop) throw stop;
+      }
       throw e;
     }
+    const stop = await this.currentBudgetStop(runId, ctx);
+    if (stop) throw stop;
+    return plan;
   }
 
   // ---------- 3. Iterate (one model call + tool executions) ----------
@@ -507,6 +515,8 @@ export class AgentRuntime {
       return { kind: "failed", error: msg, retryable };
     }
 
+    const modelStop = await this.currentBudgetStop(runId, ctx);
+    if (modelStop) return { kind: "budget_exhausted", detail: modelStop.message, ...(!toolCalls.length && text ? { finalText: text } : {}) };
     if (!toolCalls.length) return { kind: "done", finalText: text || "(no output)" };
 
     for (const tc of toolCalls) {
@@ -637,6 +647,7 @@ export class AgentRuntime {
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "verifying");
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "verification", title: "Verify against success criteria" });
+    let verification: Verification;
     try {
       const plan = run.plan ? Plan.safeParse(run.plan) : null;
       const [steps, calls] = await Promise.all([this.s.runs.steps(this.scope, runId), this.s.runs.toolCallsFor(this.scope, runId)]);
@@ -655,15 +666,18 @@ export class AgentRuntime {
         },
         { policy: { ...ctx.routingPolicy, requirements: { ...ctx.routingPolicy.requirements, preference: "cost" } }, purpose: "verification", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
-      const v = settleDelegation(parseStructured(res, Verification), calls);
-      await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: v });
-      return v;
+      verification = settleDelegation(parseStructured(res, Verification), calls);
+      await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: verification });
     } catch (e) {
       // A verifier that crashes has verified nothing. Reporting `passed: true` here would let an unreviewed
       // run reach `succeeded` — the exact failure mode `unverified` exists to prevent.
       const message = errMsg(e);
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: message });
       if (e instanceof RunBudgetExhaustedError) throw e;
+      if (!signal?.aborted) {
+        const stop = await this.currentBudgetStop(runId, ctx);
+        if (stop) throw stop;
+      }
       return {
         passed: false,
         verdict: "unverified",
@@ -673,6 +687,9 @@ export class AgentRuntime {
         followUps: [],
       };
     }
+    const stop = await this.currentBudgetStop(runId, ctx);
+    if (stop) throw stop;
+    return verification;
   }
 
   // ---------- 5. Finalize ----------

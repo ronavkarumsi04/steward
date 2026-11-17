@@ -29,8 +29,8 @@ export function statusForVerification(verification: Verification | null | undefi
 /** How many times a retryable provider failure may be retried before the run is reported as failed. */
 export const MAX_PROVIDER_RETRIES = 4;
 
-export function budgetEnding(detail: string): FinalizeInput {
-  return { status: "needs_review", finalText: `Stopped: ${detail}`, error: detail, budgetExhausted: true };
+export function budgetEnding(detail: string, finalText?: string): FinalizeInput {
+  return { status: "needs_review", finalText: finalText ?? `Stopped: ${detail}`, error: detail, budgetExhausted: true };
 }
 
 /**
@@ -43,7 +43,7 @@ export function endingFor(outcome: IterationOutcome, verification?: Verification
     case "done":
       return { action: "finish", status: statusForVerification(verification), finalText: outcome.finalText, verification };
     case "budget_exhausted":
-      return { action: "finish", ...budgetEnding(outcome.detail) };
+      return { action: "finish", ...budgetEnding(outcome.detail, outcome.finalText) };
     case "failed":
       return outcome.retryable ? { action: "retry", error: outcome.error } : { action: "finish", status: "failed", error: outcome.error };
     case "needs_approval":

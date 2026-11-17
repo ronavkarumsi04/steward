@@ -36,6 +36,7 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
   let iterations = 0;
   let waitingApprovalId: string | null = null;
   let cancelRequested: string | null = null;
+  let answer: string | undefined;
   let activeScope: CancellationScope | undefined;
   const decisions = new Map<string, ApprovalDecisionSignal>();
 
@@ -113,7 +114,10 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
       // Everything that ends a run — the review verdict, an exhausted budget, an unrecoverable failure — is
       // decided in `endingFor`, which the in-process drivers share so that none of them can disagree with the
       // workflow about whether work was reviewed.
-      if (outcome.kind === "done") phase = "verifying";
+      if (outcome.kind === "done") {
+        phase = "verifying";
+        answer = outcome.finalText;
+      }
       const verificationResult = outcome.kind === "done"
         ? await runCancellableActivity(() => model.verify({ ...input, ctx, finalText: outcome.finalText }))
         : undefined;
@@ -136,7 +140,7 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
       throw e;
     }
     if (e instanceof ActivityFailure && e.cause instanceof ApplicationFailure && e.cause.type === RUN_BUDGET_EXHAUSTED) {
-      return cancelRequested ? finishCancelled() : finish(budgetEnding(e.cause.message));
+      return cancelRequested ? finishCancelled() : finish(budgetEnding(e.cause.message, answer));
     }
     await bookkeeping.finalize({ ...input, outcome: { status: "failed", error: failureMessage(e) } });
     return { status: "failed" };
