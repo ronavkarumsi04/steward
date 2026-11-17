@@ -47,8 +47,12 @@ test("register → onboarding → dashboard → tasks → settings → providers
 
   // Dashboard renders durable state seeded by company creation, including the onboarding profile.
   await expect(page.getByRole("heading", { name: "E2E Analytics", exact: true })).toBeVisible();
-  // Exact: the launch-kit run that creation starts quotes the idea inside its instruction too.
   await expect(page.getByText("A weekly analytics digest for small online stores.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start the launch kit", exact: true })).toBeVisible();
+  const companyId = companyUrl.split("/").pop()!;
+  const runs = await page.request.get(`/api/v1/companies/${companyId}/runs`);
+  expect(runs.status()).toBe(200);
+  expect((await runs.json()).runs).toEqual([]);
   await expect(page.getByText(/autonomy/i).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Build", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Grow" })).toBeVisible();
@@ -124,18 +128,15 @@ test("register → onboarding → dashboard → tasks → settings → providers
   // Runs: whichever deployment this is, the run surface has to stay honest. With Temporal connected (CI
   // starts one) the run is created and the inspector must describe it; on a checkout without Temporal the
   // API refuses to start a run at all, and the list must stay empty rather than show invented work.
-  const companyId = companyUrl.split("/").pop()!;
-  const agentList = (await (await page.request.get(`/api/v1/companies/${companyId}/agents`)).json()) as { agents: Array<{ id: string }> };
-  const runResponse = await page.request.post(`/api/v1/companies/${companyId}/runs`, {
-    // Cookie-authenticated mutations are CSRF-gated on the Origin the browser itself would send.
-    headers: { origin: new URL(page.url()).origin },
-    data: { agentId: agentList.agents[0].id, instruction: "Draft the design partner email" },
-  });
-  const runBody = (await runResponse.json().catch(() => null)) as { message?: string } | null;
+  await page.goto(companyUrl);
+  const [runResponse] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/companies/${companyId}/launch-kit`)),
+    page.getByRole("button", { name: "Start the launch kit", exact: true }).click(),
+  ]);
+  const runBody = (await runResponse.json().catch(() => null)) as { message?: string; run?: { id: string } } | null;
   const runRecorded = runResponse.status() === 201 || /recorded as/i.test(runBody?.message ?? "");
   if (runRecorded) {
-    await page.goto(`${companyUrl}/runs`);
-    await page.getByRole("link", { name: "Draft the design partner email" }).click();
+    await page.goto(`${companyUrl}/runs/${runBody!.run!.id}`);
     await page.waitForURL(/\/runs\/[0-9a-f-]+$/);
     await expect(page.getByRole("region", { name: "Run inspection" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Timeline/ })).toBeVisible();

@@ -2462,6 +2462,10 @@ describe("launch kit", () => {
       profile: { name: "Ledgerline", description: "Bookkeeping that closes itself for two-person agencies", stage: "prototype", targetCustomers: ["design agencies"], constraints: ["no paid ads"] },
     });
     const companyId = co.body.company.id;
+    expect(co.status).toBe(201);
+    const beforeStart = await api.json<{ runs: unknown[] }>("GET", `/companies/${companyId}/runs`);
+    expect(beforeStart.status).toBe(200);
+    expect(beforeStart.body.runs).toEqual([]);
     const started = await api.json<{ run: { id: string; agentId: string; trigger: { kind: string; instruction: string } } }>("POST", `/companies/${companyId}/launch-kit`, {});
     const byTrigger = await api.json<{ runs: { id: string }[] }>("GET", `/companies/${companyId}/runs?trigger=launch&limit=1`);
     expect(byTrigger.body.runs.map((r) => r.id)).toEqual([started.body.run.id]);
