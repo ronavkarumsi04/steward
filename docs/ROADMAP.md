@@ -131,7 +131,33 @@ knows, driven through the page. The three Docker image builds passed in the same
 
 ## Launch
 
-✅ Hosted deployment: `https://steward-eosin.vercel.app` serves the product **and its own API from the same
+### Current hosted state
+
+The public origin is `https://steward-eosin.vercel.app`: web on Vercel, with the API and worker
+on Oracle and Temporal connected. The Vercel origin proxies `/health` and `/ready` to the Oracle API.
+Read-only production GET checks for this documentation update returned:
+
+```json
+{"ok":true,"version":"0.1.0","commit":"846f0c7","db":"ok","temporal":"connected"}
+```
+
+`/ready` returned the same fields plus `"executions":"ready"`. This supersedes the earlier
+embedded-API/Temporal-disabled snapshot below. Access is invite-only, not open public signup; see
+[registration policy](DEPLOY.md#4-sign-up-policy).
+
+Readiness means the database and Temporal namespace answered and recent workflow/activity pollers
+were present; it does not prove a completed model/tool run, browser/sandbox isolation, email delivery
+or a production restore. See [readiness semantics](DEPLOY.md#availability-versus-execution-readiness),
+[web/API routing](DEPLOY.md#2-web-on-vercel) and [worker operations](WORKER_DEPLOYMENT.md).
+The embedded-hosting examples in the deploy guide and the proposed topology in
+[free hosting qualification](FREE_HOSTING.md) are not a current production inventory.
+
+### Historical hosted rollout (superseded topology)
+
+The following records the earlier embedded rollout and its deployment/check implementation history,
+not the current topology, signup policy, service configuration or repository-variable values.
+
+✅ Earlier hosted deployment: `https://steward-eosin.vercel.app` served the product **and its own API from the same
 Vercel deployment** (project `steward`, team `novara-exosystems-projects`) — the web app's `/api/v1/*` rewrite
 points inward at the API runtime (`EMBEDDED_API=true`), which talks to Supabase `steward-prod` (migrated to the
 same journal as `main`: 18 migrations, 70 tables) through its pooler. Verified on the deployment built from
@@ -319,8 +345,10 @@ Historical P0/P1/P2 completion does not establish that hosted loop or finish P3.
 
 See [ADR-0026](adr/0026-worker-production-readiness.md), [deployment procedure](WORKER_DEPLOYMENT.md)
 and [verification evidence](BYOK_LAUNCH_EXECUTION_2026-10-03.md). This tranche is not marked ✅ until merge
-verification passes. Production execution remains **UNVERIFIED**: a fresh exact-release hosted check
-returned `/ready` 503 with Temporal disabled, and no worker/Temporal hosting account is connected.
+verification passes. At that checkpoint production execution remained **UNVERIFIED**: an exact-release hosted check
+returned `/ready` 503 with Temporal disabled, and no worker/Temporal hosting account was connected.
+The [current hosted state](#current-hosted-state) supersedes that infrastructure/readiness snapshot,
+but readiness alone does not verify a completed production agent run.
 NIM execution, browser/sandbox isolation, email delivery, production restore and the cross-system website
 loop remain launch blockers. No new paid resources have been provisioned.
 
