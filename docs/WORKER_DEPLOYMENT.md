@@ -72,6 +72,10 @@ the endpoint is securely reachable. Redeploy and require:
 NODE_USE_ENV_PROXY=1 EXPECT=<release-sha> REQUIRE_EXECUTIONS=1 pnpm hosted:check
 ```
 
+`EXPECT` checks the API/worker build inputs against the revision from `/health`. To also verify the
+web revision behind the Vercel production alias, set `EXPECT_WEB=<web-release-sha>` (or `auto` for
+HEAD) and supply `VERCEL_TOKEN` from your secret store. Both workflows check the revisions separately.
+
 A 200 readiness response is not live model/tool verification. Save a real NIM credential in the owner's
 Provider settings, create a fresh company task, confirm actual worker/model/tool steps and provider usage,
 then exercise cancellation, rejection, worker restart and Temporal outage. No provider key belongs in chat,

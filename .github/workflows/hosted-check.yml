@@ -18,15 +18,11 @@ permissions:
 
 jobs:
   hosted:
-    name: Hosted deployment serves the product, its API, and main
+    name: Check production health and component revisions
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # Full history, not the default single commit: the check compares the deployed commit with this
-      # checkout's HEAD, and a shallow clone does not contain the deployed commit to compare against. It
-      # reports that honestly ("whether they differ in anything a build reads cannot be checked from here")
-      # and fails, which is the right answer for a check that cannot see what it was asked about — but it
-      # is not the answer anyone wants at 6am.
+      # Full history lets the checker compare each deployed tree with HEAD.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -38,5 +34,7 @@ jobs:
       # No install and no build: fetch, git and node are all this needs.
       - name: Check the hosted deployment
         env:
+          EXPECT_WEB: auto
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '0' }}
         run: node scripts/hosted-check.mjs

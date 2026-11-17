@@ -17,9 +17,7 @@
  *
  * One repository secret is all it needs: VERCEL_TOKEN (Vercel → Account Settings → Tokens, scoped to the team
  * that owns the project). Without it the script names the command that sets it and how to deploy right now,
- * and the workflow treats that as a warning on a push rather than a failure: a merge would otherwise turn
- * `main` red for a capability nobody has switched on yet, and `pnpm hosted:check` is already the thing that
- * reports production drifting from the repository.
+ * and exits without deploying. Set REQUIRE_TOKEN=0 only when a missing token should warn rather than fail.
  *
  * It writes nothing anywhere but the deployment itself, and no token is ever printed, returned or put in a
  * URL.
@@ -34,7 +32,8 @@ const REF = process.env.REF ?? "main";
 // The team that owns the project. Vercel's documented form is a team parameter on every call, but the one
 // deployment this repository created by hand had to omit it, so the request is tried with it and then
 // without rather than being assumed either way (see createDeployment).
-const TEAM = process.env.VERCEL_TEAM ?? "team_qWsE4XZplKvuICX6yuYLx4mX";
+export const DEFAULT_VERCEL_TEAM = "team_qWsE4XZplKvuICX6yuYLx4mX";
+const TEAM = process.env.VERCEL_TEAM ?? DEFAULT_VERCEL_TEAM;
 const POLL_MS = 10_000;
 const TIMEOUT_MS = 15 * 60_000;
 
@@ -60,7 +59,7 @@ export function resolveSha(env = process.env, gitHead = () => execFileSync("git"
 }
 
 /** The deployment request, in the shape the project's own manual deployment used: the commit is named in
- *  `gitSource`, so the build Vercel makes is the build of that commit and `/health` can report it. */
+ *  `gitSource`, so Vercel's deployment metadata can identify the web commit. */
 export function deploymentRequest({ project = PROJECT, target = TARGET, org, repo, ref = REF, sha } = {}) {
   return {
     name: project,

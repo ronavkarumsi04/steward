@@ -7,18 +7,14 @@ name: Deploy to production
 #            Production Branch main). Nothing here deploys; this waits for production to serve the pushed
 #            commit and fails if it never does.
 #   create   There is no connection, so a deployment has to be asked for by API for that exact commit.
-#            Needs one repository secret, VERCEL_TOKEN (`gh secret set VERCEL_TOKEN`); without it the step
-#            warns and names the command rather than failing for a capability nobody has switched on.
+#            Needs the repository secret VERCEL_TOKEN (`gh secret set VERCEL_TOKEN`).
 #
 # Which one runs is the repository variable DEPLOY_MODE (`create` when unset) — a setting rather than a code
 # path, because that answer changes when a person connects the project, not when a commit lands.
 #
-# Both modes end in the same verification, and that is the part worth having: scripts/hosted-check.mjs asks
-# the deployment itself which commit it is running and compares that with the commit that was pushed,
-# retrying while Vercel builds. A merge that changes nothing a build reads (docs, workflows, scripts) passes
-# on the first attempt — Vercel ignores those builds by design — and one that production never picks up fails
-# the run in minutes, instead of being found by the daily check the next morning. The daily run stays
-# single-shot; only this one waits.
+# Both modes verify the web commit behind the production alias through Vercel (using VERCEL_TOKEN),
+# and check public health and the API revision independently. Unchanged build inputs need no redeploy.
+# Only this workflow retries while production catches up.
 on:
   push:
     branches: [main]
@@ -43,8 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      # Full history, not the default single commit: the verification compares the commit production
-      # reports with this checkout, and a shallow clone cannot answer that.
+      # Full history lets the checker compare each deployed tree with the requested commit.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -59,24 +54,30 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SHA: ${{ inputs.sha || github.sha }}
-          REQUIRE_TOKEN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: node scripts/deploy-production.mjs
 
       # No install and no build: the deployment is Vercel's to make. This waits for it to exist and be
       # serving this commit, and says what production was serving instead if it never does.
-      - name: Wait for production to serve this commit
+      - name: Wait for a healthy, current production deployment
         env:
           SHA: ${{ inputs.sha || github.sha }}
           ATTEMPTS: "24"
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '0' }}
         run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is required to verify the production alias's web revision"
+            exit 1
+          fi
           for attempt in $(seq 1 "$ATTEMPTS"); do
-            if EXPECT="$SHA" node scripts/hosted-check.mjs; then
+            if EXPECT="$SHA" EXPECT_WEB="$SHA" node scripts/hosted-check.mjs; then
               echo "production is current for $SHA (attempt $attempt)"
               exit 0
             fi
-            echo "::notice::retrying in 30s (attempt $attempt of $ATTEMPTS): production may still be building $SHA, or the failure above is a real one"
-            sleep 30
+            if [ "$attempt" -lt "$ATTEMPTS" ]; then
+              echo "::notice::retrying production verification in 30s (attempt $attempt of $ATTEMPTS)"
+              sleep 30
+            fi
           done
-          echo "::error::production is still not current for $SHA after 12 minutes of waiting; the last report above says what it was serving instead"
+          echo "::error::production verification failed for $SHA after $ATTEMPTS attempts; see the last check above"
           exit 1
