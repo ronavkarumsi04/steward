@@ -1,15 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
 import { BrandKitSettings } from "./brand-kit-settings";
+import { SettingsField } from "./settings-field";
 import { Card, Empty, StatusPill, usd } from "./ui";
 import { useLocale, useT, useTf } from "./locale-provider";
 import { statusLabel, type MessageKey } from "@/lib/i18n";
+import { recordedUsd } from "@/lib/decision-semantics";
+import { decisionCopy } from "@/lib/decision-copy";
 
 const DIMENSIONS: Array<{ id: PolicyDimension }> = [
   { id: "ai_spend" },
@@ -26,12 +29,17 @@ const DIMENSIONS: Array<{ id: PolicyDimension }> = [
 ];
 const BUDGET_CATEGORIES: Budget["category"][] = ["total", "ai", "infra", "ads", "messaging", "payments"];
 
-function useAction() {
+function useAction(quiet: boolean) {
   const router = useRouter();
   const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
   async function run(label: string, fn: () => Promise<unknown>) {
+    if (quiet && pending.current) return;
+    pending.current = true;
+    setBusy(true);
     setError(null);
     setSaved(null);
     try {
@@ -40,17 +48,27 @@ function useAction() {
       router.refresh();
     } catch (e) {
       setError(e instanceof ApiError ? (e.status === 403 ? t("settings.adminOnly") : e.message) : t("settings.requestFailed"));
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   }
-  return { run, error, saved };
+  return { run, error, saved, busy };
 }
 
-export function SettingsPanel({ company, profile, policies, budgets, goals, isAdmin }: { company: Company; profile: CompanyProfile | null; policies: Policy[]; budgets: Budget[]; goals: Goal[]; isAdmin: boolean }) {
-  const { run, error, saved } = useAction();
+export function SettingsPanel({ company, profile, policies, budgets, goals, isAdmin, quiet = false, readOnly = false }: { company: Company; profile: CompanyProfile | null; policies: Policy[]; budgets: Budget[]; goals: Goal[]; isAdmin: boolean; quiet?: boolean; readOnly?: boolean }) {
+  const { run, error, saved, busy } = useAction(quiet);
   const t = useT();
   const tf = useTf();
   const locale = useLocale();
+  const amount = (value: string | number | null | undefined, signed = false) => {
+    if (!quiet) return usd(value);
+    // Remaining capacity is signed; costs and limits remain nonnegative ledger amounts.
+    const deficit = signed && Number(value) < 0 ? recordedUsd(-Number(value), locale) : null;
+    return deficit ? `-${deficit}` : (recordedUsd(value, locale) ?? decisionCopy(locale).unavailable);
+  };
   const base = `/companies/${company.id}`;
+  const Group = quiet ? "fieldset" : "div";
   const list = (s: string) => s.split(/\n|,/).map((x) => x.trim()).filter(Boolean);
 
   function saveCompany(e: FormEvent<HTMLFormElement>) {
@@ -131,11 +149,11 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
   }
 
   return (
-    <div className="space-y-5">
+    <Group disabled={quiet ? busy || readOnly : undefined} aria-busy={quiet ? busy : undefined} className={quiet ? "min-w-0 space-y-5" : "space-y-5"}>
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
       {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
-      <form onSubmit={saveProfile} id="profile" className="card nb-left-green settings-anchor space-y-3">
+      <form onSubmit={saveProfile} id="profile" className={quiet ? "card settings-anchor space-y-3" : "card nb-left-green settings-anchor space-y-3"}>
         <h2 className="font-semibold">{t("settings.profile")}</h2>
         <p className="text-sm text-muted">{t("settings.profileHelp")}</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -156,10 +174,10 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       </form>
 
       <div id="brand-kit" className="settings-anchor">
-        <BrandKitSettings company={company} profile={profile} />
+        <BrandKitSettings company={company} profile={profile} quiet={quiet} />
       </div>
 
-      <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue settings-anchor space-y-3">
+      <form onSubmit={saveCompany} id="autonomy" className={quiet ? "card settings-anchor space-y-3" : "card nb-left-blue settings-anchor space-y-3"}>
         <h2 className="font-semibold">{t("settings.autonomy")}</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div><label className="block"><span className="label">{t("settings.companyName")}</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
@@ -182,7 +200,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>{t("settings.save")}</button></div>
       </form>
 
-      <Card title={t("settings.policies")} id="policies" className="nb-left-yellow settings-anchor">
+      <Card title={t("settings.policies")} id="policies" className={quiet ? "settings-anchor" : "nb-left-yellow settings-anchor"}>
         <p className="mb-3 text-sm text-muted">{t("settings.policiesHelp")} <b>{t("policy.mode.deny")}</b> {t("settings.policiesDeny")} <b>{t("policy.mode.approve")}</b> {t("settings.policiesApprove")} <b>{t("policy.mode.allow")}</b> {t("settings.policiesAllow")}</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
@@ -190,11 +208,11 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             return (
               <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
                 <div><div className="font-medium">{t(`dimension.${d.id}` as MessageKey)}</div><div className="mono text-xs text-muted">{d.id}</div></div>
-                <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select>
-                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select>
-                <input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} />
-                <input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} />
-                <input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} />
+                <SettingsField quiet={quiet} label={t("settings.mode")}><select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.maxRisk")}><select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perActionLabel")}><input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} /></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perDayLabel")}><input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} /></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perDayCountLabel")}><input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} /></SettingsField>
                 <button className="btn" disabled={!isAdmin}>{t("settings.save")}</button>
               </form>
             );
@@ -202,30 +220,41 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange settings-anchor">
+      <Card title={t("settings.budgets")} id="budgets" className={quiet ? "settings-anchor" : "nb-left-orange settings-anchor"}>
         {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
-          <div className="table-wrap mb-4"><table className="table text-sm">
+          <div className={quiet ? "q-settings-budget-table table-wrap mb-4" : "table-wrap mb-4"}><table className="table text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
             <tbody>
               {budgets.map((b) => (
                 <tr key={`${b.category}-${b.period}`} className={`border-t border-line ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
-                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
+                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{amount(b.limitUsd)}</td><td>{amount(b.spentUsd)}</td><td>{amount(b.reservedUsd)}</td><td>{amount(b.remainingUsd, true)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
                 </tr>
               ))}
             </tbody>
           </table></div>
         )}
+        {quiet && budgets.length > 0 && <ul className="q-settings-budget-list">{budgets.map((b) => <li key={`${b.category}-${b.period}`} className={`nb-panel-flat ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
+          <h3 className="font-semibold">{t(`budgetCategory.${b.category}` as MessageKey)}</h3>
+          <dl>{[
+            [t("settings.period"), t(`settings.${b.period}` as MessageKey)],
+            [t("settings.limit"), amount(b.limitUsd)],
+            [t("settings.spent"), amount(b.spentUsd)],
+            [t("settings.reserved"), amount(b.reservedUsd)],
+            [t("settings.remaining"), amount(b.remainingUsd, true)],
+            [t("settings.hardStop"), b.hardStop ? t("settings.yes") : t("settings.soft")],
+          ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        </li>)}</ul>}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
-          <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select>
-          <select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select>
-          <input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} />
-          <input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={t("settings.softThreshold")} />
-          <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
+          <SettingsField quiet={quiet} label={t("settings.category")}><select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.period")}><select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.limitUsd")}><input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} /></SettingsField>
+          <SettingsField quiet={quiet} label={`${t("settings.softThreshold")} (%)`}><input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={quiet ? `${t("settings.softThreshold")} (%)` : t("settings.softThreshold")} /></SettingsField>
+          <label className={`flex items-center gap-1 text-muted ${quiet ? "q-settings-check-label" : "text-xs"}`}><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
           <button className="btn btn-primary" disabled={!isAdmin}>{t("settings.set")}</button>
         </form>
       </Card>
 
-      <Card title={t("settings.goals")} id="goals" className="nb-left-purple settings-anchor">
+      <Card title={t("settings.goals")} id="goals" className={quiet ? "settings-anchor" : "nb-left-purple settings-anchor"}>
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -238,16 +267,16 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           ))}
         </ul>
         <form onSubmit={addGoal} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
-          <input name="title" className="input" placeholder={t("settings.goalPlaceholder")} required aria-label={t("settings.goalTitle")} />
-          <input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} />
-          <input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} />
-          <input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} />
-          <select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select>
+          <SettingsField quiet={quiet} label={t("settings.goalTitle")}><input name="title" className="input" placeholder={t("settings.goalPlaceholder")} required aria-label={t("settings.goalTitle")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.metric")}><input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.target")}><input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.horizonLabel")}><input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.priority")}><select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select></SettingsField>
           <button className="btn btn-primary">{t("settings.add")}</button>
         </form>
       </Card>
 
-      <Card title={t("settings.controls")} id="controls" className="nb-left-red settings-anchor">
+      <Card title={t("settings.controls")} id="controls" className={quiet ? "settings-anchor" : "nb-left-red settings-anchor"}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
             <div className="font-medium">{t("settings.outboundPause")}</div>
@@ -274,6 +303,6 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       <div id="overclock" className="settings-anchor">
         <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
       </div>
-    </div>
+    </Group>
   );
 }

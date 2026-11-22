@@ -1,9 +1,14 @@
+import { QuietDepthLoading } from "@/components/quiet-depth";
+import { t } from "@/lib/i18n";
+import { Suspense } from "react";
 import type { CSSProperties } from "react";
 import { landingArrival, timelineArrival, workspaceArrival } from "@/lib/arrivals";
 import { BANDS, MAX_FLASH_HZ, MOTION_MS, SETTLE_FACTOR, type Band } from "@/lib/motion";
-import { requireMe } from "@/lib/server";
+import { getLocale, requireMe } from "@/lib/server";
 import { DesignMotionLab } from "@/components/design-motion-lab";
 import { Card, Empty, Pill, RiskPill, Spinner, Stat, StatusPill, type Tone } from "@/components/ui";
+import { QuietDesignGallery } from "@/components/quiet-design-gallery";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export const metadata = { title: "Design system" };
 
@@ -68,7 +73,13 @@ function Plan({ title, note, delays }: { title: string; note: string; delays: nu
 }
 
 export default async function DesignPage() {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return DesignPageContent();
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><DesignPageContent /></Suspense>;
+}
+
+async function DesignPageContent() {
   await requireMe("/app/design");
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return <QuietDesignGallery />;
   const landing = landingArrival();
   const workspace = workspaceArrival();
   const timeline = timelineArrival(12);
