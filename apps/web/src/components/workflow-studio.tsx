@@ -181,7 +181,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="q-workflow-layout grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           {notice && <p role="status" className="text-sm text-muted">{notice}</p>}

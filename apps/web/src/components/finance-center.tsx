@@ -16,7 +16,7 @@ function refHref(companyId: string, row: BudgetLedgerEntry): string | null {
   return null;
 }
 
-export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "en" }: { companyId: string; budgets: Budget[]; ledger: BudgetLedgerEntry[]; aiUsage: UsageRow[]; locale?: Locale }) {
+export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "en", quiet = false }: { companyId: string; budgets: Budget[]; ledger: BudgetLedgerEntry[]; aiUsage: UsageRow[]; locale?: Locale; quiet?: boolean }) {
   const t = (key: MessageKey) => tr(locale, key);
   const f = (key: MessageKey, vars: Record<string, string | number>) => tf(locale, key, vars);
   const monthly = budgets.filter((b) => b.period === "monthly");
@@ -28,6 +28,8 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
   const aiCost = aiUsage.reduce((n, r) => n + r.costUsd, 0);
   const attention = budgets.filter((b) => b.exhausted || b.overSoftThreshold);
   const { usage, neverAnswered } = splitUsage(aiUsage);
+  const monthlyAvailable = !!total || categoryRows.length > 0;
+  const amount = (value: number, available = true) => quiet && (!available || !Number.isFinite(value)) ? t("quiet.notAvailable") : usd(value);
 
   return (
     <div className="space-y-5">
@@ -53,32 +55,32 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
         </Card>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label={t("finance.monthlyLimit")} value={usd(limit)} hint={t("finance.monthlyLimitHint")} />
-        <Stat label={t("finance.spentMonth")} value={usd(spent)} hint={limit > 0 ? f("finance.ofLimit", { pct: Math.round((spent / limit) * 100) }) : t("finance.noMonthlyLimit")} />
-        <Stat label={t("finance.reserved")} value={usd(reserved)} hint={t("finance.reservedHint")} />
-        <Stat label={t("finance.aiCost")} value={usd(aiCost)} hint={f("finance.modelCalls", { n: aiUsage.reduce((n, r) => n + r.calls, 0) })} />
+      <div data-specialist-metrics className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label={t("finance.monthlyLimit")} value={amount(limit, monthlyAvailable)} hint={t("finance.monthlyLimitHint")} />
+        <Stat label={t("finance.spentMonth")} value={amount(spent, monthlyAvailable)} hint={limit > 0 ? f("finance.ofLimit", { pct: Math.round((spent / limit) * 100) }) : t("finance.noMonthlyLimit")} />
+        <Stat label={t("finance.reserved")} value={amount(reserved, monthlyAvailable)} hint={t("finance.reservedHint")} />
+        <Stat label={t("finance.aiCost")} value={amount(aiCost, usage.length > 0)} hint={f("finance.modelCalls", { n: aiUsage.reduce((n, r) => n + r.calls, 0) })} />
       </div>
 
       <Card className="nb-left-orange" title={f("finance.health", { n: budgets.length })} description={t("finance.healthHelp")}>
         {budgets.length === 0 ? <Empty>{t("finance.noBudgets")}</Empty> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="q-finance-table w-full min-w-[760px] text-left text-sm" role="table">
               <thead className="text-xs text-muted"><tr><th className="pb-2">{t("finance.colCategory")}</th><th className="pb-2">{t("finance.colPeriod")}</th><th className="pb-2">{t("finance.colSpent")}</th><th className="pb-2">{t("finance.colReserved")}</th><th className="pb-2">{t("finance.colRemaining")}</th><th className="pb-2">{t("finance.colUtilization")}</th><th className="pb-2">{t("finance.colGuardrail")}</th></tr></thead>
               <tbody className="divide-y divide-line">
                 {budgets.map((b) => {
                   const pct = usagePct(b);
                   return (
                     <tr key={`${b.category}:${b.period}`}>
-                      <td className="py-2.5 font-medium">{t(LABEL_KEY[b.category] ?? "budgetCategory.totalLong")}</td>
-                      <td className="py-2.5 text-muted">{t(`settings.${b.period}` as MessageKey)}</td>
-                      <td className="tnum py-2.5">{usd(b.spentUsd)}</td>
-                      <td className="tnum py-2.5">{usd(b.reservedUsd)}</td>
-                      <td className={`tnum py-2.5 ${b.exhausted ? "text-danger" : ""}`}>{usd(b.remainingUsd)}</td>
-                      <td className="py-2.5">
+                      <td data-label={t("finance.colCategory")} className="py-2.5 font-medium">{t(LABEL_KEY[b.category] ?? "budgetCategory.totalLong")}</td>
+                      <td data-label={t("finance.colPeriod")} className="py-2.5 text-muted">{t(`settings.${b.period}` as MessageKey)}</td>
+                      <td data-label={t("finance.colSpent")} className="tnum py-2.5">{amount(b.spentUsd)}</td>
+                      <td data-label={t("finance.colReserved")} className="tnum py-2.5">{amount(b.reservedUsd)}</td>
+                      <td data-label={t("finance.colRemaining")} className={`tnum py-2.5 ${b.exhausted ? "text-danger" : ""}`}>{amount(b.remainingUsd)}</td>
+                      <td data-label={t("finance.colUtilization")} className="py-2.5">
                         <div className="flex items-center gap-2"><progress className="w-24" max={100} value={pct} /><span className="tnum text-xs text-muted">{Math.round(pct)}%</span></div>
                       </td>
-                      <td className="py-2.5"><Pill tone={b.exhausted ? "danger" : b.overSoftThreshold ? "warn" : "ok"}>{b.hardStop ? t("finance.hardStop") : t("finance.soft")}</Pill></td>
+                      <td data-label={t("finance.colGuardrail")} className="py-2.5"><Pill tone={b.exhausted ? "danger" : b.overSoftThreshold ? "warn" : "ok"}>{b.hardStop ? t("finance.hardStop") : t("finance.soft")}</Pill></td>
                     </tr>
                   );
                 })}
@@ -92,7 +94,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
         <Card className="nb-left-blue" title={t("finance.ledger")} description={t("finance.ledgerHelp")}>
           {ledger.length === 0 ? <Empty>{t("finance.noSpend")}</Empty> : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-sm">
+              <table className="q-finance-table w-full min-w-[620px] text-left text-sm" role="table">
                 <thead className="text-xs text-muted"><tr><th className="pb-2">{t("finance.colWhen")}</th><th className="pb-2">{t("finance.colCategory")}</th><th className="pb-2">{t("finance.colKind")}</th><th className="pb-2">{t("finance.colAmount")}</th><th className="pb-2">{t("finance.colReference")}</th></tr></thead>
                 <tbody className="divide-y divide-line">
                   {ledger.map((row) => {
@@ -100,11 +102,11 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
                     const ref = row.refType && row.refId ? `${row.refType}:${row.refId.slice(0, 10)}` : "—";
                     return (
                       <tr key={row.id}>
-                        <td className="py-2.5 text-muted"><Ago iso={row.createdAt} locale={locale} /></td>
-                        <td className="py-2.5">{t(LABEL_KEY[row.category] ?? "budgetCategory.totalLong")}</td>
-                        <td className="py-2.5"><Pill tone={row.kind === "charge" || row.kind === "settle" ? "neutral" : row.kind === "reserve" ? "warn" : "ok"}>{row.kind}</Pill></td>
-                        <td className="tnum py-2.5">{usd(row.amountUsd)}</td>
-                        <td className="mono py-2.5 text-xs">{href ? <Link className="text-accent hover:underline" href={href}>{ref}</Link> : ref}</td>
+                        <td data-label={t("finance.colWhen")} className="py-2.5 text-muted"><Ago iso={row.createdAt} locale={locale} /></td>
+                        <td data-label={t("finance.colCategory")} className="py-2.5">{t(LABEL_KEY[row.category] ?? "budgetCategory.totalLong")}</td>
+                        <td data-label={t("finance.colKind")} className="py-2.5"><Pill tone={row.kind === "charge" || row.kind === "settle" ? "neutral" : row.kind === "reserve" ? "warn" : "ok"}>{row.kind}</Pill></td>
+                        <td data-label={t("finance.colAmount")} className="tnum py-2.5">{amount(row.amountUsd)}</td>
+                        <td data-label={t("finance.colReference")} className="mono py-2.5 text-xs">{href ? <Link className="text-accent hover:underline" href={href}>{ref}</Link> : ref}</td>
                       </tr>
                     );
                   })}

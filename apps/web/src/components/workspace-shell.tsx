@@ -12,6 +12,7 @@ import { ThemeToggle } from "./feedback";
 import { Icon } from "./icons";
 import { useT } from "./locale-provider";
 import { StatusPill } from "./ui";
+import { QuietWorkNavigation } from "./quiet-work-navigation";
 
 const PRIMARY = [
   ["overview", "", "quiet.overview", Icon.Overview],
@@ -151,7 +152,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
         <div className="quiet-context-name">{company.name} <span aria-hidden="true">/</span> {t(PRIMARY.find((p) => p[0] === group)?.[2] ?? "nav.settings")}</div>
         <CompanyCommandPalette key={company.id} companyId={company.id} quiet destinations={workspaceDestinations(me, company.organizationId)} />
       </div>
-      {subroutes.length > 1 && <div className="quiet-subnav">
+      {group === "work" ? <QuietWorkNavigation base={base} current={current} /> : subroutes.length > 1 && <div className="quiet-subnav">
         {([undefined, "automation", "business"] as const).map((section) => {
           const routes = subroutes.filter((route) => route.section === section);
           if (!routes.length) return null;

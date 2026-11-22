@@ -7,10 +7,12 @@ import { browserApi, ApiError } from "@/lib/api";
 import type { Project, ProjectStatus } from "@/lib/types";
 import { Icon } from "./icons";
 import { Empty, PageHeader, Pill, ago } from "./ui";
+import { SpecialistDisclosure, useQuietSpecialist } from "./quiet-specialist-context";
 
 const STATUS_TONE: Record<ProjectStatus, "neutral" | "accent" | "warn" | "ok"> = { active: "accent", blocked: "warn", complete: "ok", cancelled: "neutral" };
 
 export function ProjectWorkspace({ companyId, initial }: { companyId: string; initial: Project[] }) {
+  const quiet = useQuietSpecialist();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,8 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
   const history = initial.filter((p) => p.status === "complete" || p.status === "cancelled");
 
   return <div className="space-y-5">
-    <PageHeader eyebrow="Projects" title="Outcomes that survive every thread" description="Projects keep one founder objective, its specialist workers, outputs, decisions, campaigns, and next step together until the outcome is actually finished." />
+    <PageHeader eyebrow="Projects" title={quiet ? "Projects" : "Outcomes that survive every thread"} description={quiet ? "Objectives, outputs, and the next step — together across every run and conversation." : "Projects keep one founder objective, its specialist workers, outputs, decisions, campaigns, and next step together until the outcome is actually finished."} />
+    <SpecialistDisclosure label="Create project">
     <form onSubmit={createProject} className="card nb-left-blue p-4 sm:p-5">
       <div className="grid gap-3 lg:grid-cols-2">
         <div><label className="label">Project</label><input className="input" name="name" aria-label="Project name" placeholder="Launch design partner pilot" required maxLength={200} /></div>
@@ -55,8 +58,9 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
         <button className="btn btn-primary" disabled={busy}>{busy ? <span className="spinner" aria-hidden="true" /> : <Icon.Plus size={15} />}Create project</button>
       </div>
     </form>
+    </SpecialistDisclosure>
     {active.length === 0 ? <Empty>No active projects yet. Create one above, or start a mission from Studio and Steward will create one automatically.</Empty> : (
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Active projects">
+      <section className="q-project-list grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Active projects">
         {active.map((project) => <Link key={project.id} href={`/app/c/${companyId}/projects/${project.id}`} className="card nb-left-green group block p-5 transition hover:-translate-y-0.5">
           <div className="flex items-center justify-between gap-3"><Pill tone={STATUS_TONE[project.status]}>{project.status}</Pill><span className="text-xs text-faint">{ago(project.updatedAt)}</span></div>
           <h2 className="mt-3 text-lg font-semibold tracking-tight group-hover:text-accent">{project.name}</h2>

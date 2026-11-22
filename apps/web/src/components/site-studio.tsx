@@ -180,7 +180,7 @@ export function SiteStudio({ companyId, initial }: { companyId: string; initial:
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="rise-in">
+      <Card className="q-site-heading rise-in">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="nb-section-label">Site Studio</p>
@@ -252,7 +252,7 @@ export function SiteStudio({ companyId, initial }: { companyId: string; initial:
       </Card>
 
       {model && page && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="q-site-layout grid gap-4 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
             <Card className="rise-in">
               <h2 className="text-sm font-bold uppercase tracking-wider">Pages</h2>
