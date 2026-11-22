@@ -97,7 +97,8 @@
   .q-specialist[data-surface="conversations"] .chat-transcript { min-height: 480px; max-height: none; }
 }
 @media (max-width: 767px) {
-  .q-specialist .q-project-work-row > .truncate { flex-basis: 100%; order: 1; }
+  .q-specialist .q-project-work-row { flex-direction: column; align-items: flex-start; }
+  .q-specialist .q-project-work-row > .truncate { flex: none; width: 100%; overflow-wrap: break-word; }
   .q-specialist .q-project-heading > .btn { order: -1; }
   .q-specialist .q-project-heading > .desk-heading { flex-basis: 100%; }
   .q-specialist :is(.card, .nb-panel-flat) { padding: 20px 16px; }
