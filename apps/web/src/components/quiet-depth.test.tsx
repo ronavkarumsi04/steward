@@ -70,6 +70,23 @@ describe("Quiet depth boundaries", () => {
     expect(html).not.toContain("/runs/unrelated");
     expect(html).not.toContain("q=Research");
   });
+  it("keeps long run instructions out of run reference links", () => {
+    const intent = "Prepare the launch kit. ".repeat(100);
+    const runs = [{ id: "r1", agentId: agent.id, intent, status: "executing", createdAt: "2026-11-22T00:00:00Z" }] as Run[];
+    const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
+    const links = [...html.matchAll(/<a[^>]*href="\/app\/c\/north\/runs\/r1"[^>]*>(.*?)<\/a>/g)];
+    expect(links).toHaveLength(2);
+    expect(links.every((match) => match[1] === "View run · r1")).toBe(true);
+    expect(html).not.toContain(intent);
+  });
+  it("provides a single collection navigation with one Connections destination", () => {
+    const html = markup(createElement(KnowledgePanel, { quiet: true, companyId: "north", documents: [], decisions: [], memories: [], pending: [], artifacts: [], projects: [], canManageMemories: true, canManagePlaybooks: true, initialTab: "documents" }));
+    expect([...html.matchAll(/<nav/g)]).toHaveLength(1);
+    expect([...html.matchAll(/href="\/app\/c\/north\/graph"/g)]).toHaveLength(1);
+    expect([...html.matchAll(/href="\/app\/c\/north\/knowledge\?tab=documents"/g)]).toHaveLength(1);
+    expect(html).toContain("Filter this document list by title or folder.");
+    expect(html).not.toContain("up to 100 memories");
+  });
   it("keeps human members distinct and forbids viewer invitation and role controls", () => {
     const html = markup(createElement(MembersPanel, { quiet: true, orgId: "org-north", members: [{ userId: "me", name: "Reader", email: "reader@example.test", role: "viewer", joinedAt: "2026-11-22T00:00:00Z" }], invitations: [], me: "me", myRole: "viewer" }));
     expect(html).toContain('aria-label="Role: reader@example.test"');

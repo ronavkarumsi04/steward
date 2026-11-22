@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ApiClient } from "@/lib/api";
 import type { Artifact, Decision, Document, Memory, Project } from "@/lib/types";
 import type { Locale } from "@/lib/i18n";
@@ -18,7 +17,7 @@ export async function QuietKnowledge({ companyId, api, locale, tab }: { companyI
   ]);
   const [documents, decisions, memories, artifacts, projects, company] = records;
   const failure = records.find((result) => result.status === "rejected");
-  return <QuietDepth title={c.knowledgeTitle} description={c.knowledgeIntro} action={<Link className="btn" href={`/app/c/${companyId}/graph`}>{c.connections}</Link>}>
+  return <QuietDepth title={c.knowledgeTitle} description={c.knowledgeIntro}>
     <aside className="q-depth-note"><h2>{c.scope}</h2><p>{c.scopeHint}</p></aside>
     {documents.status === "fulfilled" && decisions.status === "fulfilled" && memories.status === "fulfilled" && artifacts.status === "fulfilled" && projects.status === "fulfilled" && company.status === "fulfilled" ? <KnowledgePanel quiet key={tab ?? "default"} companyId={companyId} initialTab={tab} documents={documents.value.documents} decisions={decisions.value.decisions} memories={memories.value.memories} pending={memories.value.pending} canManageMemories={memories.value.canManage} artifacts={artifacts.value.artifacts} projects={projects.value.projects} canManagePlaybooks={["owner", "admin"].includes(company.value.role)} /> : <DepthFailure error={failure?.status === "rejected" ? failure.reason : undefined} href={`/app/c/${companyId}/knowledge${tab ? `?tab=${encodeURIComponent(tab)}` : ""}`} locale={locale} />}
   </QuietDepth>;

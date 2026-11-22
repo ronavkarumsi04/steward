@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useT, useTf } from "./locale-provider";
+import { useLocale, useT, useTf } from "./locale-provider";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, CompanyOverview, Run } from "@/lib/types";
 import { QuietAgentRoster } from "./quiet-agent-roster";
 import { scheduleAccess } from "@/lib/team-access";
+import { depthCopy } from "@/lib/depth-copy";
 import { AgentOverclock } from "./overclock";
 import Link from "next/link";
 import { RoutingPolicy } from "@steward/schema";
@@ -26,6 +27,7 @@ export interface Schedule {
 
 export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, overclockEnabled = false, isAdmin = false, quiet = false, runs = null, overview = null, schedulesAvailable = true }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]>; overclockEnabled?: boolean; isAdmin?: boolean; quiet?: boolean; runs?: Run[] | null; overview?: CompanyOverview | null; schedulesAvailable?: boolean }) {
   const router = useRouter();
+  const c = depthCopy(useLocale());
   const t = useT();
   const tf = useTf();
   const [hydrated, setHydrated] = useState(false);
@@ -116,7 +118,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   return (
     <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">{overclockEnabled ? t("agents.overclockOn") : t("agents.overclockOff")}</p><Link className="btn" href={`/app/c/${companyId}/settings`}>Workspace settings ↗</Link></div>
+      {!quiet && <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">{overclockEnabled ? t("agents.overclockOn") : t("agents.overclockOff")}</p><Link className="btn" href={`/app/c/${companyId}/settings`}>Workspace settings ↗</Link></div>}
       {quiet ? <QuietAgentRoster companyId={companyId} agents={agents} runs={runs} overview={overview} busy={busy} editable={isAdmin && hydrated} onEdit={(agent) => { setEditing(agent); setError(null); }} onToggle={(agent) => { void change(() => toggle(agent)); }} /> : <Card title={t("agents.agents")} className="nb-left-purple">
         <ul className="divide-y divide-line">
           {agents.map((a) => (
@@ -136,6 +138,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
         </ul>
       </Card>}
 
+      {quiet && <details className="q-team-settings"><summary>{c.learningSettings}</summary><p>{c.overclockHint}</p><p>{overclockEnabled ? t("agents.overclockOn") : t("agents.overclockOff")}</p><Link className="q-link" href={`/app/c/${companyId}/settings`}>{c.workspaceSettings}</Link></details>}
       {editing && (
         <form key={editing.id} onSubmit={(e) => { if (!quiet) return save(e); e.preventDefault(); void change(() => save(e)); }} className="card nb-left-blue space-y-3">
           <h3 id="agent-editor-title" tabIndex={-1} className="scroll-mt-24 font-semibold">Edit {editing.name}</h3>

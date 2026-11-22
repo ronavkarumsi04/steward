@@ -21,7 +21,7 @@ export default async function MembersPage({ params }: { params: Promise<{ orgId:
     catch (error) { return <QuietDepth title={c.membersTitle} description={c.membersIntro}><DepthFailure error={error} href={`/app/org/${orgId}/members`} locale={locale} /></QuietDepth>; }
     return <QuietDepth title={c.membersTitle} description={c.membersIntro}>
       <div className="q-depth-note"><h2>{membership?.name ?? c.organization}</h2><p>{c.organization} · {membership?.role ?? c.unavailable}</p></div>
-      <nav className="q-filter-tabs" aria-label={c.organization}><Link href={`/app/org/${orgId}/members`} aria-current="page">{c.members}</Link><Link href={`/app/org/${orgId}/providers`}>{locale === "es" ? "Proveedores de IA" : "AI providers"}</Link><Link href={`/app/org/${orgId}/integrations`}>{locale === "es" ? "Integraciones" : "Integrations"}</Link></nav>
+      <nav className="q-filter-tabs" aria-label={c.organization}><Link href={`/app/org/${orgId}/integrations`}>{c.connections}</Link><Link href={`/app/org/${orgId}/providers`}>{locale === "es" ? "Proveedores de IA" : "AI providers"}</Link><Link href={`/app/org/${orgId}/members`} aria-current="page">{c.members}</Link><Link href="/app">{locale === "es" ? "Empresas" : "Companies"}</Link></nav>
       <MembersPanel quiet orgId={orgId} members={records.members} invitations={records.invitations} me={me.user.id} myRole={membership?.role} />
     </QuietDepth>;
   }

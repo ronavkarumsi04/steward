@@ -12,9 +12,10 @@ import { DeckView, SheetView } from "./deliverables";
 import { PicturesPanel, imageSrc } from "./pictures";
 import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
 import { depthCopy } from "@/lib/depth-copy";
+import { KNOWLEDGE_TABS, QuietKnowledgeNav, type KnowledgeTab } from "./quiet-knowledge-nav";
 
-const TAB_IDS = ["playbooks", "documents", "decisions", "memory", "artifacts", "pictures"] as const;
-type Tab = (typeof TAB_IDS)[number];
+const TAB_IDS = KNOWLEDGE_TABS.map(([id]) => id);
+type Tab = KnowledgeTab;
 
 const AGENT_ROLES = [
   ["orchestrator", "role.orchestrator"],
@@ -248,12 +249,12 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
 
   return (
     <div className={quiet ? "q-depth-panel space-y-5" : "space-y-5"}>
-      <nav className="flex flex-wrap gap-1" aria-label={t("knowledge.title")}>
+      {quiet ? <QuietKnowledgeNav companyId={companyId} active={tab} counts={Object.fromEntries(tabs.map(([id, , count]) => [id, id === "pictures" && pictures === null ? null : count]))} /> : <nav className="flex flex-wrap gap-1" aria-label={t("knowledge.title")}>
         {tabs.map(([id, label, n]) => (
           <Link key={id} href={`/app/c/${companyId}/knowledge?tab=${id}`} scroll={false} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-current={tab === id ? "page" : undefined}>{t(label)} <span className="text-muted">{quiet && id === "pictures" && pictures === null ? "" : n}</span></Link>
         ))}
-      </nav>
-      {quiet && <p className="q-caption">{c.sourcesHint}</p>}
+      </nav>}
+      {quiet && <p className="q-caption">{tab === "documents" ? c.sourcesHint : tab === "playbooks" ? c.playbooksHint : tab === "pictures" ? "" : c.boundedHint}</p>}
       {quiet && ["documents", "playbooks"].includes(tab) && <div className="q-depth-search"><label>{c.searchSources}<input type="search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>{query && <button className="btn" onClick={() => setQuery("")}>{c.clear}</button>}</div>}
       {quiet && <p role="status" className="sr-only">{query.trim() && !(tab === "playbooks" ? playbooks : regularDocuments).length ? c.noMatches : ""}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
