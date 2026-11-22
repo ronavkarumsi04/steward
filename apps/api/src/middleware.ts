@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import type { MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { SESSION_TTL_MS } from "@steward/core";
@@ -99,8 +100,9 @@ interface Bucket {
 export function rateLimit(opts: { capacity: number; refillPerSec: number; key?: (c: Ctx) => string }): MiddlewareHandler<AppEnv> {
   const buckets = new Map<string, Bucket>();
   const keyFn = opts.key ?? ((c: Ctx) => c.get("user")?.id ?? clientIp(c));
+  const idleTtlMs = Math.max(10 * 60_000, (opts.capacity / opts.refillPerSec) * 1000);
   setInterval(() => {
-    const cutoff = Date.now() - 10 * 60_000;
+    const cutoff = Date.now() - idleTtlMs;
     for (const [k, b] of buckets) if (b.updated < cutoff) buckets.delete(k);
   }, 60_000).unref();
   return async (c, next) => {
@@ -123,9 +125,30 @@ export function rateLimit(opts: { capacity: number; refillPerSec: number; key?: 
 
 export function clientIp(c: Ctx): string {
   const env = c.get("deps").env;
-  if (env.TRUST_PROXY === "true") {
-    const xff = c.req.header("x-forwarded-for");
-    if (xff) return xff.split(",")[0]!.trim();
+  const secret = env.STEWARD_PROXY_SECRET;
+  const provided = c.req.header("x-steward-proxy-secret");
+  const forwarded = c.req.header("x-steward-client-ip")?.trim();
+  if (secret && provided && forwarded) {
+    const expectedBytes = Buffer.from(secret);
+    const providedBytes = Buffer.from(provided);
+    if (expectedBytes.length === providedBytes.length && timingSafeEqual(expectedBytes, providedBytes)) return forwarded;
   }
-  return c.req.header("x-real-ip") ?? "local";
+  if (env.TRUST_PROXY === "true") {
+    const vercel = c.req.header("x-vercel-forwarded-for")?.trim();
+    if (env.VERCEL && vercel) return vercel;
+    const xff = c.req.header("x-forwarded-for");
+    const hops = Number(env.TRUST_PROXY_HOPS ?? "1");
+    if (xff && Number.isSafeInteger(hops) && hops > 0) {
+      const entries = xff.split(",").map((ip) => ip.trim());
+      const ip = entries[entries.length - hops];
+      if (ip) return ip;
+    }
+    const realIp = c.req.header("x-real-ip")?.trim();
+    if (realIp) return realIp;
+  }
+  try {
+    return getConnInfo(c).remote.address ?? "local";
+  } catch {
+    return "local";
+  }
 }

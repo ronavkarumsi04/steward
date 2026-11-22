@@ -34,6 +34,10 @@ describe("loadConfig", () => {
   });
 
   it("parses ALLOW_SIGNUP and NODE_ENV", () => {
+    expect(loadConfig({ ...base }).requireEmailVerification).toBe(false);
+    expect(loadConfig({ ...base, NODE_ENV: "production" }).requireEmailVerification).toBe(false);
+    expect(loadConfig({ ...base, NODE_ENV: "production", REQUIRE_EMAIL_VERIFICATION: "false" }).requireEmailVerification).toBe(false);
+    expect(loadConfig({ ...base, REQUIRE_EMAIL_VERIFICATION: "true" }).requireEmailVerification).toBe(true);
     expect(loadConfig({ ...base }).allowSignup).toBe(true);
     expect(loadConfig({ ...base, ALLOW_SIGNUP: "false" }).allowSignup).toBe(false);
     expect(loadConfig({ ...base, NODE_ENV: "production" }).env).toBe("production");

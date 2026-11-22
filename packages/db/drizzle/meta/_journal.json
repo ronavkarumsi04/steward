@@ -155,6 +155,13 @@
       "when": 1794009976945,
       "tag": "0021_user_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795308668758,
+      "tag": "0022_legacy_email_verification",
+      "breakpoints": true
     }
   ]
 }

@@ -33,10 +33,10 @@ export interface ApiClient {
   del<T>(path: string, body?: unknown): Promise<T>;
 }
 
-export function createClient(opts: { baseUrl: string; cookie?: string; fetchImpl?: typeof fetch }): ApiClient {
+export function createClient(opts: { baseUrl: string; cookie?: string; fetchImpl?: typeof fetch; clientHeaders?: Record<string, string> }): ApiClient {
   const f = opts.fetchImpl ?? fetch;
   async function call<T>(method: Method, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = { accept: "application/json", "x-steward-csrf": "1" };
+    const headers: Record<string, string> = { ...opts.clientHeaders, accept: "application/json", "x-steward-csrf": "1" };
     if (body !== undefined) headers["content-type"] = "application/json";
     if (opts.cookie) headers.cookie = opts.cookie;
     const res = await f(`${opts.baseUrl}${path}`, {

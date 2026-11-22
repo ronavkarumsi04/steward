@@ -18,6 +18,7 @@ export interface CoreConfig {
   logLevel?: string;
   /** Public self-registration. When false, only the first user and invited emails can register. */
   allowSignup: boolean;
+  requireEmailVerification: boolean;
 }
 
 function parseKeyMap(value: string | undefined): Record<string, string> {
@@ -102,6 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     env: nodeEnv as CoreConfig["env"],
     logLevel: env.LOG_LEVEL,
     allowSignup: parseBoolean(env.ALLOW_SIGNUP, nodeEnv !== "production"),
+    requireEmailVerification: parseBoolean(env.REQUIRE_EMAIL_VERIFICATION, false),
   };
 }
 

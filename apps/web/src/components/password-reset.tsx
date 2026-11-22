@@ -32,7 +32,7 @@ export function ForgotPasswordForm() {
       await browserApi.post("/auth/password/forgot", { email });
       setRequestedFor(email);
     } catch (err) {
-      setError(err instanceof ApiError ? friendly(err) : "Something went wrong");
+      setError(err instanceof ApiError ? friendly(err, "Password-reset email") : "Something went wrong");
     } finally {
       setBusy(false);
     }
