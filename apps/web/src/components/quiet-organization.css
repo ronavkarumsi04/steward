@@ -9,4 +9,5 @@
 .quiet-organization-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 @media (max-width: 600px) {
   .quiet-organization { padding: 24px 16px 48px; }
+  .quiet-page-heading h1 { font-size: clamp(20px, 6vw, 24px); overflow-wrap: normal; }
 }
