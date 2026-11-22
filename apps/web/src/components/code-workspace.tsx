@@ -389,7 +389,7 @@ export function CodeWorkspace({
             <label className="label" htmlFor="code-branch">
               Branch
             </label>
-            <QuietSelect id="code-branch" className="input" value={ref} onChange={(event) => void pickBranch(event.target.value)} disabled={!branches || busy !== null}>
+            <QuietSelect technical id="code-branch" className="input" value={ref} onChange={(event) => void pickBranch(event.target.value)} disabled={!branches || busy !== null}>
               {branches?.branches.map((branch) => (
                 <option key={branch.name} value={branch.name}>
                   {branch.name}

@@ -8,7 +8,7 @@ const choices = [createElement("option", { key: "a", value: "a" }, "Researcher (
 describe("Quiet native selection reflow", () => {
   it("leaves legacy select markup and form semantics identical", () => {
     const props = { name: "agent", id: "agent", defaultValue: "b", disabled: true, children: choices };
-    expect(renderToStaticMarkup(createElement(QuietSelect, props))).toBe(renderToStaticMarkup(createElement("select", props)));
+    expect(renderToStaticMarkup(createElement(QuietSelect, { ...props, technical: true }))).toBe(renderToStaticMarkup(createElement("select", props)));
   });
   it.each(["a", "b"])("shows the full controlled value %s without changing the submitted native value", (value) => {
     const html = renderToStaticMarkup(createElement(QuietSelectScope, { children: createElement(QuietSelect, { name: "agent", value, onChange: () => {}, children: choices }) }));
@@ -29,5 +29,12 @@ describe("Quiet native selection reflow", () => {
     const html = renderToStaticMarkup(createElement(QuietSelectScope, { children: createElement(QuietSelect, { multiple: true, children: choices }) }));
     expect(html).not.toContain("q-reflow-select");
     expect(html).toContain('multiple=""');
+  });
+  it("marks technical branch captions for identifier reflow without leaking an attribute to the native control", () => {
+    const branch = "a".repeat(128);
+    const html = renderToStaticMarkup(createElement(QuietSelectScope, { children: createElement(QuietSelect, { technical: true, value: branch, onChange: () => {}, children: createElement("option", { value: branch }, branch) }) }));
+    expect(html).toContain('data-technical="true"');
+    expect(html).toContain(`aria-hidden="true">${branch}</span>`);
+    expect(html.match(/<select[^>]*>/)?.[0]).not.toContain("technical");
   });
 });
