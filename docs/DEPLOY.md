@@ -125,10 +125,9 @@ connection, so a recovered boot restores that path too.
 
 For an embedded deployment, `/ready` is rewritten to the same API runtime as `/health`. Run
 `REQUIRE_EXECUTIONS=1 pnpm hosted:check` to require execution readiness in addition to the UI smoke.
-The repository variable `REQUIRE_EXECUTIONS=1` enables this requirement in the daily and deployment
-checks. Enable it once a real worker is provisioned; its absence leaves the check explicitly limited to
-UI/API availability. Production agent execution remains **UNVERIFIED** until a hosted run is exercised
-with real model credentials, required approvals, and its persisted audit trail.
+The daily and deployment checks require readiness by default, unless `REQUIRE_EXECUTIONS=0` is
+set for an explicitly UI-only deployment. Production agent execution remains **UNVERIFIED** until
+a hosted run is exercised with real model credentials, required approvals, and its persisted audit trail.
 
 Configuration now validates key lengths/formats, URL schemes, empty values, pool bounds, and boolean
 settings before connecting. `DATABASE_POOL_MAX` applies to the runtime pool (including embedded hosts),
@@ -288,49 +287,30 @@ keyed by) before checking the network.
 
 ### 2.4 Which commit is being served
 
-A hosted instance that cannot name its own commit cannot be told apart from the one before it — and this
-one proved it: every check was green for five days while production served a bundle older than `main`. So
-`/health` states one:
+Check the web bundle and the API separately. In proxy mode, `/health` is served by the API behind
+the rewrite and says nothing about which web bundle Vercel is serving.
 
-```sh
-curl -s https://app.example.com/health
-# {"ok":true,"version":"0.1.0","commit":"ef63b83","db":"ok","temporal":"connected"}
-```
+| Endpoint | What it verifies |
+|---|---|
+| `/web-version` | The Next build's full commit SHA, baked in from `VERCEL_GIT_COMMIT_SHA` or the web image build arg `GIT_COMMIT_SHA`. Not cached. |
+| `/health` | Database health and the same-origin API's short commit SHA; independent of the web build. |
+| `/ready` | Temporal and both worker queues are ready, via the API revision reported by `/health`. This does not identify the worker build. |
 
-`commit` is the seven-character short sha of `VERCEL_GIT_COMMIT_SHA`, the variable Vercel sets for the build
-and for the function (the same variable is available at runtime, so nothing has to be baked into the bundle
-to read it). An image built by this repository's own Dockerfiles can pass the same fact as `GIT_COMMIT_SHA`.
-When neither is set the answer is `unknown`, never a guess: the field exists so that a checker can compare it
-against a repository, and a plausible-looking sha would make that comparison lie in the one direction that
-matters. Because it is read at **runtime**, it is deliberately absent from Turborepo's build cache key
-(§2.3): nothing about the bundle depends on it, and adding it would throw the cache away on every deployment
-without changing a byte.
+Run `pnpm hosted:check` from a checkout with full history. It also checks the public app and exercises
+same-origin auth and legal endpoints. The web commit must match `EXPECT` (default: HEAD), except an
+older ancestor with only non-build changes such as docs. An older API commit is accepted only if it's
+an ancestor with no changes to backend inputs. Web app changes don't force a backend redeploy; changes
+to the API, worker, shared packages, lockfile or backend infrastructure do. Unknown or incomparable
+commits fail. For an independently approved API release, `EXPECT_API=<sha>` adds an exact pin without
+relaxing the compatibility check. The CI workflows take it from the repository variable of the same name.
 
-The other half is the check that reads it from outside the deployment: `pnpm hosted:check`
-(`scripts/hosted-check.mjs`) fetches the landing page, a legal page, the document list the sign-up form
-accepts, a login attempt that must be refused as a wrong password, and `/health` — then compares the reported
-commit against this checkout's `HEAD` and fails when they disagree, because "the hosted instance lags the
-repository" is otherwise a fact nobody sees. It needs no account and no token, and `EXPECT=any` skips the
-comparison for a deployment that is deliberately older. `.github/workflows/hosted-check.yml` runs the same
-script daily and on demand; deliberately not on push, since after every push to `main` the difference is
-expected until someone deploys, and a check that is red after every merge is a check nobody reads.
+`EXPECT=any` runs the smoke without claiming either component is current; it still requires both to
+report a SHA. The daily and deploy workflows require execution readiness by default. Only set the
+repository variable `REQUIRE_EXECUTIONS=0` for a deliberately UI-only environment.
 
-One more distinction the check had to learn, from the first merge after it existed: Vercel refuses to build
-a commit at all when the project's `ignoreCommand` (`npx turbo-ignore`, declared in `apps/web/vercel.json`)
-says nothing the web app or its dependencies consume has changed — the deployment comes back `CANCELED` with
-`ignored-build-step` and production stays where it was. A deployment that is behind `HEAD` by such files is
-current in the only sense that matters, so the check passes and names them (`the deployment is running
-9932427, and the 2 file(s) changed after it are ones no build reads (docs/ROADMAP.md,
-scripts/hosted-check.mjs)`); anything else is treated as a difference that matters. The rule is deliberately
-conservative — `docs/`, `.github/`, `scripts/` and `*.md` are the only paths it will call unread — so it can
-be wrong by complaining, never by staying quiet. The workflow checks out full history for that comparison
-(`fetch-depth: 0`): a single-commit clone does not contain the deployed commit, and the check answers that
-with a failure rather than a guess — correct, and useless if it is what every scheduled run says.
-
-**Deploying this repository's own instance.** §2.5 is how `main` reaches production: Vercel's own Git
-connection when the project has one, or a deployment created for the commit being deployed when it does not —
-and, either way, a check that the deployment then reports that commit. The per-deployment `*.vercel.app` URLs
-stay behind Vercel Authentication, and the assigned domain is the door (§2.1).
+Vercel may skip a non-build change via `turbo-ignore`. Its production alias can still be current for
+those changes even when the component SHAs differ. If the version is unknown, confirm Vercel exposes
+its Git metadata or that the web image was built with a full `GIT_COMMIT_SHA` build arg.
 
 ### 2.5 How `main` reaches production
 
@@ -431,6 +411,39 @@ Password-reset requests always return `202` whether or not the address exists, s
 - `false` — `/register` shows an *invitation-only* notice. **Exception:** while the database has zero users the first registration is still accepted, so you can bootstrap the owner with `ALLOW_SIGNUP=false` from the start. After that, only people holding a valid invitation link (issued from **Org → Members**, emailed automatically) can create accounts, and only with the invited address.
 
 Recommended: leave it `false`, register yourself, invite your team.
+
+### Provisioning a founder's own organization
+
+Ordinary member invitations cannot grant the owner role. An instance operator provisions a
+founder's organization with no initial members and a seven-day owner invitation. Accepting
+the link makes the founder its sole owner, including when `ALLOW_SIGNUP=false`. Existing
+users can sign in and accept the same link; new users register with the invited email.
+
+With `DATABASE_URL` and `APP_URL` exported on the API server, run:
+
+```sh
+pnpm --filter @steward/api provision:founder --org "Founder Co" --owner-email founder@example.com
+# Compiled production app:
+node apps/api/dist/cli/provision-founder.js --org "Founder Co" --owner-email founder@example.com
+```
+
+The CLI prints the accept URL, requires no superadmin account, and sends no email. Hand the
+printed link to the founder securely. It does not grant superadmin privileges.
+
+Alternatively, an authenticated superadmin can call the operator API:
+
+```sh
+curl "$API_URL/v1/admin/organizations" \
+  -H "Authorization: Bearer $OPERATOR_SESSION_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Founder Co","ownerEmail":"founder@example.com"}'
+```
+
+The response contains `organization`, `invitation`, `acceptUrl`, and `emailed`. Email delivery
+requires `PLATFORM_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified
+`PLATFORM_EMAIL_FROM`; otherwise hand over the returned link. The operator is not added as
+a member. **Superadmins retain read access to all organizations**, and instance-wide operator
+privileges still allow administrative access even without membership.
 
 ---
 

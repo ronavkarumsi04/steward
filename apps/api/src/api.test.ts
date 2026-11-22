@@ -22,6 +22,7 @@ import { startSmtpSink, type SmtpSink } from "./test/smtp-sink.js";
 import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
 import { startFakeGitHub } from "@steward/core/test/fake-github";
 import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
+import { provisionFounder } from "./cli/provision-founder.js";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 const ENV: NodeJS.ProcessEnv = {
@@ -398,6 +399,124 @@ describe("email verification and auth limits", () => {
       const stored = await core.pool.query("SELECT ip FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = $1)", [body.email]);
       expect(stored.rows).toHaveLength(2);
       expect(stored.rows.every((row: { ip: string }) => row.ip === (trust === "true" ? "192.0.2.1" : "local"))).toBe(true);
+    }
+  });
+});
+
+describe("founder organization provisioning", () => {
+  d("ordinary invitations reject owners in core and HTTP, but allow admins and members", async () => {
+    const owner = await register();
+    const service = new OrganizationService(core.db);
+    await expect(service.invite(owner.orgId, owner.userId, "owner", { email: `owner-${uniq()}@example.com`, role: "owner" })).rejects.toMatchObject({ code: "owner_invite_requires_provisioning" });
+    const rejected = await owner.api.json<{ error: { code: string } }>("POST", `/orgs/${owner.orgId}/invitations`, { email: `owner-${uniq()}@example.com`, role: "owner" });
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.error.code).toBe("owner_invite_requires_provisioning");
+    for (const role of ["admin", "member"]) {
+      expect((await owner.api.json("POST", `/orgs/${owner.orgId}/invitations`, { email: `${role}-${uniq()}@example.com`, role })).status).toBe(201);
+    }
+  });
+
+  d("only superadmins can provision and invited founders become sole owners under closed signup", async () => {
+    const operator = await register();
+    const ownerEmail = `provisioned-${uniq()}@example.com`;
+    const body = { name: `Founder ${uniq()}`, ownerEmail };
+    expect((await client().json("POST", "/admin/organizations", body)).status).toBe(401);
+    expect((await operator.api.json("POST", "/admin/organizations", body)).status).toBe(403);
+    await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
+    const deliveryApp = createApp({ core, auth: new AuthService(core.db), mailer: { ...mailer, provider: "resend" }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+    const result = await client(operator.api.token, "", () => deliveryApp).json<{ organization: { id: string }; invitation: { role: string }; acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", body);
+    expect(result.status).toBe(201);
+    expect(result.body.invitation.role).toBe("owner");
+    expect(result.body.emailed).toBe(true);
+    const orgId = result.body.organization.id;
+    expect((await core.pool.query("select * from memberships where organization_id=$1", [orgId])).rows).toEqual([]);
+    expect((await operator.api.json<{ members: unknown[] }>("GET", `/orgs/${orgId}/members`)).body.members).toEqual([]);
+    expect(lastMailTo(ownerEmail)?.text).toContain(result.body.acceptUrl);
+    const founder = await client("", "", () => closedApp).json<{ token: string; user: { id: string }; organization: null; joined: { role: string } }>("POST", "/auth/register", { email: ownerEmail, name: "Founder", password: "correct-horse-battery", inviteToken: result.body.acceptUrl.split("/").pop(), accepted: CLICKWRAP });
+    expect(founder.status).toBe(201);
+    expect(founder.body.organization).toBeNull();
+    expect(founder.body.joined.role).toBe("owner");
+    const api = client(founder.body.token);
+    const members = await api.json<{ members: { userId: string; role: string }[] }>("GET", `/orgs/${orgId}/members`);
+    expect(members.body.members).toEqual([expect.objectContaining({ userId: founder.body.user.id, role: "owner" })]);
+    expect((await api.json("PATCH", `/orgs/${orgId}`, { name: "Founder managed" })).status).toBe(200);
+    expect((await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai", secret: "fake-local-key" })).status).toBe(201);
+    expect((await operator.api.json("POST", `/orgs/${orgId}/invitations`, { email: `blocked-${uniq()}@example.com`, role: "owner" })).status).toBe(403);
+    const teammateEmail = `teammate-${uniq()}@example.com`;
+    const invitation = await api.json<{ acceptUrl: string }>("POST", `/orgs/${orgId}/invitations`, { email: teammateEmail, role: "member" });
+    expect(invitation.status).toBe(201);
+    const teammate = await client("", "", () => closedApp).json<{ token: string; joined: { role: string } }>("POST", "/auth/register", { email: teammateEmail, name: "Teammate", password: "correct-horse-battery", inviteToken: invitation.body.acceptUrl.split("/").pop(), accepted: CLICKWRAP });
+    expect(teammate.status).toBe(201);
+    expect(teammate.body.joined.role).toBe("member");
+    const member = client(teammate.body.token);
+    expect((await member.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai", secret: "fake-local-key" })).status).toBe(403);
+    expect((await member.json("POST", `/orgs/${orgId}/invitations`, { email: `blocked-${uniq()}@example.com`, role: "member" })).status).toBe(403);
+    const audit = await core.pool.query("select metadata from audit_log where organization_id=$1 and action='organization.provisioned'", [orgId]);
+    expect(audit.rows[0].metadata).toEqual({ ownerEmail });
+  });
+
+  d("CLI provisions without an operator membership and existing users can accept", async () => {
+    const existing = await register();
+    const service = new OrganizationService(core.db);
+    const name = `CLI ${uniq()}`;
+    const acceptUrl = await provisionFounder(["--org", name, "--owner-email", existing.email.toUpperCase()], "  https://app.test/ \n", service);
+    expect(acceptUrl).toMatch(/^https:\/\/app.test\/invite\/inv_/);
+    const preview = await client().json<{ invitation: { email: string; role: string } }>("GET", `/invitations/${acceptUrl.split("/").pop()}`);
+    expect(preview.body.invitation).toMatchObject({ email: existing.email, role: "owner" });
+    const accepted = await existing.api.json<{ organizationId: string }>("POST", "/invitations/accept", { token: acceptUrl.split("/").pop() });
+    expect(accepted.status).toBe(200);
+    const rows = await core.pool.query("select user_id,role from memberships where organization_id=$1", [accepted.body.organizationId]);
+    expect(rows.rows).toEqual([{ user_id: existing.userId, role: "owner" }]);
+    const inv = await core.pool.query("select invited_by from invitations where organization_id=$1", [accepted.body.organizationId]);
+    expect(inv.rows[0].invited_by).toBe("operator-cli");
+    await expect(provisionFounder([], "https://app.test", service)).rejects.toThrow("Usage:");
+    await expect(provisionFounder(["--org", "", "--owner-email", existing.email], "https://app.test", service)).rejects.toThrow("Usage:");
+    await expect(service.provisionFounderOrganization({ name, ownerEmail: "invalid", operatorUserId: null })).rejects.toThrow("valid owner email");
+    const invalidName = `Invalid CLI ${uniq()}`;
+    await expect(provisionFounder(["--org", invalidName, "--owner-email", "founder@example.com/"], "https://app.test", service)).rejects.toThrow("valid owner email");
+    expect((await core.pool.query("select id from organizations where name=$1", [invalidName])).rows).toEqual([]);
+  });
+
+  d("CLI rejects non-origin APP_URL values before provisioning", async () => {
+    const service = new OrganizationService(core.db);
+    const provision = vi.spyOn(service, "provisionFounderOrganization");
+    const args = ["--org", `Invalid origin ${uniq()}`, "--owner-email", "founder@example.com"];
+    for (const appUrl of ["", "not-a-url", "ftp://app.test", "https://user:pass@app.test", "https://app.test/path", "https://app.test?query=yes", "https://app.test#fragment", "https://app.test?", "https://app.test#"]) {
+      await expect(provisionFounder(args, appUrl, service)).rejects.toThrow();
+    }
+    expect(provision).not.toHaveBeenCalled();
+    provision.mockRestore();
+  });
+
+  d("console provisioning skips mail and returns a non-cacheable handoff link", async () => {
+    const operator = await register();
+    await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
+    const send = vi.fn();
+    const consoleApp = createApp({ core, auth: new AuthService(core.db), mailer: { provider: "console", send }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+    const res = await client(operator.api.token, "", () => consoleApp).call("POST", "/admin/organizations", { name: `Console ${uniq()}`, ownerEmail: `console-${uniq()}@example.com` });
+    expect(res.status).toBe(201);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toMatchObject({ emailed: false, acceptUrl: expect.stringMatching(/^http:\/\/app.test\/invite\/inv_/) });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  d("provisioning returns a handoff link when email delivery fails and validates input", async () => {
+    const operator = await register();
+    await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
+    expect((await operator.api.json("POST", "/admin/organizations", { name: "", ownerEmail: "invalid" })).status).toBe(422);
+    const send = vi.spyOn(mailer, "send").mockImplementationOnce(async (message) => { throw new Error(message.text); });
+    const log = vi.spyOn(core.log, "error");
+    try {
+      const deliveryApp = createApp({ core, auth: new AuthService(core.db), mailer: { ...mailer, provider: "resend" }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+      const result = await client(operator.api.token, "", () => deliveryApp).json<{ acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", { name: `No mail ${uniq()}`, ownerEmail: `offline-${uniq()}@example.com` });
+      expect(result.status).toBe(201);
+      expect(result.body.emailed).toBe(false);
+      expect(result.body.acceptUrl).toMatch(/^http:\/\/app.test\/invite\/inv_/);
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.stringify(log.mock.calls)).not.toContain(result.body.acceptUrl.split("/").pop());
+    } finally {
+      send.mockRestore();
+      log.mockRestore();
     }
   });
 });

@@ -229,6 +229,29 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   });
 
   // ---- organizations ----
+  defineRoute(app, reg, { method: "post", path: "/admin/organizations", tag: "organizations", summary: "Provision a founder organization (instance operators only)", body: z.object({ name: z.string().trim().min(1).max(120), ownerEmail: z.email() }) }, async (c, { body }) => {
+    const operator = requireUser(c);
+    if (!operator.isSuperadmin) throw new HttpError(403, "forbidden", "Requires an instance operator");
+    const deps = c.get("deps");
+    const { organization, invitation, token } = await new OrganizationService(deps.core.db).provisionFounderOrganization({ ...body, operatorUserId: operator.id });
+    const acceptUrl = `${deps.core.config.appUrl.replace(/\/$/, "")}/invite/${token}`;
+    let emailed = false;
+    try {
+      if (deps.mailer.provider !== "console") {
+        await deps.mailer.send({
+          to: invitation.email,
+          subject: `Your founder organization: ${organization.name}`,
+          ...renderEmail({ title: `Own ${organization.name}`, intro: "An instance operator provisioned your organization. Accept within 7 days to become its owner.", actionLabel: "Accept ownership", actionUrl: acceptUrl, footer: "If you weren't expecting this invitation, you can ignore this email." }),
+        });
+        emailed = true;
+      }
+    } catch {
+      deps.core.log.error({ invitationId: invitation.id }, "failed to send founder invitation email");
+    }
+    c.header("cache-control", "no-store");
+    return c.json({ organization, invitation, acceptUrl, emailed }, 201);
+  });
+
   defineRoute(app, reg, { method: "get", path: "/orgs", tag: "organizations", summary: "Organizations the user belongs to" }, async (c) => {
     requireUser(c);
     return c.json({ organizations: c.get("memberships") ?? [] });
