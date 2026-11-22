@@ -50,6 +50,7 @@ const SUITE_FILES = [
   "memory.spec.ts",
   "motion.spec.ts",
   "overclock.spec.ts",
+  "palette-keyboard.spec.ts",
   SEAM,
   "session.ts",
   "site-studio.spec.ts",

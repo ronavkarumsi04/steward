@@ -58,6 +58,8 @@ export interface PaletteData {
 }
 
 export interface PaletteOptions {
+  /** Replace legacy page commands before deciding whether a query needs an instruction fallback. */
+  navigation?: readonly PaletteAction[];
   /** Second step: the founder has chosen a task and is choosing the agent for it. */
   picking?: { taskId: string; picking: "assign" | "run" };
   /** Injectable clock, so ordering by deadline is testable. */
@@ -99,6 +101,11 @@ export const NAV: ReadonlyArray<{ suffix: string; labelKey: MessageKey; label: s
   { suffix: "/knowledge", labelKey: "nav.knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
   { suffix: "/graph", labelKey: "nav.graph", label: "Graph", keywords: "knowledge graph entities relations what we know" },
   { suffix: "/integrations", labelKey: "nav.integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
+  { suffix: "/workflows", labelKey: "nav.workflows", label: "Workflows", keywords: "builder schedules triggers" },
+  { suffix: "/mcp", labelKey: "nav.marketplace", label: "Marketplace", keywords: "tools servers mcp" },
+  { suffix: "/browser", labelKey: "nav.browser", label: "Browser", keywords: "watch sessions" },
+  { suffix: "/code", labelKey: "nav.code", label: "Code", keywords: "repository changes" },
+  { suffix: "/site", labelKey: "nav.website", label: "Website", keywords: "site studio business" },
   { suffix: "/settings", labelKey: "nav.settings", label: "Settings", keywords: "autonomy policy provider models" },
 ];
 
@@ -364,7 +371,8 @@ export function paletteFor(
   options: PaletteOptions = {},
 ): PaletteAction[] {
   if (options.picking) return buildPalette(data, { picking: options.picking, now: options.now, locale: options.locale });
-  const commands = buildPalette(data, { now: options.now, locale: options.locale });
+  const built = buildPalette(data, { now: options.now, locale: options.locale });
+  const commands = options.navigation ? [...built.filter((action) => action.kind !== "navigate"), ...options.navigation] : built;
   if (query.trim().length === 0) return commands;
   const instruction = rankPalette(commands, query).total === 0 ? instructionCommand(data, query, options.locale) : null;
   return instruction ? [...commands, instruction] : commands;

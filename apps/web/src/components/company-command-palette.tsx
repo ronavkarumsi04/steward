@@ -9,6 +9,8 @@ import { buildPalette, kindBadge, loadSummary, paletteFor, rankPalette, stateLin
 import type { Agent, Approval, Run, Task } from "@/lib/types";
 import { useToast } from "./feedback";
 import { Pill, type Tone } from "./ui";
+import { WORKSPACE_ROUTES, workspaceRouteHref } from "@/lib/workspace-navigation";
+import type { MessageKey } from "@/lib/i18n";
 
 const KIND_TONE: Record<PaletteKind, Tone> = {
   decide: "warn",
@@ -44,7 +46,7 @@ function shortId(id: string): string {
  *     the real effect — including the cases where approving resumes nothing. If the rows cannot be loaded the
  *     palette says so and offers pages only, rather than an empty list that looks like "nothing to do".
  */
-export function CompanyCommandPalette({ companyId }: { companyId: string }) {
+export function CompanyCommandPalette({ companyId, quiet = false, destinations = [] }: { companyId: string; quiet?: boolean; destinations?: readonly { href: string; label: MessageKey; scope?: string }[] }) {
   const t = useT();
   const tf = useTf();
   const locale = useLocale();
@@ -55,6 +57,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const [selected, setSelected] = useState(0);
   const [data, setData] = useState<PaletteData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<PaletteAction | null>(null);
   const [picking, setPicking] = useState<{ taskId: string; picking: "assign" | "run" } | null>(null);
@@ -63,6 +66,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const modalRef = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
@@ -84,12 +88,19 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     }
   }, [companyId]);
 
-  const navOnly = useMemo(() => buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale]);
-  const actions = useMemo(() => (data ? paletteFor(data, query, picking ? { picking, locale } : { locale }) : navOnly), [data, locale, navOnly, picking, query]);
+  const navOnly = useMemo(() => quiet ? [
+    ...WORKSPACE_ROUTES.map((route): PaletteAction => ({ id: `nav:${workspaceRouteHref("", route)}`, kind: "navigate", label: t(route.label), detail: t("shell.companyMenu"), keywords: route.keywords, target: { kind: "navigate", href: workspaceRouteHref(`/app/c/${companyId}`, route) } })),
+    ...destinations.map((d): PaletteAction => ({ id: `nav:${d.href}`, kind: "navigate", label: t(d.label), detail: d.scope ? `${t("quiet.organization")} · ${d.scope}` : t("quiet.workspace"), keywords: `${d.href} ${d.scope ?? ""}`, target: { kind: "navigate", href: d.href } })),
+  ] : buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale, quiet, destinations, t]);
+  const actions = useMemo(() => {
+    if (!data) return navOnly;
+    return paletteFor(data, query, { picking: picking ?? undefined, locale, navigation: quiet ? navOnly : undefined });
+  }, [data, locale, navOnly, picking, query, quiet]);
   const { matches, total } = useMemo(() => rankPalette(actions, query), [actions, query]);
 
   useEffect(() => {
     setSelected(0);
+    setActionError(null);
   }, [query, picking, confirming]);
 
   function openPalette() {
@@ -103,6 +114,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     setQuery("");
     setConfirming(null);
     setPicking(null);
+    setActionError(null);
   }
 
   const act = useCallback(
@@ -121,6 +133,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
         return;
       }
       setBusy(true);
+      setActionError(null);
       try {
         switch (target.kind) {
           case "approve": {
@@ -181,7 +194,11 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
         void load();
       } catch (e) {
         // The palette stays open on failure: the next attempt should not need re-typing.
-        toast("err", e instanceof ApiError ? e.message : "The action did not reach the API.");
+        // Native modal dialogs make the global toast region inert. Keep retry feedback in the active dialog.
+        setActionError(e instanceof ApiError ? e.message : "The action did not reach the API.");
+        // Disabling the submit button can drop native focus onto BODY. Keep the
+        // retained confirmation keyboard-operable, including its one-step Escape.
+        inputRef.current?.focus();
       } finally {
         setBusy(false);
       }
@@ -200,12 +217,19 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
 
   useEffect(() => {
     if (!open) return;
+    modalRef.current?.showModal();
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       window.clearTimeout(id);
       (previousFocus.current?.isConnected ? previousFocus.current : triggerRef.current)?.focus();
     };
   }, [open]);
+
+  useEffect(() => {
+    if (open && !confirming) {
+      dialogRef.current?.querySelector(`#command-${selected}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [open, confirming, selected, matches]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -249,11 +273,12 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
 
   /** Escape backs out one step at a time: the confirmation, then the picker, then the palette. */
   function backOut() {
-    if (confirming) setConfirming(null);
+    if (confirming) { setConfirming(null); inputRef.current?.focus(); }
     else if (picking) {
       setPicking(null);
       setQuery("");
-    } else setOpen(false);
+      inputRef.current?.focus();
+    } else close();
   }
 
   function onDialogKeyDown(e: React.KeyboardEvent<HTMLElement>) {
@@ -261,6 +286,9 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     // step has real buttons, and a keyboard user must not have to find the input again to undo it.
     if (e.key === "Escape") {
       e.preventDefault();
+      // Backing out removes the focused confirmation button synchronously. Do not let
+      // the window listener mistake its now-detached target for an outside Escape.
+      e.stopPropagation();
       backOut();
       return;
     }
@@ -285,7 +313,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     if (confirming) {
       if (e.key === "Enter") {
         e.preventDefault();
-        void act(confirming);
+        if (!busy) void act(confirming);
       }
       return;
     }
@@ -325,14 +353,15 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
         <kbd className="kbd mono shrink-0 border border-line px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
       </button>
       {open && (
-        <div
-          className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] flex items-start justify-center bg-black/60 px-3 pt-[10vh]"
-          onMouseDown={(e) => e.currentTarget === e.target && close()}
+        <dialog
+          ref={modalRef}
+          aria-labelledby="command-palette-title"
+          onCancel={(e) => { e.preventDefault(); backOut(); }}
+          className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] m-0 flex h-full max-h-none w-full max-w-none items-start justify-center border-0 bg-black/60 px-3 pt-[10vh] text-fg"
+          onMouseDown={(e) => { if (e.currentTarget === e.target) { e.preventDefault(); close(); } }}
         >
           <section
             ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
             aria-labelledby="command-palette-title"
             onKeyDown={onDialogKeyDown}
             className="nb-dialog w-full max-w-xl overflow-hidden border border-line"
@@ -360,6 +389,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                 aria-activedescendant={!confirming && matches[selected] ? `command-${selected}` : undefined}
               />
               {countsLine && <p className="mt-1.5 text-[11px] font-semibold text-muted">{countsLine}</p>}
+              {actionError && <p role="alert" className="mt-2 text-sm font-semibold text-danger">{actionError}</p>}
             </div>
 
             {confirming ? (
@@ -379,7 +409,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
                   <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void act(confirming)}>
                     {busy ? "…" : confirming.confirm!.confirmLabel}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming(null)}>
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={backOut}>
                     {t("palette.back")}
                   </button>
                 </div>
@@ -432,7 +462,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
               <span>{t("shell.paletteShortcuts")}</span>
             </footer>
           </section>
-        </div>
+        </dialog>
       )}
     </>
   );

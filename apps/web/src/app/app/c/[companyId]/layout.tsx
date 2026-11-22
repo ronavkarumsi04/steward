@@ -9,6 +9,8 @@ import { CompanyCommandPalette } from "@/components/company-command-palette";
 import { Icon } from "@/components/icons";
 import { TopNav } from "@/components/nav";
 import { Pill, StatusPill } from "@/components/ui";
+import { CompanyWorkspace } from "@/components/workspace-shell";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export default async function CompanyLayout({ children, params }: { children: ReactNode; params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
@@ -22,6 +24,13 @@ export default async function CompanyLayout({ children, params }: { children: Re
   ]);
   if (!overview) notFound();
   const { company, pendingApprovals } = overview;
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return (
+    <div className="flex min-h-screen flex-col">
+      <a href="#workspace-content" className="workspace-skip">{t(locale, "shell.skipContent")}</a>
+      <TopNav me={me} orgId={company.organizationId} quiet />
+      <CompanyWorkspace key={company.id} company={company} me={me} pendingApprovals={pendingApprovals}>{children}</CompanyWorkspace>
+    </div>
+  );
   return (
     <div className="flex min-h-screen flex-col">
       <a href="#workspace-content" className="workspace-skip">{t(locale, "shell.skipContent")}</a>

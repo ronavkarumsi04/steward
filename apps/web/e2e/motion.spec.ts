@@ -150,7 +150,7 @@ test("a settling bar lands exactly on its value and leaves no frame requests beh
   const errors = watchErrors(page);
   await register(page);
   await page.goto("/app/design");
-  await expect(page.getByRole("heading", { name: "One house, on purpose." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workspace design system" })).toBeVisible();
   await expect(page.locator("[data-motion-lab]")).toBeVisible();
 
   const frames = await countFrames(page);

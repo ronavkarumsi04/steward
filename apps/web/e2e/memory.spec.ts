@@ -56,9 +56,10 @@ async function openMemory(page: Page, base: string): Promise<void> {
   await showMemoryTab(page);
 }
 
-/** Select the Memory tab on the already-open Knowledge page, without navigating. A reload resets it to Playbooks. */
+/** Select the URL-backed Memory view; its selection must survive reloads. */
 async function showMemoryTab(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /^Memory/ }).click();
+  await page.getByRole("link", { name: /^Memory \d+$/ }).click();
+  await expect(page).toHaveURL(/\/knowledge\?tab=memory$/);
   await expect(page.getByRole("heading", { name: "Long-term memory" })).toBeVisible();
 }
 
@@ -112,7 +113,7 @@ test("files a fact a person wrote, with its provenance, its band and no expiry",
   // What a person wrote does not lapse, so no expiry sentence is drawn for it.
   await expect(page.getByText(/expires in|expires tomorrow|^expired$/)).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("button", { name: /^Memory/ })).toContainText("1");
+  await expect(page.getByRole("link", { name: /^Memory \d+$/ })).toContainText("1");
   await showMemoryTab(page);
   await expect(page.getByText("We charge $49 a seat.")).toBeVisible();
   checkpoint("filing a memory");
@@ -181,7 +182,7 @@ test("corrects a memory keeping the words it replaced, and supersedes it keeping
   await expect(page.getByText("We charge $49.")).toHaveCount(0);
   await expect(page.getByText("A seat is $59 a month.")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: /^Memory/ })).toContainText("1");
+  await expect(page.getByRole("link", { name: /^Memory \d+$/ })).toContainText("1");
   await showMemoryTab(page);
   await expect(page.getByText("A seat is $59 a month.")).toBeVisible();
   checkpoint("superseding a memory");
@@ -199,7 +200,7 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   await openMemory(page, base);
   await remember(page, { companyId: id, expect: 1, title: "Acme", content: "Acme is on the enterprise plan." });
   await remember(page, { companyId: id, expect: 2, title: "Acme again", content: "Acme renewed in March." });
-  await expect(page.getByRole("button", { name: /^Memory/ })).toContainText("2");
+  await expect(page.getByRole("link", { name: /^Memory \d+$/ })).toContainText("2");
   checkpoint("two memories filed");
 
   // Merge is offered only when exactly two rows are selected, because merging is a choice between two things.
@@ -215,7 +216,7 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   // the one it absorbed is superseded rather than gone.
   const afterMerge = await readMemories(page, id);
   expect(afterMerge.map((m) => m.content)).toEqual(["Acme renewed in March."]);
-  await expect(page.getByRole("button", { name: /^Memory/ })).toContainText("1");
+  await expect(page.getByRole("link", { name: /^Memory \d+$/ })).toContainText("1");
   // The absorbed row leaves the list because it was superseded, which is the same move supersede makes.
   await expect(page.getByText("Acme is on the enterprise plan.")).toHaveCount(0);
   // The words of the memory that was folded in are kept as a revision, so a merge loses nothing.
@@ -234,7 +235,7 @@ test("merges two memories by selecting them, and only forgetting removes a row",
   await expect.poll(async () => (await readMemories(page, id)).length).toBe(0);
   await expect(page.getByText("Nothing remembered yet.")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: /^Memory/ })).toContainText("0");
+  await expect(page.getByRole("link", { name: /^Memory \d+$/ })).toContainText("0");
   await showMemoryTab(page);
   await expect(page.getByText("Nothing remembered yet.")).toBeVisible();
   checkpoint("forgetting a memory");

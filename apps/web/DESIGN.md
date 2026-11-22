@@ -1,5 +1,45 @@
 # Design
 
+## Quiet momentum workspace (redesign slice A)
+
+The authenticated `/app` family can preview Quiet momentum: Manrope with system/script fallbacks,
+white canvas, fog rail, pine ink, forest actions and sage selection. Light/dark semantic colors and the
+compatibility adapters for current components live in `src/app/app/quiet-workspace.css`; the navigation
+inventory lives in `src/lib/workspace-navigation.ts`. Preserve status words/icons as well as color.
+
+The 224px company rail has Overview, Approvals, Work, Team, Knowledge and Tools. Settings stays in the
+footer. Work/Knowledge/Tools expose contextual links at their existing URLs; command search includes
+every company destination and explicitly scoped workspace/organization links. Below 1024px, labeled
+Overview/Approvals/Work/Team/More navigation replaces the rail. More includes tools, knowledge, settings,
+company switching and account/organization destinations. Native modal dialogs provide focus containment,
+Escape dismissal and background inertness. Authority and backend actions are unchanged.
+
+Work's five primary links are followed by labeled Automation and Business views groups (never one flat
+ten-link row). Knowledge exposes Documents and Memory at their existing `?tab=` deep links, plus
+Connections. Tools includes explicitly named organization provider/integration links; Settings includes
+organization membership/privacy links. Desktop and mobile Approvals show the same real pending count.
+
+Metadata, pills, shortcut hints and mobile labels have a **12px minimum**; ordinary body text is 14px+.
+`--line` is only a low-emphasis divider. Interactive outlines use `--control-border` (`#7d8a81` light,
+`#6c8474` dark), tested at **3:1 or better** against canvas/rail/panel and pending surfaces. Primary and danger
+actions retain semantic outlines; controls inside tinted panels use the stronger action-colored outline
+(the standard dark control border is below 3:1 on sage). Light/dark values match the canonical
+`docs/research/steward-redesign/tokens.json`; `workspace-token-sync.test.ts` checks every semantic
+alias and both dark branches. Shadows are disabled; the canonical themed scrim separates modals.
+The prototype is not normative for links, current-page semantics, focus or modal behavior.
+
+The incumbent shell remains the **production and local default**. Vercel preview deployments
+(`VERCEL_ENV=preview`) opt in automatically when `STEWARD_WORKSPACE_SHELL` is unset; this lets the owner
+review an isolated preview without changing production settings. Set `STEWARD_WORKSPACE_SHELL=quiet`
+on a local/preview **web process** to opt in explicitly, or `legacy` to force rollback in any environment.
+Restart/redeploy that web process after changing it. Unknown values fail closed to legacy.
+This is server-resolved per authenticated request, not a client-controlled auth/policy flag.
+No production environment is changed by this PR; enabling production still requires owner approval.
+
+This is an intentional staged transition: current screen components get compatibility tokens/controls,
+not fictional prototype data. Decision/work/public/depth redesigns follow separately. The public/access
+family and the legacy opt-out continue to use the incumbent identity documented below until their slices.
+
 <!-- impeccable:design-schema 1 -->
 
 ## World
