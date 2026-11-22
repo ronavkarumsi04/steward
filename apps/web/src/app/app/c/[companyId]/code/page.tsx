@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { CodeBranchesRead, CodeTreeRead, CodeWorkspaceRead } from "@/lib/types";
 import { CodeWorkspace } from "@/components/code-workspace";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietToolsFrame, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
 
 export const metadata: Metadata = { title: "Code" };
 
@@ -34,6 +36,17 @@ export default async function CodePage({
   const { companyId } = await params;
   const { repo: repoParam, ref: refParam } = await searchParams;
   const api = await serverApi();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    const read = await readTools(() => api.get<CodeWorkspaceRead>(`/companies/${companyId}/code`));
+    if (!read.data) return <QuietToolsFrame title="Code" description="Read repositories and propose changes through an agent run." scope="This company only."><ToolsReadError error={read.error} subject="Code workspace" href={`/app/c/${companyId}/code`} /></QuietToolsFrame>;
+    const workspace = read.data;
+    const repo = repoParam && REPO_PATTERN.test(repoParam) ? repoParam : workspace.defaultRepo;
+    const branches = repo ? await readTools(() => api.get<CodeBranchesRead>(`/companies/${companyId}/code/branches?repo=${encodeURIComponent(repo)}`)) : null;
+    const wanted = refParam && refParam.length <= 200 && branches?.data?.branches.some(branch => branch.name === refParam) ? refParam : null;
+    const ref = wanted ?? branches?.data?.defaultBranch ?? null;
+    const tree = repo && ref ? await readTools(() => api.get<CodeTreeRead>(`/companies/${companyId}/code/tree?repo=${encodeURIComponent(repo)}&ref=${encodeURIComponent(ref)}`)) : null;
+    return <div className="quiet-tools"><ToolsPermission allowed={workspace.canEdit} action="propose and apply code changes" />{(branches && !branches.data || tree && !tree.data) && <ToolsReadError error={branches?.error ?? tree?.error} subject="Repository contents" href={`/app/c/${companyId}/code`} />}<CodeWorkspace quiet companyId={companyId} initial={workspace} initialRepo={repo} initialRef={ref} initialTree={tree?.data ?? null} initialBranches={branches?.data ?? null} /></div>;
+  }
 
   const workspace = await tryApi(() => api.get<CodeWorkspaceRead>(`/companies/${companyId}/code`));
   if (!workspace) notFound();

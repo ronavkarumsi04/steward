@@ -13,7 +13,7 @@ interface PingResult {
   error?: { code: string; message: string };
 }
 
-export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: string; devices: CompanionDevice[]; isAdmin: boolean; serverUrl: string }) {
+export function CompanionPanel({ orgId, devices, isAdmin, serverUrl, quiet = false }: { orgId: string; devices: CompanionDevice[]; isAdmin: boolean; serverUrl: string; quiet?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pairing, setPairing] = useState<{ code: string; expiresAt: string; name: string } | null>(null);
@@ -31,7 +31,7 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
       setPairing({ code: r.code, expiresAt: r.expiresAt, name: r.device.name });
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not start pairing");
+      setError(!quiet && err instanceof ApiError ? err.message : "Could not start pairing. Check your access and try again.");
     } finally {
       setBusy(null);
     }
@@ -43,10 +43,10 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
       const r = await browserApi.post<PingResult>(`${base}/${id}/ping`, {});
       setPing((p) => ({
         ...p,
-        [id]: r.ok ? `OK · ${r.latencyMs}ms · codex ${r.status?.version ?? "?"} · ${r.status?.loggedIn ? "logged in" : `NOT logged in (${r.status?.detail ?? "run codex login"})`}` : `${r.error?.code}: ${r.error?.message}`,
+        [id]: quiet ? r.ok ? `Companion reached · ${r.status?.loggedIn ? "Signed in" : "Sign in to Codex on the companion"}` : "Companion check failed. Check the device and try again." : r.ok ? `OK · ${r.latencyMs}ms · codex ${r.status?.version ?? "?"} · ${r.status?.loggedIn ? "logged in" : `NOT logged in (${r.status?.detail ?? "run codex login"})`}` : `${r.error?.code}: ${r.error?.message}`,
       }));
     } catch (err) {
-      setPing((p) => ({ ...p, [id]: err instanceof ApiError ? err.message : "Ping failed" }));
+      setPing((p) => ({ ...p, [id]: !quiet && err instanceof ApiError ? err.message : "Companion check failed. Try again." }));
     } finally {
       setBusy(null);
     }
@@ -54,7 +54,7 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
 
   async function revoke(d: CompanionDevice) {
     if (!confirm(`Revoke "${d.name}"? Its key stops working immediately and any provider bound to it will fail.`)) return;
-    await browserApi.del(`${base}/${d.id}`).catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Revoke failed"));
+    await browserApi.del(`${base}/${d.id}`).catch((err: unknown) => setError(!quiet && err instanceof ApiError ? err.message : "Revoke failed. Reload to check the current status."));
     router.refresh();
   }
 
@@ -96,7 +96,7 @@ export function CompanionPanel({ orgId, devices, isAdmin, serverUrl }: { orgId: 
         </div>
       ) : (
         <form onSubmit={begin} className="mt-3 flex flex-wrap items-end gap-2">
-          <div className="grow"><label className="label">Device name</label><input name="name" className="input" placeholder="Ronav's MacBook" maxLength={80} /></div>
+          <div className="grow"><label className="label" htmlFor="companion-name">Device name</label><input id="companion-name" name="name" className="input" placeholder={quiet ? "My computer" : "Ronav's MacBook"} maxLength={80} /></div>
           <button className="btn btn-primary" disabled={busy === "pair" || !isAdmin}>{busy === "pair" ? "Starting…" : "Pair a new companion"}</button>
         </form>
       )}

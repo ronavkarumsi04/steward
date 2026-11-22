@@ -4,6 +4,8 @@ import { serverApi, tryApi } from "@/lib/server";
 import { preferredSession } from "@/lib/browser";
 import type { BrowserSessionRead, BrowserWorkspaceRead } from "@/lib/types";
 import { BrowserWorkspace } from "@/components/browser-workspace";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietToolsFrame, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
 
 export const metadata: Metadata = { title: "Browser" };
 
@@ -30,6 +32,14 @@ export default async function BrowserPage({
   const { companyId } = await params;
   const { session: wanted } = await searchParams;
   const api = await serverApi();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    const read = await readTools(() => api.get<BrowserWorkspaceRead>(`/companies/${companyId}/browser`));
+    if (!read.data) return <QuietToolsFrame title="Browser" description="Watch agent browser sessions and stop work when needed." scope="This company only."><ToolsReadError error={read.error} subject="Browser" href={`/app/c/${companyId}/browser`} /></QuietToolsFrame>;
+    const workspace = read.data;
+    const chosen = (wanted && workspace.sessions.some(row => row.id === wanted) ? wanted : null) ?? preferredSession(workspace.sessions)?.id ?? null;
+    const detail = chosen ? await readTools(() => api.get<BrowserSessionRead>(`/companies/${companyId}/browser/sessions/${chosen}`)) : null;
+    return <div className="quiet-tools"><ToolsPermission allowed={workspace.canControl} action="start or stop browser sessions" />{detail && !detail.data && <ToolsReadError error={detail.error} subject="Browser session" href={`/app/c/${companyId}/browser`} />}<BrowserWorkspace quiet companyId={companyId} initial={workspace} initialSession={detail?.data ?? null} /></div>;
+  }
 
   const workspace = await tryApi(() => api.get<BrowserWorkspaceRead>(`/companies/${companyId}/browser`));
   if (!workspace) notFound();
