@@ -153,7 +153,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
           </div>
           {overclockEnabled && <label className="block text-xs text-muted">{t("agents.routingPolicy")}<textarea name="routing" aria-label={t("agents.routingPolicyLabel")} className="input mono mt-1 min-h-36" defaultValue={JSON.stringify(editing.routingPolicy, null, 2)} /><span className="hint">Explicit provider/model, ordered fallback chain and capability requirements. Credentials remain in Providers.</span></label>}
           <div className="flex justify-end gap-2"><button type="button" className="btn" disabled={quiet && busy} onClick={() => setEditing(null)}>{t("agents.cancel")}</button><button className="btn btn-primary" disabled={quiet && (busy || !isAdmin)}>{t("agents.save")}</button></div>
-        </form></fieldset>
+        </form>
       )}
 
       {editing && overclockEnabled && <AgentOverclock key={editing.id} companyId={companyId} agent={editing} isAdmin={isAdmin} />}
@@ -166,7 +166,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
           <input name="timezone" className="input" placeholder="UTC" aria-label={t("agents.timezone")} />
           <button className="btn btn-primary">{t("agents.add")}</button>
           <input name="instruction" className="input md:col-span-5" placeholder={t("agents.instructionPlaceholder")} aria-label={t("agents.instruction")} />
-        </form>
+        </form></fieldset>
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {schedules.map((s) => (
