@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { CompanyOverview, RunDetail, Task } from "@/lib/types";
+import type { Approval, CompanyOverview, RunDetail, Task } from "@/lib/types";
 import { QuietWork } from "./quiet-work";
 import { QuietRunDetail } from "./quiet-run-detail";
 import { QuietRunRecord } from "./quiet-run-record";
@@ -12,6 +12,21 @@ const overview = { role: "owner", company: { id: "company", autonomyLevel: 1, ti
 const detail: RunDetail = { run: { id: "run", agentId: "agent", taskId: null, projectId: null, conversationId: null, trigger: {}, status: "executing", intent: "Check recorded evidence", plan: null, result: null, error: null, workflowId: null, costUsd: "", inputTokens: 0, outputTokens: 0, iterations: 0, createdAt: at, startedAt: at, finishedAt: null }, steps: [], aiCalls: [], toolCalls: [], artifacts: [], approvals: [], workflow: null };
 
 describe("Quiet work surfaces", () => {
+  it.each(["en", "es"] as const)("names approval actions under a run in plain words (%s), preserving bounded previews and review links", (locale) => {
+    const request: Approval = { id: "wait-request", runId: detail.run.id, taskId: null, agentId: detail.run.agentId, action: "browser.act", reason: "external_write", risk: "LOW", dimension: "external_write", payload: { kind: "wait", ms: 500 }, status: "pending", expiresAt: "2099-01-01T00:00:00Z", createdAt: at, affectedSystem: "browser", alternatives: [], estimatedCostUsd: null, resolution: null, resolvedAt: null, resolvedBy: null };
+    const email = { ...request, id: "email-request", action: "email.send", payload: { to: "review@example.com", subject: "Long recorded subject ".repeat(30) } };
+    const html = renderToStaticMarkup(createElement(QuietRunRecord, { detail: { ...detail, approvals: [request, email] }, companyId: "company", locale, observedAt: Date.parse(at), timeZone: "UTC" }));
+    const rows = [...html.matchAll(/<a class="q-work-row"[^>]*>[\s\S]*?<\/a>/g)].map(([row]) => row);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain(locale === "en" ? "Wait 0.5 seconds in the browser" : "Esperar 0,5 segundos en el navegador");
+    expect(rows[1]).toContain(locale === "en" ? "Send email to review@example.com" : "Enviar correo a review@example.com");
+    expect(rows[0]).toContain("/approvals/wait-request");
+    expect(rows[1]).toContain("/approvals/email-request");
+    expect(rows.join("")).not.toMatch(/browser\.act|email\.send|external_write/);
+    const preview = rows[1]!.match(/<strong>(.*?)<\/strong>/)![1]!;
+    expect(Array.from(preview).length).toBeLessThanOrEqual(140);
+    expect(preview.endsWith("…")).toBe(true);
+  });
   it("retains records when assignment context fails, without claiming an empty list", async () => {
     const get = vi.fn(async (path: string) => {
       if (path.includes("/agents")) throw new Error("offline");
