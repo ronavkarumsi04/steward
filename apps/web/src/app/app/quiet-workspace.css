@@ -122,14 +122,15 @@
   .quiet-context { padding: 12px 16px; flex-wrap: wrap; }
   .quiet-context .nb-command-trigger { max-width: none; }
   .quiet-tabs { padding-inline: 16px; gap: 4px; }
-  .quiet-content { padding: 24px 16px calc(100px + env(safe-area-inset-bottom)); }
-  .quiet-bottom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-nav); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
-  .quiet-bottom > :is(a, button) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; min-width: 0; padding: 4px 2px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; overflow-wrap: anywhere; }
+  .quiet-content { padding: 24px 16px calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 24px); }
+  /* Keep each word whole; enlarged labels move destinations onto another row. */
+  .quiet-bottom { display: flex; flex-wrap: wrap; row-gap: 4px; position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-nav); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+  .quiet-bottom > :is(a, button) { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; min-width: min-content; max-width: 100%; padding: 4px 2px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; overflow-wrap: normal; }
   .quiet-bottom > [aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
   .quiet-top-actions .btn { min-height: 44px; }
   .quiet-workspace { padding-bottom: env(safe-area-inset-bottom); }
-  body:has(.quiet-workspace) .toasts { bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .quiet-workspace :focus { scroll-margin-block: 100px; }
+  body:has(.quiet-workspace) .toasts { bottom: calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 12px); }
+  .quiet-workspace :focus { scroll-margin-block: 100px calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 24px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .quiet-workspace *, .quiet-workspace *::before, .quiet-workspace *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

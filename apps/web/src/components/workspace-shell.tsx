@@ -98,9 +98,20 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
   const current = workspaceRoute(path, company.id, search.toString());
   const group: WorkspaceGroup = current?.group ?? "overview";
   const content = useRef<HTMLElement>(null);
+  const bottom = useRef<HTMLElement>(null);
   const routeKey = `${path}?${search.toString()}`;
   const previousPath = useRef(routeKey);
   const [announcement, setAnnouncement] = useState("");
+  useEffect(() => {
+    const element = bottom.current;
+    if (!element) return;
+    // Includes wrapped rows and the safe-area inset; keep content clear after text zoom.
+    const sync = () => document.documentElement.style.setProperty("--workspace-bottom-height", `${element.offsetHeight}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    return () => { observer.disconnect(); document.documentElement.style.removeProperty("--workspace-bottom-height"); };
+  }, []);
   useEffect(() => {
     if (previousPath.current === routeKey) return;
     previousPath.current = routeKey;
@@ -158,7 +169,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
       <main ref={content} id="workspace-content" tabIndex={-1} className="quiet-content">{children}</main>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
     </div>
-    <nav className="quiet-bottom" aria-label={t("shell.companyMenu")}>
+    <nav ref={bottom} className="quiet-bottom" aria-label={t("shell.companyMenu")}>
       {PRIMARY.slice(0, 4).map((p) => primaryLink(p, true))}
       <WorkspaceMenu me={me} orgId={company.organizationId} companyId={company.id} label={t("quiet.more")}><Icon.Menu size={18} /><span>{t("quiet.more")}</span></WorkspaceMenu>
     </nav>
