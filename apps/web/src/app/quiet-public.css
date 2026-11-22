@@ -52,6 +52,8 @@
 [data-public-design="quiet"] .public-family :is(p.hint, p.help, p.public-access-note) { font-size: max(14px, .875rem); }
 [data-public-design="quiet"] .public-family :is(.btn, .input, select, textarea) { border-radius: 8px; min-height: 44px; min-width: 0; max-width: 100%; font-size: max(14px, .875rem); font-stretch: normal; white-space: normal; }
 [data-public-design="quiet"] .public-family :is(button, .btn, .pill, label, .label, summary) { overflow-wrap: normal; }
+[data-public-design="quiet"] .public-family .flex:has(> :is(.btn, .pill)) { flex-wrap: wrap; }
+[data-public-design="quiet"] .public-family .flex > :is(.btn, .pill) { min-width: min-content; }
 [data-public-design="quiet"] .public-legal .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
 [data-public-design="quiet"] .public-family :is(.btn:not(.btn-primary):not(.btn-danger), .input, select, textarea) { border-color: var(--control-border); }
 [data-public-design="quiet"] .public-family :is(input, .input, select, textarea) { background: var(--panel); color: var(--fg); }

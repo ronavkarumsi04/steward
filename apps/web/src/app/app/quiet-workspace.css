@@ -62,6 +62,9 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace .btn { max-width: 100%; white-space: normal; overflow-wrap: normal; font-size: max(14px, 0.875rem); }
 /* Content may break long identifiers; controls and short labels keep whole words. */
 .quiet-workspace :is(button, .btn, .pill, label, .label, summary) { overflow-wrap: normal; }
+/* Action/badge rows yield before their shortest readable label does. */
+.quiet-workspace .flex:has(> :is(.btn, .pill)) { flex-wrap: wrap; }
+.quiet-workspace .flex > :is(.btn, .pill) { min-width: min-content; }
 /* Text-only zoom enlarges intrinsic control widths without changing the viewport. */
 .quiet-workspace :is(.input, .select, textarea) { min-width: 0; max-width: 100%; }
 .quiet-workspace .quiet-page-heading { overflow-wrap: anywhere; }
