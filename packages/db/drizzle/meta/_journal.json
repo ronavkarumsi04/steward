@@ -169,6 +169,13 @@
       "when": 1795311183000,
       "tag": "0023_signup_waitlist",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795370559000,
+      "tag": "0024_mcp_canonical_grants",
+      "breakpoints": true
     }
   ]
 }
