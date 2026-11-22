@@ -12,6 +12,7 @@
   --radius-xs: 4px; --radius-sm: 8px; --radius-md: 10px; --radius-lg: 10px; --radius-xl: 10px;
   --shadow-1: none; --shadow-2: none; --shadow-3: none; --scrim: #10231966;
   --body-leading: 1.55;
+  --text-xs: max(12px, 0.75rem); --text-sm: max(14px, 0.875rem);
   --font-sans: var(--font-manrope), "Noto Sans", Arial, system-ui, sans-serif;
   min-height: 100svh; background: var(--bg); color: var(--fg); font: 400 14px/1.55 var(--font-sans);
 }
@@ -53,8 +54,8 @@
 .quiet-workspace input { accent-color: var(--accent); }
 /* The incumbent root is 15px: .75rem alone computes to 11.25px. Keep floors absolute
    while still allowing rem-based user enlargement above them. */
-.quiet-workspace :is(.text-xs, .pill, .kbd, .label, .help, .nb-section-label, .nb-metric > :first-child, .table th, code, [class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"], [class*="text-[11px]"]) { font-size: max(12px, 0.75rem); }
-.quiet-workspace :is(.text-sm, .table, .panel-heading p, p.text-xs, li.text-xs) { font-size: max(14px, 0.875rem); }
+.quiet-workspace :where(.text-xs, .pill, .kbd, .label, .help, .eyebrow, .nb-section-label, .nb-metric > :first-child, .table th, code, [class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"], [class*="text-[11px]"]) { font-size: max(12px, 0.75rem); }
+.quiet-workspace :where(.text-sm, .table, .panel-heading p, p.text-xs, li.text-xs, .text-xs p, .text-xs li, .prose) { font-size: max(14px, 0.875rem); }
 .quiet-workspace .btn { white-space: normal; font-size: max(14px, 0.875rem); }
 .quiet-workspace .btn:active, .quiet-workspace .nav-item:active { transform: none; }
 .quiet-workspace .desk-title { font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 700; letter-spacing: -.035em; }
