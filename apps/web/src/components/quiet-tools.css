@@ -1,0 +1,54 @@
+/* Depth surfaces reuse the Quiet shell's semantic tokens; nothing selects the incumbent shell. */
+.quiet-tools { min-width: 0; font-size: 14px; }
+.quiet-tools-org { max-width: 1160px; margin: 0 auto; padding: 32px 24px 64px; }
+.quiet-tools .card { background: transparent; border: 0; border-radius: 0; padding: 0 0 28px; box-shadow: none; }
+.quiet-tools .card + .card, .quiet-tools .space-y-5 > .card + .card { padding-top: 24px; border-top: 1px solid var(--line); }
+.quiet-tools .panel-heading { margin-bottom: 16px; }
+.quiet-tools .panel-heading h2 { font-size: 18px; font-weight: 650; }
+.quiet-tools :is(.nb-panel-flat, .card-inset) { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: none; }
+.quiet-tools :is(p, li, td, input, select, textarea) { font-size: max(14px, .875rem); }
+.quiet-tools :where(.text-xs, .hint, .label, code, th, [class*="text-[11px]"]) { font-size: max(12px, .75rem); }
+.quiet-tools p { line-height: 1.55; }
+.quiet-tools :is(input, select, textarea, .btn) { min-height: 44px; max-width: 100%; }
+/* The compatibility nb-left-* classes no longer paint these neutral sections.
+   A legacy class name alone must not make every field look focused. */
+.quiet-tools :is(input, select, textarea, .btn):where(:not(.btn-primary):not(.btn-danger)) { border-color: var(--control-border); }
+.quiet-tools :where([class*="bg-accent-soft"], [class*="bg-warn-soft"]) :is(input, select, textarea, .btn):where(:not(.btn-primary):not(.btn-danger)) { border-color: var(--accent); }
+.quiet-tools [aria-invalid="true"] { border-color: var(--danger); }
+/* Pressed primary controls must retain foreground contrast on the accent fill. */
+.quiet-tools .btn.btn-primary[aria-pressed="true"] { color: var(--accent-fg); }
+/* Block field labels participate in vertical spacing; inline labels swallowed it.
+   Eight pixels also clears the shell's 2px outline plus 3px offset at any text size. */
+.quiet-tools form label { display: block; }
+.quiet-tools form label > :is(input, select, textarea) { margin-block-start: 8px; }
+.quiet-tools form label.label { margin-block-end: 8px; }
+.quiet-tools form :is(input, select, textarea) + :is(p, span, .help) { margin-block-start: 8px; }
+.quiet-tools :is(.flex, .grid) > * { min-width: 0; }
+.quiet-tools :is(p, li, td, th, code, .pill, label, .label) { overflow-wrap: anywhere; }
+.quiet-tools .pill { max-width: 100%; white-space: normal; }
+.quiet-tools .empty-note { padding: 32px 20px; background: var(--panel-2); border: 1px dashed var(--line-strong); border-radius: 10px; }
+.quiet-tools .empty-note > div { max-width: 65ch; }
+.quiet-tools-state { border: 1px solid var(--line); border-radius: 10px; padding: 24px; margin-bottom: 24px; }
+.quiet-tools-state h2 { font-size: 18px; font-weight: 650; }
+.quiet-tools-state p { color: var(--muted); margin: 8px 0 16px; max-width: 65ch; }
+.quiet-tools-permission { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; color: var(--muted); }
+.quiet-tools-placeholder { min-height: 160px; margin-bottom: 24px; border-radius: 10px; background: var(--panel-2); }
+.quiet-tools .quiet-tools-table { overflow: auto; max-width: 100%; }
+.quiet-tools table { min-width: 620px; }
+.quiet-tools :is(td, th) { padding: 12px 10px; text-align: start; }
+.quiet-tools-filter { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 24px; }
+.quiet-tools-filter label { flex: 1 1 240px; }
+.quiet-tools-connection-meta { margin-top: 8px; color: var(--muted); }
+.quiet-tools .quiet-tools-connection-row { padding: 20px 0; gap: 16px; align-items: start; }
+.quiet-tools .quiet-tools-catalog-item { padding: 20px; background: var(--panel-2); }
+.quiet-tools .quiet-tools-catalog-item .btn { flex: 1 1 120px; }
+.quiet-tools form.card { border: 1px solid var(--control-border); border-radius: 10px; padding: 24px; background: var(--panel-2); }
+.quiet-tools form.card h3 { font-size: 18px; }
+@media (max-width: 600px) {
+  .quiet-tools-org { padding: 24px 16px 48px; }
+  .quiet-tools .quiet-tools-connection-row { display: block; }
+  .quiet-tools .quiet-tools-connection-row > div + div { margin-top: 16px; }
+  .quiet-tools .quiet-tools-connection-row .btn { flex: 1; }
+  .quiet-tools form.card { padding: 16px; }
+  .quiet-tools form .flex { flex-wrap: wrap; }
+}

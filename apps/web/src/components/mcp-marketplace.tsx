@@ -5,6 +5,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import type { McpInspectionResult, McpInstallForm, McpMarketplaceRead, McpServerView, McpToolView } from "@/lib/types";
 import { bodyFromForm, describeInspection, emptyForm, formFrom, grantSummary, heldCount, serverPattern, sortTools, standing, standingLabel, standingTone, transportHint, transportLabel } from "@/lib/mcp";
 import { Ago, Card, Empty, Pill, RiskPill, Spinner } from "./ui";
+import { SecretLines } from "./secret-lines";
 
 /**
  * The MCP marketplace: install a server, and see what it may do.
@@ -26,7 +27,7 @@ import { Ago, Card, Empty, Pill, RiskPill, Spinner } from "./ui";
  * list the API returns. A second set of rules in the browser would be a second opinion about whether a program may
  * be spawned and an address dialled, and it would drift exactly where it matters.
  */
-export function McpMarketplace({ companyId, initial }: { companyId: string; initial: McpMarketplaceRead }) {
+export function McpMarketplace({ companyId, initial, quiet = false }: { companyId: string; initial: McpMarketplaceRead; quiet?: boolean }) {
   const [data, setData] = useState(initial);
   const [form, setForm] = useState<McpInstallForm | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -40,6 +41,10 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
   const agents = data.agents;
 
   function reportProblem(err: unknown) {
+    if (quiet) {
+      setError("The request did not complete. Check the server configuration and your permissions, then retry. Reload to check the current saved state.");
+      return;
+    }
     if (err instanceof ApiError) {
       setError(err.message);
       // The problem list is the API's, rendered as it arrived: nothing here decides what is wrong with a server.
@@ -91,7 +96,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
     run(`inspect:${server.id}`, async () => {
       const result = await browserApi.post<McpInspectionResult>(`/companies/${companyId}/mcp/${server.id}/inspect`, {});
       await reload();
-      return [describeInspection(result), ...result.notices].join(" ");
+      return quiet ? "Inspection finished. Review the server’s status and recorded tools below before granting access." : [describeInspection(result), ...result.notices].join(" ");
     });
 
   const toggle = (server: McpServerView) =>
@@ -121,7 +126,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
       const result = await browserApi.post<{ notices: string[]; agent: { name: string } }>(`/companies/${companyId}/mcp/${server.id}/grant`, { agentId, toolNames, granted });
       await reload();
       const what = toolNames ? `${toolNames.length} tool(s)` : `every tool`;
-      return [`${granted ? "Granted" : "Revoked"} ${what} of “${server.name}” ${granted ? "to" : "from"} ${result.agent.name}.`, ...result.notices].join(" ");
+      return [`${granted ? "Granted" : "Revoked"} ${what} of “${server.name}” ${granted ? "to" : "from"} ${result.agent.name}.`, ...(quiet ? [] : result.notices)].join(" ");
     });
 
   const openForm = (server?: McpServerView) => {
@@ -185,6 +190,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
 
       {form && (
         <InstallForm
+          quiet={quiet}
           form={form}
           editing={editing !== null}
           transports={data.catalog.transports}
@@ -202,7 +208,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
 
       {data.servers.length === 0 && !form && (
         <Card>
-          <Empty icon="🔌">
+          <Empty icon={quiet ? undefined : "🔌"}>
             <p className="font-medium">No server is installed.</p>
             <p className="mt-1 text-sm text-muted">
               An MCP server is somebody else&rsquo;s tools speaking a protocol Steward understands: a CRM, a ledger, a filesystem, whatever this company already runs. Installing one only writes down where it is
@@ -214,6 +220,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
 
       {data.servers.map((server) => (
         <ServerCard
+          quiet={quiet}
           key={server.id}
           server={server}
           agents={agents}
@@ -234,7 +241,7 @@ export function McpMarketplace({ companyId, initial }: { companyId: string; init
   );
 }
 
-function InstallForm({ form, editing, transports, busy, onChange, onCancel, onSubmit }: { form: McpInstallForm; editing: boolean; transports: string[]; busy: boolean; onChange: (form: McpInstallForm) => void; onCancel: () => void; onSubmit: () => void }) {
+function InstallForm({ form, editing, transports, busy, onChange, onCancel, onSubmit, quiet = false }: { form: McpInstallForm; editing: boolean; transports: string[]; busy: boolean; onChange: (form: McpInstallForm) => void; onCancel: () => void; onSubmit: () => void; quiet?: boolean }) {
   const set = (patch: Partial<McpInstallForm>) => onChange({ ...form, ...patch });
   const field = "w-full rounded-md border border-line bg-bg px-3 py-2 text-sm";
   const label = "block text-xs font-semibold tracking-wide text-muted";
@@ -296,13 +303,13 @@ function InstallForm({ form, editing, transports, busy, onChange, onCancel, onSu
               <span className={label}>ARGUMENTS — ONE PER LINE</span>
               <textarea data-testid="mcp-args" className={`${field} font-mono text-xs`} rows={3} value={form.args} onChange={(event) => set({ args: event.target.value })} placeholder={"-y\n@acme/ledger-mcp"} />
             </label>
-            <label className="space-y-1">
+            <div className="space-y-1">
               <span className={label}>VARIABLES — KEY=VALUE, ONE PER LINE</span>
-              <textarea data-testid="mcp-env" className={`${field} font-mono text-xs`} rows={3} value={form.env} onChange={(event) => set({ env: event.target.value })} placeholder="LEDGER_TOKEN=…" />
+              {quiet ? <SecretLines name="Environment variable KEY=VALUE" value={form.env} onChange={env => set({ env })} /> : <textarea aria-label="Environment variables" data-testid="mcp-env" className={`${field} font-mono text-xs`} rows={3} value={form.env} onChange={(event) => set({ env: event.target.value })} placeholder="LEDGER_TOKEN=…" />}
               <span className="block text-[11px] text-muted">
                 {editing ? "Leave empty to keep the variables already stored; anything typed here replaces the whole set. Values are never shown once saved." : "The process gets these and the machine's minimum, and nothing else — this deployment's database and keys are not visible to it."}
               </span>
-            </label>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -310,11 +317,11 @@ function InstallForm({ form, editing, transports, busy, onChange, onCancel, onSu
               <span className={label}>ADDRESS</span>
               <input data-testid="mcp-url" className={field} value={form.url} onChange={(event) => set({ url: event.target.value })} placeholder="https://mcp.example.com/mcp" />
             </label>
-            <label className="space-y-1">
+            <div className="space-y-1">
               <span className={label}>HEADERS — NAME: VALUE, ONE PER LINE</span>
-              <textarea data-testid="mcp-headers" className={`${field} font-mono text-xs`} rows={3} value={form.headers} onChange={(event) => set({ headers: event.target.value })} placeholder="Authorization: Bearer …" />
+              {quiet ? <SecretLines name="Header NAME: VALUE" value={form.headers} onChange={headers => set({ headers })} /> : <textarea aria-label="Headers" data-testid="mcp-headers" className={`${field} font-mono text-xs`} rows={3} value={form.headers} onChange={(event) => set({ headers: event.target.value })} placeholder="Authorization: Bearer …" />}
               <span className="block text-[11px] text-muted">{editing ? "Leave empty to keep the headers already stored." : "Credentials belong here rather than in the address."}</span>
-            </label>
+            </div>
           </div>
         )}
 
@@ -333,6 +340,7 @@ function InstallForm({ form, editing, transports, busy, onChange, onCancel, onSu
 }
 
 function ServerCard({
+  quiet = false,
   server,
   agents,
   canManage,
@@ -347,6 +355,7 @@ function ServerCard({
   onGrant,
   onGrantTool,
 }: {
+  quiet?: boolean;
   server: McpServerView;
   agents: Array<{ id: string; name: string; kind: string; enabled: boolean }>;
   canManage: boolean;
@@ -385,11 +394,11 @@ function ServerCard({
           </div>
           {/* Somebody else's sentence, carrying the command line or the address verbatim: it has to be able to
               break, because a long path is exactly what a third-party string looks like. */}
-          <p className="mt-1 break-words text-sm text-muted">{server.description}</p>
+          {!quiet && <p className="mt-1 break-words text-sm text-muted">{server.description}</p>}
           {server.purpose && <p className="mt-1 text-xs text-muted">{server.purpose}</p>}
           {server.error && (
             <p data-testid="mcp-error" className="mt-2 break-words text-sm text-danger">
-              {server.error}
+              {quiet ? "Server inspection failed. Check its configuration and inspect again." : server.error}
             </p>
           )}
           {server.inspectedAt && (
