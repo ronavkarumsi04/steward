@@ -47,12 +47,9 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
   const router = useRouter();
   // Open on the tab the link asked for, else the first one that has something in it, so a company with
   // three documents and no playbooks does not open on an empty pane.
-  const [tab, setTab] = useState<Tab>(() => {
-    if (initialTab && (TAB_IDS as readonly string[]).includes(initialTab)) return initialTab as Tab;
-    if (documents.length) return "documents";
-    if (decisions.length) return "decisions";
-    return "playbooks";
-  });
+  const tab: Tab = initialTab && (TAB_IDS as readonly string[]).includes(initialTab)
+    ? initialTab as Tab
+    : documents.length ? "documents" : decisions.length ? "decisions" : "playbooks";
   const [pictures, setPictures] = useState<ImageView[] | null>(null);
   const [open, setOpen] = useState<Document | null>(null);
   const [history, setHistory] = useState<DocumentVersion[] | null>(null);
@@ -247,11 +244,11 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-1">
+      <nav className="flex flex-wrap gap-1" aria-label={t("knowledge.title")}>
         {tabs.map(([id, label, n]) => (
-          <button key={id} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-pressed={tab === id} onClick={() => { setTab(id); setOpen(null); setHistory(null); }}>{t(label)} <span className="text-muted">{n}</span></button>
+          <Link key={id} href={`/app/c/${companyId}/knowledge?tab=${id}`} scroll={false} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-current={tab === id ? "page" : undefined}>{t(label)} <span className="text-muted">{n}</span></Link>
         ))}
-      </div>
+      </nav>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {tab === "playbooks" && (
