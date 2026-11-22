@@ -31,7 +31,6 @@
 .q-finance-model-row > div { max-width: 100%; }
 .q-finance-model-row > .tnum { flex-shrink: 0; overflow-wrap: normal; }
 .q-specialist .q-finance-model-id { overflow-wrap: anywhere; }
-.q-specialist .q-graph-node-label { overflow-wrap: break-word; }
 .q-specialist :is(pre, code) { overflow-wrap: anywhere; }
 .q-specialist .empty-note { padding: 36px 20px; background: var(--bg-tint); border-radius: 8px; }
 .q-specialist-create { border: 1px solid var(--control-border); border-radius: 10px; margin-block: 20px 28px; }
