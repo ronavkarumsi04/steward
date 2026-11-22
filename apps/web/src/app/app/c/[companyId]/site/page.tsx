@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { SiteStudioRead } from "@/lib/types";
 import { SiteStudio } from "@/components/site-studio";
+import { specialistPage, quietSpecialistEnabled } from "@/components/quiet-specialist";
 
 export const metadata: Metadata = { title: "Website" };
 
@@ -14,7 +15,10 @@ export const metadata: Metadata = { title: "Website" };
 export default async function SitePage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
-  const studio = await tryApi(() => api.get<SiteStudioRead>(`/companies/${companyId}/site`));
+  return specialistPage("site", async () => {
+  const read = () => api.get<SiteStudioRead>(`/companies/${companyId}/site`);
+  const studio = await (quietSpecialistEnabled() ? read() : tryApi(read));
   if (!studio) notFound();
   return <SiteStudio companyId={companyId} initial={studio} />;
+  });
 }

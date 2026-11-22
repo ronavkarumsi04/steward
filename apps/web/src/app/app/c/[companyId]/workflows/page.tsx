@@ -4,6 +4,7 @@ import { serverApi, tryApi } from "@/lib/server";
 import type { WorkflowWorkspaceRead } from "@/lib/types";
 import { WorkflowStudio } from "@/components/workflow-studio";
 import { PageHeader } from "@/components/ui";
+import { specialistPage, quietSpecialistEnabled } from "@/components/quiet-specialist";
 
 export const metadata: Metadata = { title: "Workflows" };
 
@@ -19,7 +20,9 @@ export const metadata: Metadata = { title: "Workflows" };
 export default async function WorkflowsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
-  const workspace = await tryApi(() => api.get<WorkflowWorkspaceRead>(`/companies/${companyId}/workflows`));
+  return specialistPage("workflows", async () => {
+  const read = () => api.get<WorkflowWorkspaceRead>(`/companies/${companyId}/workflows`);
+  const workspace = await (quietSpecialistEnabled() ? read() : tryApi(read));
   if (!workspace) notFound();
 
   return (
@@ -32,4 +35,5 @@ export default async function WorkflowsPage({ params }: { params: Promise<{ comp
       <WorkflowStudio companyId={companyId} initial={workspace} />
     </div>
   );
+  });
 }

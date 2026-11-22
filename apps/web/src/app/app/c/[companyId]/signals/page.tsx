@@ -3,12 +3,14 @@ import { serverApi } from "@/lib/server";
 import type { BusinessSignal, Project, ReactionCatalog, ReactionFire, ReactionRule } from "@/lib/types";
 import { ReactionsPanel } from "@/components/reactions-panel";
 import { SignalInbox } from "@/components/signal-inbox";
+import { specialistPage } from "@/components/quiet-specialist";
 
 export const metadata: Metadata = { title: "Signals" };
 
 export default async function SignalsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
+  return specialistPage("signals", async () => {
   const [{ signals }, { projects }, reactive, reactions] = await Promise.all([
     api.get<{ signals: BusinessSignal[] }>(`/companies/${companyId}/signals?limit=200`),
     api.get<{ projects: Project[] }>(`/companies/${companyId}/projects?limit=100`),
@@ -29,4 +31,5 @@ export default async function SignalsPage({ params }: { params: Promise<{ compan
       />
     </div>
   );
+  });
 }

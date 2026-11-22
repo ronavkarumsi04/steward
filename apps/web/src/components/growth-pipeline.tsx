@@ -8,6 +8,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import type { CampaignChannel, CampaignStatus, GrowthSnapshot, Lead, LeadStage } from "@/lib/types";
 import { Outbox } from "./outbox";
 import { Empty, PageHeader, Pill } from "./ui";
+import { SpecialistDisclosure, useQuietSpecialist } from "./quiet-specialist-context";
 
 const STAGES: Array<{ id: LeadStage; label: string; tone: "neutral" | "accent" | "warn" | "ok" | "danger" }> = [
   { id: "new", label: "leadStage.new", tone: "neutral" },
@@ -28,8 +29,10 @@ const CAMPAIGN_STATUSES: Array<{ id: CampaignStatus; label: string }> = [
 
 const money = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 const value = (lead: Lead) => lead.valueUsd === null ? 0 : Number(lead.valueUsd);
+const knownLeadValues = (leads: Lead[]) => leads.length > 0 && leads.every((lead) => lead.valueUsd !== null && Number.isFinite(Number(lead.valueUsd)));
 
 export function GrowthPipeline({ companyId, initial }: { companyId: string; initial: GrowthSnapshot }) {
+  const quiet = useQuietSpecialist();
   const t = useT();
   const tf = useTf();
   const router = useRouter();
@@ -126,10 +129,12 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
     <div className="space-y-5">
       <PageHeader eyebrow={t("growth.eyebrow")} title={t("growth.title")} description={t("growth.description")} />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {quiet && error && <p role="alert" className="text-sm text-danger">{error}</p>}
+
+      <div data-specialist-metrics className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="card nb-left-blue p-4"><div className="eyebrow">{t("growth.openLeads")}</div><div className="tnum mt-2 text-2xl font-semibold">{summary.open}</div></div>
-        <div className="card nb-left-pink p-4"><div className="eyebrow">{t("growth.openPipeline")}</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.pipeline)}</div></div>
-        <div className="card nb-left-green p-4"><div className="eyebrow">{t("growth.wonValue")}</div><div className="tnum mt-2 text-2xl font-semibold">{money(summary.won)}</div></div>
+        <div className="card nb-left-pink p-4"><div className="eyebrow">{t("growth.openPipeline")}</div><div className="tnum mt-2 text-2xl font-semibold">{quiet && !knownLeadValues(initial.leads.filter((lead) => !["won", "lost"].includes(lead.stage))) ? t("quiet.notAvailable") : money(summary.pipeline)}</div></div>
+        <div className="card nb-left-green p-4"><div className="eyebrow">{t("growth.wonValue")}</div><div className="tnum mt-2 text-2xl font-semibold">{quiet && !knownLeadValues(initial.leads.filter((lead) => lead.stage === "won")) ? t("quiet.notAvailable") : money(summary.won)}</div></div>
         <div className="card nb-left-orange p-4"><div className="eyebrow">{t("growth.recentOutreach")}</div><div className="tnum mt-2 text-2xl font-semibold">{summary.outbound}</div></div>
       </div>
 
@@ -146,6 +151,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
             </div>
           </div>
         </div>
+        <SpecialistDisclosure label={t("growth.createCampaign")}>
         <form onSubmit={createCampaign} className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-6 sm:p-5">
           <div className="lg:col-span-2"><label className="label">{t("growth.campaignName")}</label><input name="campaignName" aria-label={t("growth.campaignName")} className="input" placeholder={t("growth.campaignNamePlaceholder")} required maxLength={200} /></div>
           <div><label className="label">{t("growth.channel")}</label><select name="channel" aria-label={t("growth.channelLabel")} className="input"><option value="email">{t("growth.channelEmail")}</option><option value="social">{t("growth.channelSocial")}</option><option value="ads">{t("growth.channelAds")}</option></select></div>
@@ -154,6 +160,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
           <div className="sm:col-span-2 lg:col-span-5"><label className="label">{t("growth.objective")}</label><input name="objective" aria-label={t("growth.objectiveLabel")} className="input" placeholder={t("growth.objectivePlaceholder")} maxLength={2000} /></div>
           <button className="btn btn-primary min-h-10 self-end" disabled={busy !== null}>{busy === "campaign-create" ? t("growth.creating") : t("growth.createCampaign")}</button>
         </form>
+        </SpecialistDisclosure>
         {initial.campaigns.length === 0 ? (
           <div className="p-5 text-sm text-muted">{t("growth.noCampaigns")}</div>
         ) : (
@@ -184,6 +191,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         )}
       </section>
 
+      <SpecialistDisclosure label={t("growth.addLead")}>
       <form onSubmit={createLead} className="card p-4 sm:p-5">
         <div className="mb-3">
           <div className="nb-section-label">{t("growth.leads")}</div>
@@ -198,14 +206,15 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
           <div className="min-w-36"><label className="label">{t("growth.source")}</label><input name="source" className="input" placeholder={t("growth.sourcePlaceholder")} aria-label={t("growth.leadSource")} maxLength={100} /></div>
           <button className="btn btn-primary min-h-10" disabled={busy !== null}>{busy === "create" ? t("growth.adding") : t("growth.addLead")}</button>
         </div>
-        {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+        {!quiet && error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
       </form>
+      </SpecialistDisclosure>
 
       {initial.leads.length === 0 ? (
         <Empty>{t("growth.noLeads")}</Empty>
       ) : (
         <div className="overflow-x-auto pb-2">
-          <div className="grid min-w-[1320px] grid-cols-6 gap-3">
+          <div className="q-growth-board grid min-w-[1320px] grid-cols-6 gap-3">
             {STAGES.map((stage) => {
               const leads = initial.leads.filter((l) => l.stage === stage.id);
               return (
@@ -218,7 +227,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
                         {(lead.contactName || lead.contactCompany) && <div className="mt-1 text-xs text-muted">{[lead.contactName, lead.contactCompany].filter(Boolean).join(" · ")}</div>}
                         {lead.contactEmail && <div className="mt-1 truncate text-xs text-muted">{lead.contactEmail}</div>}
                         <div className="mt-3 flex items-center justify-between gap-2">
-                          <span className="tnum text-xs font-medium">{lead.valueUsd ? money(Number(lead.valueUsd)) : t("growth.noValue")}</span>
+                          <span className="tnum text-xs font-medium">{quiet && lead.valueUsd === null ? t("quiet.notAvailable") : lead.valueUsd ? money(Number(lead.valueUsd)) : t("growth.noValue")}</span>
                           <select aria-label={tf("growth.stageFor", { title: lead.title })} className="input h-8 w-auto min-w-0 py-1 text-xs" value={lead.stage} disabled={busy === lead.id} onChange={(e) => moveLead(lead.id, e.target.value as LeadStage)}>
                             {STAGES.map((s) => <option key={s.id} value={s.id}>{t(s.label as MessageKey)}</option>)}
                           </select>

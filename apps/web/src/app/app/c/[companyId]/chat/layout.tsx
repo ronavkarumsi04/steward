@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 import { serverApi } from "@/lib/server";
 import type { Conversation } from "@/lib/types";
 import { ConversationList } from "@/components/chat";
+import { specialistPage } from "@/components/quiet-specialist";
 
 export default async function ChatLayout({ children, params }: { children: ReactNode; params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
+  return specialistPage("conversations", async () => {
   const { conversations } = await api.get<{ conversations: Conversation[] }>(`/companies/${companyId}/conversations`);
   return (
     <div className="chat-spread">
@@ -13,4 +15,5 @@ export default async function ChatLayout({ children, params }: { children: React
       <section className="min-h-0 min-w-0">{children}</section>
     </div>
   );
+  });
 }
