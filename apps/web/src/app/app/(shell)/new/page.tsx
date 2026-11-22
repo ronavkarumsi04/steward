@@ -1,13 +1,20 @@
-import { requireMe, serverApi } from "@/lib/server";
+import { t } from "@/lib/i18n";
+import { Suspense } from "react";
+import { getLocale, requireMe, serverApi } from "@/lib/server";
 import type { ProviderCredential } from "@/lib/types";
 import { OnboardingWizard } from "@/components/onboarding";
 import Link from "next/link";
-import { QuietPageHeading } from "@/components/quiet-depth";
+import { QuietDepthLoading, QuietPageHeading } from "@/components/quiet-depth";
 import { workspaceShell } from "@/lib/workspace-theme";
 
 export const metadata = { title: "New company" };
 
 export default async function NewCompanyPage() {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return NewCompanyPageContent();
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><NewCompanyPageContent /></Suspense>;
+}
+
+async function NewCompanyPageContent() {
   const me = await requireMe("/app/new");
   const api = await serverApi();
   const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";

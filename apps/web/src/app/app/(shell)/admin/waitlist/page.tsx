@@ -1,13 +1,20 @@
+import { t } from "@/lib/i18n";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { AdminWaitlist, type WaitlistEntry } from "@/components/admin-waitlist";
 import { PageHeader } from "@/components/ui";
-import { requireMe, serverApi } from "@/lib/server";
+import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietPageHeading, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietDepthLoading, QuietPageHeading, QuietUnavailable } from "@/components/quiet-depth";
 
 export const metadata = { title: "Signup waitlist" };
 
 export default async function AdminWaitlistPage() {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return AdminWaitlistPageContent();
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><AdminWaitlistPageContent /></Suspense>;
+}
+
+async function AdminWaitlistPageContent() {
   const me = await requireMe("/app/admin/waitlist");
   if (!me.user.isSuperadmin) notFound();
   const api = await serverApi();

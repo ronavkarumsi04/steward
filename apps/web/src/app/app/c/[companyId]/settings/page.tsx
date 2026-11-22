@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import type { RoutingPolicy } from "@steward/schema";
 import { getLocale, serverApi } from "@/lib/server";
@@ -7,7 +8,7 @@ import { SettingsPanel } from "@/components/settings";
 import { RoutingPanel } from "@/components/routing-panel";
 import { ROUTING_PURPOSES } from "@/lib/routing";
 import { PageHeader } from "@/components/ui";
-import { QuietPageHeading, QuietSectionNav, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietDepthLoading, QuietPageHeading, QuietSectionNav, QuietUnavailable } from "@/components/quiet-depth";
 import { workspaceShell } from "@/lib/workspace-theme";
 
 const SECTIONS = [
@@ -25,7 +26,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "settings.title") };
 }
 
-export default async function SettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function SettingsPage(props: { params: Promise<{ companyId: string }> }) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return SettingsPageContent(props);
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><SettingsPageContent {...props} /></Suspense>;
+}
+
+async function SettingsPageContent({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
   const locale = await getLocale();

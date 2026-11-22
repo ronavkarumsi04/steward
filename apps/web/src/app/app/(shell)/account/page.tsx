@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { LEGAL_DOCUMENTS } from "@steward/legal";
 import { LanguageSelect } from "@/components/language-select";
@@ -6,7 +7,7 @@ import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { PendingAgreement } from "@/lib/types";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietDepthLayout, QuietPageHeading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietDepthLoading, QuietDepthLayout, QuietPageHeading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
 
 export async function generateMetadata() {
   return { title: t(await getLocale(), "account.title") };
@@ -32,6 +33,11 @@ interface PrivacyRequestRecord {
 }
 
 export default async function AccountPage() {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return AccountPageContent();
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><AccountPageContent /></Suspense>;
+}
+
+async function AccountPageContent() {
   const [me, api] = await Promise.all([requireMe("/app/account"), serverApi()]);
   const locale = await getLocale();
   const T = (key: MessageKey) => t(locale, key);

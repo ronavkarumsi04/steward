@@ -1,10 +1,12 @@
+import { t } from "@/lib/i18n";
+import { Suspense } from "react";
 import Link from "next/link";
 import { DeleteOrganizationForm } from "@/components/privacy-controls";
 import { OrgHeader } from "@/components/org-header";
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { activeSubprocessors, legalContactChannel, retentionRules } from "@/lib/legal";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietDepthLoading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
 import { QuietOrganizationFrame } from "@/components/quiet-organization";
 
 export function generateMetadata() {
@@ -19,7 +21,12 @@ interface Suppression {
   createdAt: string;
 }
 
-export default async function OrgPrivacyPage({ params }: { params: Promise<{ orgId: string }> }) {
+export default async function OrgPrivacyPage(props: { params: Promise<{ orgId: string }> }) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return OrgPrivacyPageContent(props);
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><OrgPrivacyPageContent {...props} /></Suspense>;
+}
+
+async function OrgPrivacyPageContent({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const [me, api] = await Promise.all([requireMe(), serverApi()]);
   const membership = me.memberships.find((m) => m.organizationId === orgId);

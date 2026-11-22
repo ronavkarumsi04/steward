@@ -1,3 +1,5 @@
+import { QuietDepthLoading } from "@/components/quiet-depth";
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { t } from "@/lib/i18n";
@@ -18,6 +20,11 @@ const INBOX_PAGE = 200;
  * page the phone opens to: one list, newest first, each request answerable in place.
  */
 export default async function InboxPage() {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) !== "quiet") return InboxPageContent();
+  return <Suspense fallback={<QuietDepthLoading label={t(await getLocale(), "activity.loading")} />}><InboxPageContent /></Suspense>;
+}
+
+async function InboxPageContent() {
   const me = await requireMe("/app/inbox");
   const api = await serverApi();
   const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";

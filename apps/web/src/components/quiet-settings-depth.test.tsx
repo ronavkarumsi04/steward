@@ -1,3 +1,4 @@
+import { Suspense, type ReactElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import AccountPage from "@/app/app/(shell)/account/page";
@@ -25,6 +26,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
 
+
+async function resolvePage(page: ReactElement): Promise<ReactElement> {
+  if (page.type !== Suspense) return page;
+  const { children } = page.props as { children: ReactElement };
+  return (children.type as (props: unknown) => Promise<ReactElement>)(children.props);
+}
+
 async function accountData(path: string) {
   if (path === "/auth/agreements") return { history: [], pending: [] };
   throw new Error("Offline");
@@ -39,7 +47,7 @@ it("retries section failures with a document navigation rather than a same-page 
 it("shows unavailable privacy data, not an empty history or an invented opt-out, in Quiet", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
   get.mockImplementation(accountData);
-  const html = renderToStaticMarkup(await AccountPage());
+  const html = renderToStaticMarkup(await resolvePage(await AccountPage()));
   expect(html).toContain("q-depth");
   expect(html).toContain("could not be loaded");
   expect(html).not.toContain("consent-control");
@@ -48,7 +56,7 @@ it("shows unavailable privacy data, not an empty history or an invented opt-out,
 it("keeps the incumbent account surface and fallback behavior when Quiet is off", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
   get.mockImplementation(accountData);
-  const html = renderToStaticMarkup(await AccountPage());
+  const html = renderToStaticMarkup(await resolvePage(await AccountPage()));
   expect(html).not.toContain("q-depth");
   expect(html).toContain("consent-control");
 });
@@ -59,7 +67,7 @@ it("puts discoverable language settings before design and deletion, with explici
     if (path === "/auth/agreements") return { history: [{ id: "acceptance", document: "terms", version: "2026-11-01", acceptedAt: "2026-11-22T16:56:59Z" }], pending: [] };
     return accountData(path);
   });
-  const html = renderToStaticMarkup(await AccountPage());
+  const html = renderToStaticMarkup(await resolvePage(await AccountPage()));
   expect(html.indexOf('id="language"')).toBeLessThan(html.indexOf('id="interface"'));
   expect(html.indexOf('id="interface"')).toBeLessThan(html.indexOf('id="danger"'));
   expect(html).toContain("Design system");
@@ -71,11 +79,11 @@ it("puts discoverable language settings before design and deletion, with explici
 it("does not turn a failed suppression request into nobody having opted out", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
   get.mockRejectedValue(new Error("Offline"));
-  const html = renderToStaticMarkup(await PrivacyPage({ params: Promise.resolve({ orgId: "org" }) }));
+  const html = renderToStaticMarkup(await resolvePage(await PrivacyPage({ params: Promise.resolve({ orgId: "org" }) })));
   expect(get).toHaveBeenCalledWith("/privacy/suppressions?organizationId=org");
   expect(html).toContain("could not be loaded");
   expect(html).not.toContain("Nobody has opted out");
-  expect(html).toMatch(/<a[^>]*href="\/app\/org\/org\/privacy"[^>]*aria-current="page"[^>]*>Data and privacy<\/a>/);
+  expect(html).toMatch(/<a(?=[^>]*href="\/app\/org\/org\/privacy")(?=[^>]*aria-current="page")[^>]*>Data and privacy<\/a>/);
 });
 
 it("keeps company controls available if optional model routing cannot load", async () => {
@@ -84,7 +92,7 @@ it("keeps company controls available if optional model routing cannot load", asy
     if (path === "/companies/company") return { company: { id: "company", name: "Review company", organizationId: "org", autonomyLevel: 2, timezone: "UTC" }, role: "member", policies: [], budgets: [], goals: [] };
     throw new Error("Offline");
   });
-  const html = renderToStaticMarkup(await SettingsPage({ params: Promise.resolve({ companyId: "company" }) }));
+  const html = renderToStaticMarkup(await resolvePage(await SettingsPage({ params: Promise.resolve({ companyId: "company" }) })));
   expect(html).toContain("q-depth");
   expect(html).toContain("Review company");
   expect(html).toContain("could not be loaded");
@@ -94,7 +102,7 @@ it("keeps company controls available if optional model routing cannot load", asy
 it("does not offer Quiet company creation or fetch providers for read-only memberships", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
   requireMe.mockResolvedValue({ user: {}, memberships: [{ organizationId: "viewer-org", role: "viewer" }] });
-  const html = renderToStaticMarkup(await NewCompanyPage());
+  const html = renderToStaticMarkup(await resolvePage(await NewCompanyPage()));
   expect(html).toContain("Company creation needs an owner or admin");
   expect(get).not.toHaveBeenCalled();
 });
@@ -103,7 +111,7 @@ it("preserves the legacy company-creation surface for those same memberships", a
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
   requireMe.mockResolvedValue({ user: {}, memberships: [{ organizationId: "viewer-org", role: "viewer" }] });
   get.mockResolvedValue({ providers: [] });
-  const html = renderToStaticMarkup(await NewCompanyPage());
+  const html = renderToStaticMarkup(await resolvePage(await NewCompanyPage()));
   expect(html).not.toContain("q-depth");
   expect(html).toContain("viewer-org");
 });
@@ -116,7 +124,7 @@ it("keeps healthy inbox organizations visible without calling the failed organiz
     if (path.endsWith("/companies")) return { companies: [{ id: "company", name: "Review company" }] };
     return { approvals: [{ id: "decision", companyId: "company", status: "pending", action: "Review this request", risk: "low", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }] };
   });
-  const html = renderToStaticMarkup(await InboxPage());
+  const html = renderToStaticMarkup(await resolvePage(await InboxPage()));
   expect(html).toContain("Offline workspace");
   expect(html).toContain("could not be loaded");
   expect(html).toContain("/app/c/company/approvals/decision");
