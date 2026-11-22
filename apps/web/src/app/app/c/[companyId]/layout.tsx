@@ -17,14 +17,15 @@ export default async function CompanyLayout({ children, params }: { children: Re
   const me = await requireMe(`/app/c/${companyId}`);
   const locale = await getLocale();
   const api = await serverApi();
+  const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";
   const [overview, active] = await Promise.all([
     tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`)),
-    // Runs in flight, for the sidebar's count: a founder glancing at the nav sees whether anything is working.
-    tryApi(() => api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=executing,planning,building_context,verifying&limit=20`)),
+    // Only the legacy sidebar uses this count; Quiet must not depend on this optional list read.
+    quiet ? null : tryApi(() => api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?status=executing,planning,building_context,verifying&limit=20`)),
   ]);
   if (!overview) notFound();
   const { company, pendingApprovals } = overview;
-  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return (
+  if (quiet) return (
     <div className="flex min-h-screen flex-col">
       <a href="#workspace-content" className="workspace-skip">{t(locale, "shell.skipContent")}</a>
       <TopNav me={me} orgId={company.organizationId} quiet />
