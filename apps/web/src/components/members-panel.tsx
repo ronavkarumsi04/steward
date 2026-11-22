@@ -55,7 +55,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole, quiet = 
   }
 
   return (
-    <div className={quiet ? "q-depth-panel space-y-5" : "space-y-5"}>
+    <div className={quiet ? "q-depth-panel q-members-panel space-y-5" : "space-y-5"}>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <Card title={quiet ? c.members : "Members"} className={quiet ? undefined : "nb-left-blue"}>
         <ul className={quiet ? "q-member-list divide-y divide-line text-sm" : "divide-y divide-line text-sm"}>
@@ -74,7 +74,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole, quiet = 
       </Card>
 
       <Card title={quiet ? c.invitations : "Invitations"} className={quiet ? undefined : "nb-left-purple"}>
-        {quiet && <p className="q-caption">{c.inviteHint}</p>}
+        {quiet && <p className="q-caption q-members-help">{c.inviteHint}</p>}
         <form onSubmit={invite} className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_auto]">
           <input name="email" type="email" className="input" aria-label={quiet ? "Invitation email" : undefined} placeholder="colleague@example.com" required disabled={!isAdmin || (quiet && busy)} />
           <select name="role" aria-label="Invitation role" className="input" defaultValue="member" disabled={!isAdmin || (quiet && busy)}>{ROLES.filter((r) => r !== "owner").map((r) => <option key={r}>{r}</option>)}</select>

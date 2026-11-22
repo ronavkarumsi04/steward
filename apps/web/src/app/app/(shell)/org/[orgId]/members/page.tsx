@@ -17,7 +17,7 @@ export default async function MembersPage({ params }: { params: Promise<{ orgId:
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const locale = await getLocale();
     const c = depthCopy(locale);
-    const frame = (children: ReactNode) => <QuietOrganizationFrame orgId={orgId} title={c.membersTitle} description={c.membersIntro} scope={`${membership?.name ?? c.organization} · ${membership?.role ?? c.unavailable}`} active="members"><div className="q-depth">{children}</div></QuietOrganizationFrame>;
+    const frame = (children: ReactNode) => <QuietOrganizationFrame orgId={orgId} title={c.members} description={c.membersIntro} scope={`${membership?.name ?? c.organization} · ${membership?.role ?? c.unavailable}`} active="members"><div className="q-depth">{children}</div></QuietOrganizationFrame>;
     let records: { members: Member[]; invitations: Invitation[] };
     try { records = await api.get(`/orgs/${orgId}/members`); }
     catch (error) { return frame(<DepthFailure error={error} href={`/app/org/${orgId}/members`} locale={locale} />); }

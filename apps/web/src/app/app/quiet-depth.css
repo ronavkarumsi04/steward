@@ -52,6 +52,7 @@
 .q-knowledge-nav a { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 10px 12px; border-bottom: 2px solid transparent; font-size: 14px; }
 .q-knowledge-nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 .q-depth .q-member-list .input { min-height: 44px; }
+.q-depth .q-members-panel .input, .q-depth .q-members-help { font-size: 14px; }
 .q-depth .q-depth-section { margin-top: 40px; }
 .q-depth-failure { display: grid; gap: 14px; }
 .q-schedule-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
