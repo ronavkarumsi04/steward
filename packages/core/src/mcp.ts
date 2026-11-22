@@ -804,12 +804,14 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
     return unique([...next, ...requested!.filter((tool) => !allowlistPermits(next, tool))]);
   }
 
-  if (toolNames === null) {
+  const revokeAll = () => {
     const remaining = allowlist.filter((pattern) => !inNamespace(pattern));
     return unique([...remaining, ...(serverTools.some((tool) => allowlistPermits(remaining, tool)) || allowlistPermits(remaining, wildcard) ? [`!${wildcard}`] : [])]);
-  }
+  };
+  if (toolNames === null) return revokeAll();
 
   const revoked = new Set(requested!);
   const remaining = allowlist.filter((pattern) => !revoked.has(pattern));
-  return unique([...remaining, ...requested!.filter((tool) => allowlistPermits(remaining, tool)).map((tool) => `!${tool}`)]);
+  const next = unique([...remaining, ...requested!.filter((tool) => allowlistPermits(remaining, tool)).map((tool) => `!${tool}`)]);
+  return requested!.length && !serverTools.some((tool) => allowlistPermits(next, tool)) ? revokeAll() : next;
 }

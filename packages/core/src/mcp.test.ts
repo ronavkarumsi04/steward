@@ -181,7 +181,7 @@ describe("grants", () => {
     }
     for (const granted of [true, false]) expect(() => applyGrant({ ...input, allowlist: [], toolNames: ["missing"], granted })).toThrow(McpError);
     expect(applyGrant({ ...input, allowlist: ["*"], toolNames: [serverTools[1]!], granted: false })).toEqual(["*", `!${serverTools[1]}`]);
-    expect(applyGrant({ ...input, serverTools: ["mcp.local_protocol_check.group.tool"], allowlist: ["mcp.local_protocol_check.group.*"], toolNames: ["mcp.local_protocol_check.group.tool"], granted: false })).toEqual(["mcp.local_protocol_check.group.*", "!mcp.local_protocol_check.group.tool"]);
+    expect(applyGrant({ ...input, serverTools: ["mcp.local_protocol_check.group.tool"], allowlist: ["mcp.local_protocol_check.group.*"], toolNames: ["mcp.local_protocol_check.group.tool"], granted: false })).toEqual([EXPLICIT_NO_TOOLS]);
   });
   const tools = ["mcp.ledger.lookup_invoice", "mcp.ledger.delete_customer", "mcp.ledger.reschedule"];
 
@@ -232,11 +232,25 @@ describe("grants", () => {
     for (const allowlist of [[tool], ["mcp.ledger.*"]]) {
       for (const toolNames of [null, [tool]]) {
         const result = applyGrant({ allowlist, slug: "ledger", toolNames, serverTools: [tool], granted: false });
-        expect(result).toEqual(toolNames !== null && allowlist[0] === "mcp.ledger.*" ? ["mcp.ledger.*", `!${tool}`] : [EXPLICIT_NO_TOOLS]);
+        expect(result).toEqual([EXPLICIT_NO_TOOLS]);
         expect(grantedBy(result, tool)).toBeNull();
         expect(grantedBy(result, "web.search")).toBeNull();
-        expect(applyGrant({ allowlist: result, slug: "ledger", toolNames: [tool], serverTools: [tool], granted: true })).toEqual(toolNames !== null && allowlist[0] === "mcp.ledger.*" ? ["mcp.ledger.*"] : [tool]);
+        expect(applyGrant({ allowlist: result, slug: "ledger", toolNames: [tool], serverTools: [tool], granted: true })).toEqual([tool]);
       }
+    }
+  });
+  it("collapses exhausted wildcard grants and denies tools recorded after the last revoke", () => {
+    for (const broad of [null, "mcp.*", "*"]) {
+      const other = ["web.*", "mcp.crm.*", "!mcp.crm.blocked", ...(broad ? [broad] : [])];
+      let allowlist = [...other, "mcp.ledger.*"];
+      for (const tool of tools) {
+        allowlist = applyGrant({ allowlist, slug: "ledger", toolNames: [tool], serverTools: tools, granted: false });
+        expect(grantedBy(allowlist, tool)).toBeNull();
+      }
+      expect(allowlist).toEqual([...other, ...(broad ? ["!mcp.ledger.*"] : [])]);
+      expect(grantedBy(allowlist, "mcp.ledger.new_tool")).toBeNull();
+      expect(grantedBy(allowlist, "mcp.crm.allowed")).not.toBeNull();
+      expect(grantedBy(allowlist, "mcp.crm.blocked")).toBeNull();
     }
   });
   it("keeps a legacy nested wildcard scoped to its recorded branch", () => {
@@ -256,7 +270,7 @@ describe("grants", () => {
     expect(narrowed).toEqual(["mcp.a_b.billing.*", "mcp.a_b.billing.invoices.*", "mcp.a_b.reports.*", "web.*", `!${serverTools[1]}`]);
     expect(grantedBy(narrowed, serverTools[1]!)).toBeNull();
     expect(grantedBy(narrowed, serverTools[3]!)).toBeNull();
-    expect(applyGrant({ ...input, allowlist: ["mcp.a_b.billing.invoices.*"], toolNames: [serverTools[1]!, serverTools[2]!] })).toEqual(["mcp.a_b.billing.invoices.*", `!${serverTools[1]}`, `!${serverTools[2]}`]);
+    expect(applyGrant({ ...input, allowlist: ["mcp.a_b.billing.invoices.*"], toolNames: [serverTools[1]!, serverTools[2]!] })).toEqual([EXPLICIT_NO_TOOLS]);
     for (const broad of ["*", "mcp.*"]) {
       const revoked = applyGrant({ ...input, allowlist: [broad, ...allowlist] });
       expect(grantedBy(revoked, serverTools[1]!)).toBeNull();

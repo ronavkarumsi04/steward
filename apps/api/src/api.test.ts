@@ -2793,6 +2793,42 @@ describe("mcp marketplace", () => {
     }
   }, 60_000);
 
+  d("collapses the last per-tool revoke and keeps tools added by refresh unavailable", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const path = `/companies/${me.companyId}/mcp/${installed.body.server.id}`;
+    await me.api.json("POST", `${path}/inspect`, {});
+    const future = "mcp.a_b.env_report";
+    await core.pool.query("DELETE FROM mcp_tools WHERE server_id=$1 AND tool_name=$2", [installed.body.server.id, future]);
+    const tools = (await me.read()).body.servers[0]!.tools.map((tool) => tool.toolName);
+    expect(tools).toHaveLength(5);
+    expect(tools).not.toContain(future);
+    const agents = [];
+    for (const broad of [null, "mcp.*", "*"]) {
+      const other = ["web.*", ...(broad ? [broad] : [])];
+      const created = await me.api.json<{ agent: { id: string } }>("POST", `/companies/${me.companyId}/agents`, { kind: "research", name: `Exhausted ${broad ?? "server"}`, toolAllowlist: other });
+      const agentId = created.body.agent.id;
+      expect((await me.api.call("POST", `${path}/grant`, { agentId, toolNames: null, granted: true })).status).toBe(200);
+      for (const tool of tools) expect((await me.api.call("POST", `${path}/grant`, { agentId, toolNames: [tool], granted: false })).status).toBe(200);
+      const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, actor: { type: "system", component: "exhausted-grant-test" } };
+      const stored = (await services.agents.get(scope, agentId))!.toolAllowlist;
+      expect(stored).toEqual([...other, ...(broad ? ["!mcp.a_b.*"] : [])]);
+      agents.push({ id: agentId, allowlist: stored });
+    }
+    expect((await me.api.call("POST", `${path}/inspect`, {})).status).toBe(200);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, actor: { type: "system", component: "exhausted-grant-test" } };
+    const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+    expect(registry.get(future)).toBeDefined();
+    const refreshed = (await me.read()).body.servers[0]!;
+    expect(refreshed.tools).toHaveLength(6);
+    for (const agent of agents) {
+      const permitted = registry.list({ allow: agent.allowlist }).map((tool) => tool.manifest.name);
+      expect(permitted.some((tool) => tool.startsWith("mcp.a_b."))).toBe(false);
+      expect(permitted).toContain("web.search");
+      expect(refreshed.tools.every((tool) => !tool.grantedTo.some((grant) => grant.agentId === agent.id))).toBe(true);
+    }
+  }, 60_000);
+
   d("edits legacy colliding installs without allowing slug changes", async () => {
     const me = await marketplace();
     const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
