@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES, resolveLocale, t, tf } from "./i18n";
+import { decisionCopy } from "./decision-copy";
 
 describe("i18n", () => {
+  it("localizes closed-run approval copy consistently in both catalogs", () => {
+    for (const locale of LOCALES) {
+      expect(t(locale, "approvals.runCancelled")).toBe(decisionCopy(locale).runCancelled);
+      expect(t(locale, "approvals.runClosed")).toBe(decisionCopy(locale).runClosed);
+      expect(t(locale, "approvals.notPending")).not.toBe("approvals.notPending");
+    }
+    expect(t("es", "approvals.runCancelled")).not.toBe(t("en", "approvals.runCancelled"));
+    expect(t("es", "approvals.runClosed")).not.toBe(t("en", "approvals.runClosed"));
+  });
   it("resolves region tags and unknown languages", () => {
     expect(resolveLocale("es-MX")).toBe("es");
     expect(resolveLocale("EN")).toBe("en");

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Approval } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
 import { ApprovalsList } from "./approvals-list";
+import { LocaleProvider } from "./locale-provider";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 
@@ -15,6 +16,14 @@ const base: Approval = {
 };
 
 describe("ApprovalCard for an outbox action", () => {
+  it("localizes closed approval copy in Spanish", () => {
+    for (const status of ["cancelled", "succeeded"] as const) {
+      const html = renderToStaticMarkup(createElement(LocaleProvider, { locale: "es", children: createElement(ApprovalCard, { companyId: "c1", approval: base, run: { id: "r1", status } }) }));
+      expect(html).toContain(status === "cancelled" ? "la ejecución se canceló antes de tomar una decisión" : "la ejecución ha terminado");
+      expect(html).not.toContain("the run was cancelled");
+      expect(html).not.toContain("the run has finished");
+    }
+  });
   it("keeps stale pending requests closed in the legacy approvals list", () => {
     const html = renderToStaticMarkup(createElement(ApprovalsList, { companyId: "c1", approvals: [base], runsById: { r1: { id: "r1", status: "cancelled" } } }));
     expect(html).toContain("the run was cancelled before a decision");
@@ -24,7 +33,7 @@ describe("ApprovalCard for an outbox action", () => {
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: base, run: { id: "r1", status } }));
     expect(html).not.toMatch(/<button[^>]*>Approve/);
     expect(html).not.toMatch(/<button[^>]*>Decline/);
-    expect(html).toContain("closed");
+    expect(html).toContain(status === "cancelled" ? "the run was cancelled before a decision" : "Closed — the run has finished");
   });
   it("renders a cancelled approval as closed", () => {
     const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: { ...base, status: "cancelled" } }));

@@ -90,7 +90,7 @@ export function ApprovalCard({
       onDecided?.(a);
       router.refresh();
     } catch (e) {
-      setError(e instanceof ApiError ? (e.code === "not_pending" ? "This approval is closed, its run has finished, or the reviewed payload changed. Reload to see the outcome." : e.message) : "The decision did not reach the API.");
+      setError(e instanceof ApiError ? (e.code === "not_pending" ? t("approvals.notPending") : e.message) : "The decision did not reach the API.");
     } finally {
       setBusy(null);
     }
@@ -114,7 +114,7 @@ export function ApprovalCard({
             <h3 className="font-semibold">{state.action}</h3>
             <RiskPill risk={state.risk} />
             <span className="pill text-muted">{state.dimension}</span>
-            {state.status === "pending" && runClosed ? <span className="pill">{cancelled ? "Cancelled" : "Closed"}</span> : <StatusPill status={state.status} />}
+            {state.status === "pending" && runClosed ? <span className="pill">{cancelled ? t("status.cancelled") : t("approvals.closed")}</span> : <StatusPill status={state.status} />}
           </div>
           {state.affectedSystem && <p className="mt-1 text-xs text-muted">Changes <span className="text-fg-2">{state.affectedSystem}</span></p>}
         </div>
@@ -333,7 +333,7 @@ export function ApprovalCard({
         </div>
       ) : (
         <p className="mt-3 text-xs text-muted">
-          {cancelled ? "Cancelled — the run was cancelled before a decision; this request is closed." : runClosed && state.status === "pending" ? "This request is closed — the run has finished." : state.status === "approved" ? t("approvals.wasApproved") : state.status === "denied" ? t("approvals.wasDenied") : state.status === "expired" ? t("approvals.lapsed") : t("approvals.withdrawn")}
+          {cancelled ? t("approvals.runCancelled") : runClosed && state.status === "pending" ? t("approvals.runClosed") : state.status === "approved" ? t("approvals.wasApproved") : state.status === "denied" ? t("approvals.wasDenied") : state.status === "expired" ? t("approvals.lapsed") : t("approvals.withdrawn")}
           {state.resolvedBy ? <> by <span className="mono">{state.resolvedBy.slice(0, 8)}</span></> : null}
           {state.resolvedAt ? <> <Ago iso={state.resolvedAt} /></> : null}
           {state.resolution && typeof state.resolution.note === "string" && state.resolution.note ? <> — {String(state.resolution.note)}</> : null}

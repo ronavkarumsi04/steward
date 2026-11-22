@@ -10,6 +10,7 @@ import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
 import { Icon } from "./icons";
 import { RunTimeline } from "./run-timeline";
+import { useT } from "./locale-provider";
 import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
@@ -40,6 +41,7 @@ function produced(toolCalls: RunDetail["toolCalls"]): { label: string; href: str
 }
 
 export function RunDetailView({ companyId, initial, agents, observedAt }: { companyId: string; initial: RunDetail; agents: Agent[]; observedAt: number }) {
+  const t = useT();
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
   // The server's snapshot time is also the first client render's time. Reading Date.now() during
@@ -252,7 +254,7 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
             <Card title="Approval history" className="nb-left-yellow">
               <ul className="space-y-1 text-sm">
                 {approvals.filter((a) => a.status !== "pending" || TERMINAL.has(run.status)).map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-2"><span className="truncate">{a.action}</span>{a.status === "cancelled" || (a.status === "pending" && run.status === "cancelled") ? <span>Cancelled — the run was cancelled before a decision</span> : a.status === "pending" && TERMINAL.has(run.status) ? <span>Closed — the run has finished</span> : <StatusPill status={a.status} />}</li>
+                  <li key={a.id} className="flex items-center justify-between gap-2"><span className="truncate">{a.action}</span>{a.status === "cancelled" || (a.status === "pending" && run.status === "cancelled") ? <span>{t("approvals.runCancelled")}</span> : a.status === "pending" && TERMINAL.has(run.status) ? <span>{t("approvals.runClosed")}</span> : <StatusPill status={a.status} />}</li>
                 ))}
               </ul>
             </Card>

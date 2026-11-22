@@ -5,12 +5,21 @@ import type { Approval, CompanyOverview } from "@/lib/types";
 import { QuietApprovalDetail } from "./quiet-approval-detail";
 import { QuietOverview } from "./quiet-overview";
 import { QuietApprovals } from "./quiet-approvals";
+import { LocaleProvider } from "./locale-provider";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 const approval: Approval = { id: "approval-1", action: "email.send", reason: "Please review this exact draft", payload: { to: "review@example.com", text: "Review draft" }, risk: "HIGH", dimension: "email_send", affectedSystem: "test-email-account", estimatedCostUsd: "0", runId: null, taskId: null, agentId: null, alternatives: [], status: "pending", resolvedAt: null, resolvedBy: null, resolution: null, createdAt: "2026-01-01T00:00:00Z", expiresAt: "2099-01-01T00:00:00Z", workflowId: null };
 const overview = { company: { id: "company-1", name: "Test workspace", organizationId: "org-1", autonomyLevel: 1, timezone: "UTC" }, role: "owner", agents: [], budgets: [], pendingApprovals: 1 } as unknown as CompanyOverview;
 
 describe("Quiet decision surfaces", () => {
+  it("localizes cancelled and closed run states in Spanish", () => {
+    for (const status of ["cancelled", "succeeded"] as const) {
+      const html = renderToStaticMarkup(createElement(LocaleProvider, { locale: "es", children: createElement(QuietApprovalDetail, { approval, overview, run: { id: "r1", status } as never }) }));
+      expect(html).toContain(status === "cancelled" ? "la ejecución se canceló antes de tomar una decisión" : "la ejecución ha terminado");
+      expect(html).not.toContain("the run was cancelled");
+      expect(html).not.toContain("the run has finished");
+    }
+  });
   it("labels cancelled requests in approval history", async () => {
     const get = vi.fn(async () => ({ approvals: [{ ...approval, status: "cancelled" }] }));
     const html = renderToStaticMarkup(await QuietApprovals({ companyId: "company-1", status: "cancelled", api: { get } as never, locale: "en" }));

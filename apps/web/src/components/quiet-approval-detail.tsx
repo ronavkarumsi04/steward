@@ -120,7 +120,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
     } finally { lock.current = false; setBusy(false); }
   }
 
-  const statusText = cancelled ? "Cancelled — the run was cancelled before a decision" : state.status === "pending" && runClosed ? "Closed — the run has finished" : state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
+  const statusText = cancelled ? c.runCancelled : state.status === "pending" && runClosed ? c.runClosed : state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
   const terminalRunMessage = run?.status === "failed" ? c.executionFailed : run?.status === "succeeded" ? c.executionSucceeded : run?.status === "cancelled" ? c.executionCancelled : null;
   const decided = !pending;
   const decider = members.find((member) => member.userId === state.resolvedBy);
