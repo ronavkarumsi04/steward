@@ -3,6 +3,8 @@ import { requireMe, serverApi } from "@/lib/server";
 import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
 import { IntegrationsPanel } from "@/components/integrations-panel";
 import { OrgHeader } from "@/components/org-header";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietConnections } from "@/components/quiet-tools-pages";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -11,6 +13,7 @@ export default async function IntegrationsPage({ params, searchParams }: { param
   const sp = await searchParams;
   const [me, api] = await Promise.all([requireMe(), serverApi()]);
   const membership = me.memberships.find((m) => m.organizationId === orgId);
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return <QuietConnections api={api} orgId={orgId} membership={membership} oauth={sp} />;
   const [{ catalog }, { integrations }] = await Promise.all([
     api.get<{ catalog: IntegrationCatalogEntry[] }>("/integrations/catalog"),
     api.get<{ integrations: Integration[] }>(`/orgs/${orgId}/integrations`),

@@ -129,7 +129,10 @@
   .quiet-content { padding: 24px 16px calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 24px); }
   /* Keep each word whole; enlarged labels move destinations onto another row. */
   .quiet-bottom { display: flex; flex-wrap: wrap; row-gap: 4px; position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-nav); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
-  .quiet-bottom > :is(a, button) { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; min-width: min-content; max-width: 100%; padding: 4px 2px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; overflow-wrap: normal; }
+  .quiet-bottom > :is(a, button) { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; min-width: min-content; max-width: 100%; padding: 4px 2px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; text-align: center; cursor: pointer; overflow-wrap: normal; }
+  /* Beat the generic .quiet-workspace .btn type on More without beating the
+     active state below. The 15px root gives 12px labels; root preferences grow all five. */
+  .quiet-workspace .quiet-bottom > :where(a, button) { font-size: max(12px, 0.8rem); font-weight: 400; line-height: 1.55; }
   .quiet-bottom > [aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
   .quiet-top-actions .btn { min-height: 44px; }
   .quiet-workspace { padding-bottom: env(safe-area-inset-bottom); }

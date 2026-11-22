@@ -33,7 +33,7 @@ type Busy = string | null;
 
 const EVENT_TYPES = ["browser.opened", "browser.step", "browser.stopped", "browser.closed", "browser.failed"];
 
-export function BrowserWorkspace({ companyId, initial, initialSession }: { companyId: string; initial: BrowserWorkspaceRead; initialSession: BrowserSessionRead | null }) {
+export function BrowserWorkspace({ companyId, initial, initialSession, quiet = false }: { companyId: string; initial: BrowserWorkspaceRead; initialSession: BrowserSessionRead | null; quiet?: boolean }) {
   const toast = useToast();
   const [sessions, setSessions] = useState(initial.sessions);
   const [selectedId, setSelectedId] = useState<string | null>(initialSession?.session.id ?? null);
@@ -64,7 +64,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
       try {
         return await run();
       } catch (err) {
-        const message = err instanceof ApiError ? err.message : failure;
+        const message = !quiet && err instanceof ApiError ? err.message : failure;
         setError(message);
         toast("err", message);
         return null;
@@ -72,7 +72,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
         setBusy(null);
       }
     },
-    [toast],
+    [toast, quiet],
   );
 
   const loadWorkspace = useCallback(async () => {
@@ -166,7 +166,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession }: { compa
     <div className="space-y-5">
       <PageHeader
         eyebrow="Browser"
-        title="Watch an agent use a browser"
+        title={quiet ? "Browser" : "Watch an agent use a browser"}
         description={
           providerMissing
             ? "This deployment has no browser, so nothing here can open a page. The sessions below are still readable."
