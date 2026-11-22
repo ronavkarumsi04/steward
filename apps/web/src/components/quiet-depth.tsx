@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Locale } from "@/lib/i18n";
 
@@ -14,7 +13,7 @@ export function QuietPageHeading({ title, description, scope, actions, level = 1
 }
 
 export function QuietSectionNav({ label, items, children }: { label: string; items: ReadonlyArray<readonly [string, string]>; children?: ReactNode }) {
-  return <aside className="q-depth-rail"><nav aria-label={label}><ul>{items.map(([id, title]) => <li key={id}><Link href={`#${id}`}>{title}</Link></li>)}</ul></nav>{children}</aside>;
+  return <aside className="q-depth-rail"><nav aria-label={label}><ul>{items.map(([id, title]) => <li key={id}><a href={`#${id}`}>{title}</a></li>)}</ul></nav>{children}</aside>;
 }
 
 export function QuietTable({ label, children }: { label: string; children: ReactNode }) {
