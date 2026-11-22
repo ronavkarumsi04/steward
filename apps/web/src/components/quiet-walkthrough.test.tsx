@@ -9,6 +9,8 @@ import { CodeWorkspace } from "./code-workspace";
 import { BrowserWorkspace } from "./browser-workspace";
 import { AuthForm } from "./auth-form";
 import { QuietHome } from "./quiet-home";
+import { quietPublicEnabled } from "@/lib/public-design";
+import { landingStoryEnabled } from "@/lib/landing-story";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/use-events", () => ({ useLiveEvents: (_id: string, options: { initial?: StewardEvent[] }) => ({ events: options.initial ?? [], connected: true }) }));
@@ -64,10 +66,19 @@ describe("Quiet walkthrough regressions", () => {
     expect(html(createElement(BrowserWorkspace, { ...props, quiet: true }))).not.toContain(">Live</span>");
   });
   it("links Quiet home to the existing story without changing the access destination", () => {
-    const result = html(createElement(QuietHome, { entry: "/login", label: "Sign in", note: "Invitation only", story: false }));
+    const result = html(createElement(QuietHome, { entry: "/login", label: "Sign in", note: "Invitation only", story: false, storyAvailable: true }));
     expect(result).toContain('href="/?experience=story"');
     expect(result).toContain("Explore the 3D story");
     expect(result).toContain('href="/pilot/waitlist"');
+    expect(result).toContain('href="#how"');
+  });
+  it("does not offer a dead story link when only the Quiet public preview is enabled", () => {
+    const env = { NODE_ENV: "production", STEWARD_PUBLIC_DESIGN: "quiet", STEWARD_PUBLIC_PREVIEW: "true" };
+    expect(quietPublicEnabled(env)).toBe(true);
+    expect(landingStoryEnabled("story", env)).toBe(false);
+    const result = html(createElement(QuietHome, { entry: "/login", label: "Sign in", note: "Invitation only", story: false, storyAvailable: landingStoryEnabled("story", env) }));
+    expect(result).not.toContain('href="/?experience=story"');
+    expect(result).toContain('href="#how"');
   });
   it("labels Quiet access honestly without changing legacy copy or the signup route", () => {
     expect(html(createElement(AuthForm, { mode: "login" }))).toContain(">Register</a>");
