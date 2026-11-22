@@ -109,6 +109,10 @@ export class PrivacyError extends Error {
   }
 }
 
+function accountWaitlistFilter(userId: string) {
+  return or(eq(waitlistEntries.userId, userId), eq(waitlistEntries.email, sql`(select lower(trim(email)) from users where id = ${userId} and email_verified_at is not null)`));
+}
+
 export class PrivacyService {
   constructor(private readonly db: Db) {}
 
@@ -263,7 +267,7 @@ export class PrivacyService {
       createdAt: waitlistEntries.createdAt,
       admittedAt: waitlistEntries.admittedAt,
       registeredAt: waitlistEntries.registeredAt,
-    }).from(waitlistEntries).where(or(eq(waitlistEntries.userId, userId), eq(waitlistEntries.email, sql`(select lower(trim(email)) from users where id = ${userId})`)));
+    }).from(waitlistEntries).where(accountWaitlistFilter(userId));
     return {
       manifest: {
         generatedAt: new Date().toISOString(),
@@ -359,7 +363,7 @@ export class PrivacyService {
     // locked out of an account that still holds data, nor leave a deleted account inside a live organization.
     await this.db.transaction(async (tx) => {
       for (const organizationId of removed) await this.deleteOrganization(organizationId, userId, tx);
-      await tx.delete(waitlistEntries).where(or(eq(waitlistEntries.userId, userId), eq(waitlistEntries.email, user.email.trim().toLowerCase())));
+      await tx.delete(waitlistEntries).where(accountWaitlistFilter(userId));
       await tx.insert(privacyRequests).values({
         userId: null,
         organizationId: null,

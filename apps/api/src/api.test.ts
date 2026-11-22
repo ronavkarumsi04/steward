@@ -47,6 +47,7 @@ describe("capped signup and waitlist", () => {
 
   d("deletes waitlist personal data by account linkage and normalized email only", async () => {
     const owner = await register();
+    await core.pool.query("update users set email_verified_at=now() where id=$1", [owner.userId]);
     const linkedEmail = `previous-${uniq()}@example.com`;
     const unrelatedEmail = `unrelated-${uniq()}@example.com`;
     const signup = new SignupService(core.db);
@@ -64,6 +65,7 @@ describe("capped signup and waitlist", () => {
 
   d("exports only the account's waitlist personal data without admission credentials", async () => {
     const owner = await register();
+    await core.pool.query("update users set email_verified_at=now() where id=$1", [owner.userId]);
     const signup = new SignupService(core.db);
     const privacy = new PrivacyService(core.db);
     expect((await privacy.exportUser(owner.userId)).data.waitlist_entries).toEqual([]);
@@ -86,6 +88,25 @@ describe("capped signup and waitlist", () => {
     expect(exported.manifest.counts.tables).toBe(Object.keys(exported.data).length);
     expect(exported.manifest.counts.rows).toBe(Object.values(exported.data).reduce((sum, rows) => sum + rows.length, 0));
     expect((await privacy.exportUser(`missing-${uniq()}`)).data.waitlist_entries).toEqual([]);
+  });
+
+  d("requires verified email ownership for unlinked waitlist exports and deletion", async () => {
+    const signup = new SignupService(core.db);
+    const privacy = new PrivacyService(core.db);
+    for (const verified of [false, true]) {
+      const email = `waitlist-ownership-${uniq()}@example.com`;
+      await signup.join({ email, note: "Private application" }, "closed");
+      const { user } = await new AuthService(core.db).register({ email, name: "Registrant", password: "correct-horse-battery", emailVerified: verified });
+      const linkedEmail = `linked-ownership-${uniq()}@example.com`;
+      await signup.join({ email: linkedEmail }, "closed");
+      await core.pool.query("update waitlist_entries set user_id=$1 where email=$2", [user.id, linkedEmail]);
+      const exported = (await privacy.exportUser(user.id)).data.waitlist_entries;
+      expect(exported.map((row) => row.email).sort()).toEqual((verified ? [email, linkedEmail] : [linkedEmail]).sort());
+      await privacy.deleteAccount(user.id);
+      expect(await entry(linkedEmail)).toBeUndefined();
+      if (verified) expect(await entry(email)).toBeUndefined();
+      else expect(await entry(email)).toMatchObject({ email, note: "Private application", user_id: null });
+    }
   });
 
   it("parses optional non-negative caps and rejects malformed startup configuration", () => {
