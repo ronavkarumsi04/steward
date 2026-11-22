@@ -77,9 +77,9 @@
 .quiet-workspace .table th { text-transform: none; letter-spacing: normal; font-weight: 600; }
 .quiet-workspace .nav-item[aria-current="location"] { background: var(--accent-soft); color: var(--accent); }
 
-.quiet-topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--line); }
+.quiet-topbar { min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--line); }
 .quiet-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; font-size: 17px; }
-.quiet-top-actions { display: flex; align-items: center; gap: 8px; }
+.quiet-top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .quiet-top-actions .btn { min-height: 40px; }
 .quiet-frame { display: grid; grid-template-columns: 224px minmax(0, 1fr); flex: 1; }
 .quiet-rail { display: flex; flex-direction: column; gap: 20px; padding: 20px 12px; background: var(--rail); border-inline-end: 1px solid var(--line); }

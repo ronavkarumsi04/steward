@@ -196,6 +196,9 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
         // The palette stays open on failure: the next attempt should not need re-typing.
         // Native modal dialogs make the global toast region inert. Keep retry feedback in the active dialog.
         setActionError(e instanceof ApiError ? e.message : "The action did not reach the API.");
+        // Disabling the submit button can drop native focus onto BODY. Keep the
+        // retained confirmation keyboard-operable, including its one-step Escape.
+        inputRef.current?.focus();
       } finally {
         setBusy(false);
       }
@@ -221,6 +224,12 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
       (previousFocus.current?.isConnected ? previousFocus.current : triggerRef.current)?.focus();
     };
   }, [open]);
+
+  useEffect(() => {
+    if (open && !confirming) {
+      dialogRef.current?.querySelector(`#command-${selected}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [open, confirming, selected, matches]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -304,7 +313,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
     if (confirming) {
       if (e.key === "Enter") {
         e.preventDefault();
-        void act(confirming);
+        if (!busy) void act(confirming);
       }
       return;
     }
