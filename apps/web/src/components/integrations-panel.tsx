@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
 import { Card, Empty, StatusPill, Ago } from "./ui";
+import { copyWebhookUrl, downloadWebhookUrl } from "@/lib/webhook-export";
 
 export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, companyId, companyPath, quiet = false }: { orgId: string; catalog: IntegrationCatalogEntry[]; integrations: Integration[]; isAdmin: boolean; companyId?: string; companyPath?: string; quiet?: boolean }) {
   const router = useRouter();
@@ -89,7 +90,12 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
                   <div>
                     <div className={quiet ? "flex flex-wrap items-center gap-2" : "flex items-center gap-2"}><span className="font-medium">{i.label}</span><span className="pill text-muted">{i.definition.name}</span><StatusPill status={i.status} />{i.companyId && <span className="pill text-muted">company-scoped</span>}{inherited && <span className="pill text-muted">Managed at organization level</span>}</div>
                     <div className={quiet ? "quiet-tools-connection-meta" : "text-xs text-muted"}>{i.authKind}{i.externalAccountId ? ` · ${i.externalAccountId}` : ""}{i.scopes.length ? ` · ${i.scopes.join(" ")}` : ""} · connected <Ago iso={i.createdAt} />{i.lastError && <span className="text-danger"> · {quiet ? "Connection check failed. Re-authorize or reconnect." : i.lastError}</span>}</div>
-                    {showWebhook && <div className="mt-2 flex max-w-2xl items-center gap-2">{!quiet && <code className="nb-panel-flat min-w-0 flex-1 truncate px-2 py-1 text-[11px] text-muted" title={i.webhookUrl ?? undefined}>{i.webhookUrl}</code>}<button type="button" className="btn btn-sm" onClick={() => void navigator.clipboard.writeText(i.webhookUrl!).catch(() => setError("Could not copy the webhook. Check clipboard permission and try again."))}>Copy webhook</button></div>}
+                    {showWebhook && <div className="mt-2 flex max-w-2xl flex-wrap items-center gap-2">{!quiet && <code className="nb-panel-flat min-w-0 flex-1 truncate px-2 py-1 text-[11px] text-muted" title={i.webhookUrl ?? undefined}>{i.webhookUrl}</code>}<button type="button" className="btn btn-sm" onClick={async () => {
+                      const copied = await copyWebhookUrl(i.webhookUrl!);
+                      setError(copied ? null : quiet ? "Could not copy. Use Download webhook instead; keep the downloaded file private." : "Could not copy the webhook. Check clipboard permission and try again.");
+                    }}>Copy webhook</button>{quiet && <button type="button" className="btn btn-sm" onClick={() => {
+                      try { downloadWebhookUrl(i.webhookUrl!); } catch { setError("Could not download. Allow downloads for this site and try again."); }
+                    }}>Download webhook</button>}</div>}
                   </div>
                   {manageable && (
                     <div className="flex gap-1">
