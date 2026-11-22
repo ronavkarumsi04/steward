@@ -98,7 +98,7 @@ export default async function Landing({ searchParams }: { searchParams?: Promise
       : "We couldn't check hosted access right now. Sign in still works.";
   const story = landingStoryEnabled((await searchParams)?.experience, process.env);
 
-  if (quietPublicEnabled(process.env)) return <QuietHome entry={entry} label={entryLabel} note={entryNote} story={story} />;
+  if (quietPublicEnabled(process.env)) return <QuietHome entry={entry} label={entryLabel} note={entryNote} story={story} storyAvailable={landingStoryEnabled("story", process.env)} />;
 
   return (
     <Pad className={`paper ${s.home}`}>

@@ -301,7 +301,7 @@ export function CodeWorkspace({
         <Card title="Connect source control">
           <Empty icon={<Icon.Code size={28} />}>
             Steward reads your repository directly rather than keeping a copy of it, so the IDE needs a GitHub connection. Connect
-            one under <Link className="underline" href={`/app/c/${companyId}/integrations`}>Integrations</Link> with a token that can read and write the
+            one under <Link className="underline" href={`/app/c/${companyId}/integrations`}>{quiet ? "Connections" : "Integrations"}</Link> with a token that can read and write the
             repositories you want to edit, then come back.
           </Empty>
         </Card>

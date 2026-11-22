@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import { canStop, endingNote, frameSrc, isFollowingLive, preferredSession, sessionSummary, shownFrame, shortUrl, statusLabel, statusTone, stepLog } from "@/lib/browser";
+import { canStop, endingNote, frameSrc, isFollowingLive, isLive, preferredSession, sessionSummary, shownFrame, shortUrl, statusLabel, statusTone, stepLog } from "@/lib/browser";
 import type { BrowserFrameView, BrowserRunResult, BrowserSessionRead, BrowserSessionView, BrowserWorkspaceRead, StewardEvent } from "@/lib/types";
 import { useLiveEvents } from "@/lib/use-events";
 import { useToast } from "./feedback";
@@ -174,11 +174,11 @@ export function BrowserWorkspace({ companyId, initial, initialSession, quiet = f
             ? "This deployment has no browser, so nothing here can open a page. The sessions below are still readable."
             : "Ask an agent to look at a page and it will drive a real browser while you watch. Every action is a frame you can see, and you can stop it mid-flight."
         }
-        action={
+        action={(!quiet || (session && isLive(session))) ?
           <Pill tone={connected ? "ok" : "neutral"} title={connected ? "Live updates are arriving over the event stream" : "Reconnecting to the event stream"}>
             <span className={`dot ${connected ? "dot-live" : ""}`} aria-hidden="true" />
             {connected ? "Live" : "Reconnecting"}
-          </Pill>
+          </Pill> : null
         }
       />
 
