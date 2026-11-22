@@ -28,6 +28,8 @@ const BUILD_CRITICAL = [
   "apps/web/src/lib/server-transport.ts",
   // Site-wide metadata (canonical URL, Open Graph) rendered into the static shell.
   "apps/web/src/app/layout.tsx",
+  // The preview-only 3D landing story must not leak through a cached production build.
+  "apps/web/src/app/page.tsx",
 ];
 
 /** Variables Turborepo itself always hashes, so declaring them would be noise rather than a cache key. */
