@@ -11,10 +11,11 @@ describe("Quiet workflow state and rhythm", () => {
     expect(scheduleRhythm(null, "UTC")).toBe("No time set");
     expect(scheduleRhythm("not a cron", "UTC")).toBe("Schedule needs a valid time · UTC");
   });
-  it("offers Pause/Resume only after publication and while live targets exist", () => {
-    expect(canTogglePublishedWorkflow({ publishedAt: null, liveCount: 0 })).toBe(false);
-    expect(canTogglePublishedWorkflow({ publishedAt: "2026-01-01", liveCount: 0 })).toBe(false);
-    expect(canTogglePublishedWorkflow({ publishedAt: "2026-01-01", liveCount: 1 })).toBe(true);
+  it("keeps published work stoppable when an incomplete draft hides its live count", () => {
+    const incompleteDraft = { publishedAt: "2026-01-01", liveCount: 0, problems: [{ code: "agent_missing" }] };
+    expect(canTogglePublishedWorkflow({ publishedAt: null })).toBe(false);
+    expect(canTogglePublishedWorkflow(incompleteDraft)).toBe(true);
+    expect(canTogglePublishedWorkflow({ publishedAt: "2026-01-01" })).toBe(true);
     expect(canTogglePublishedWorkflow(undefined)).toBe(false);
   });
 });

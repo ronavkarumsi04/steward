@@ -12,6 +12,8 @@ export function scheduleRhythm(cron: string | null, timezone: string | null): st
   }
 }
 
-export function canTogglePublishedWorkflow(workflow: Pick<WorkflowView, "publishedAt" | "liveCount"> | undefined): boolean {
-  return Boolean(workflow?.publishedAt && workflow.liveCount > 0);
+export function canTogglePublishedWorkflow(workflow: Pick<WorkflowView, "publishedAt"> | undefined): boolean {
+  // An incomplete saved draft reports liveCount=0 even while its previously published work is still running.
+  // Publication, not the draft's comparison result, determines whether that work must remain stoppable.
+  return Boolean(workflow?.publishedAt);
 }
