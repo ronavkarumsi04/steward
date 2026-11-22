@@ -46,7 +46,7 @@ describe("Quiet depth boundaries", () => {
     get.mockRejectedValue(new Error("database secret"));
     const html = markup(await QuietKnowledge({ companyId: "north", api, locale: "en", tab: "memory" }));
     expect(html).toContain("could not be loaded");
-    expect(html).toContain("/companies/") === false;
+    expect(html).not.toContain("/companies/");
     expect(html).not.toContain("database secret");
     expect(html).not.toContain("No memories");
     expect(html).toContain("?tab=memory");
