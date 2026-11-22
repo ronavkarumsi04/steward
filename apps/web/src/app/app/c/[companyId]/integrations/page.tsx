@@ -1,16 +1,28 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { QuietToolsLoading } from "@/components/quiet-tools";
 import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
 import { serverApi } from "@/lib/server";
 import { IntegrationsPanel } from "@/components/integrations-panel";
 import { PageHeader } from "@/components/ui";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietConnections } from "@/components/quiet-tools-pages";
 
 export const metadata: Metadata = { title: "Integrations" };
 
-export default async function IntegrationsPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function IntegrationsPage(props: Parameters<typeof IntegrationsContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><IntegrationsContent {...props} /></Suspense>;
+  }
+  return IntegrationsContent(props);
+}
+
+async function IntegrationsContent({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams?: Promise<{ connected?: string; error?: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
   const overview = await api.get<import("@/lib/types").CompanyOverview>(`/companies/${companyId}`);
   const orgId = overview.company.organizationId;
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return <QuietConnections api={api} orgId={orgId} companyId={companyId} overview={overview} oauth={await searchParams} />;
   const [{ catalog }, { integrations }] = await Promise.all([
     api.get<{ catalog: IntegrationCatalogEntry[] }>("/integrations/catalog"),
     api.get<{ integrations: Integration[] }>(`/orgs/${orgId}/integrations?companyId=${companyId}`),

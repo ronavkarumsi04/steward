@@ -41,6 +41,7 @@ export function CodeWorkspace({
   initialRef,
   initialTree,
   initialBranches,
+  quiet = false,
 }: {
   companyId: string;
   initial: CodeWorkspaceRead;
@@ -48,6 +49,7 @@ export function CodeWorkspace({
   initialRef: string | null;
   initialTree: CodeTreeRead | null;
   initialBranches: CodeBranchesRead | null;
+  quiet?: boolean;
 }) {
   const toast = useToast();
   const [sessions, setSessions] = useState(initial.sessions);
@@ -86,7 +88,7 @@ export function CodeWorkspace({
     try {
       return await run();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : failure;
+      const message = !quiet && err instanceof ApiError ? err.message : failure;
       setError(message);
       toast("err", message);
       return null;

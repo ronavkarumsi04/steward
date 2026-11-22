@@ -14,10 +14,10 @@ export interface WaitlistEntry {
   status: "pending" | "admitted" | "registered";
 }
 
-export function AdminWaitlist({ entries }: { entries: WaitlistEntry[] }) {
+export function AdminWaitlist({ entries, quiet = false }: { entries: WaitlistEntry[]; quiet?: boolean }) {
   if (!entries.length) return <p className="empty-note">No one is on the waitlist yet.</p>;
   return (
-    <div className="overflow-x-auto border border-line bg-panel">
+    <div className={quiet ? "q-depth-table q-depth-waitlist" : "overflow-x-auto border border-line bg-panel"}>
       <table className="w-full text-left text-sm">
         <caption className="sr-only">Waitlist entries and admission controls</caption>
         <thead className="bg-panel-2">
@@ -59,11 +59,11 @@ function WaitlistRow({ entry }: { entry: WaitlistEntry }) {
   const status = admission ? "admitted" : entry.status;
   return (
     <tr className="border-b border-line align-top last:border-0">
-      <td className="px-4 py-4"><div className="font-semibold">{entry.name || "Unnamed founder"}</div><div className="break-all text-muted">{entry.email}</div></td>
-      <td className="max-w-xs px-4 py-4"><p className="whitespace-pre-wrap break-words">{entry.note || "No note"}</p><p className="mt-2 text-xs text-muted">Signup was {entry.reason}</p></td>
-      <td className="whitespace-nowrap px-4 py-4"><time dateTime={entry.createdAt}>{entry.createdAt.slice(0, 10)}</time></td>
-      <td className="px-4 py-4"><StatusPill status={status} /></td>
-      <td className="min-w-64 max-w-md px-4 py-4">
+      <td data-label="Founder" className="px-4 py-4"><div className="font-semibold">{entry.name || "Unnamed founder"}</div><div className="break-all text-muted">{entry.email}</div></td>
+      <td data-label="Context" className="max-w-xs px-4 py-4"><p className="whitespace-pre-wrap break-words">{entry.note || "No note"}</p><p className="mt-2 text-xs text-muted">Signup was {entry.reason}</p></td>
+      <td data-label="Joined" className="whitespace-nowrap px-4 py-4"><time dateTime={entry.createdAt}>{entry.createdAt.slice(0, 10)}</time></td>
+      <td data-label="Status" className="px-4 py-4"><StatusPill status={status} /></td>
+      <td data-label="Admission" className="min-w-64 max-w-md px-4 py-4">
         {status === "registered" ? <span className="text-muted">Account created</span> : <button type="button" className="btn btn-sm" onClick={admit} disabled={busy}>{busy ? "Admitting…" : status === "admitted" ? "Reissue link" : "Admit"}</button>}
         {status === "admitted" && <p className="mt-2 text-xs text-muted">Reissuing replaces the previous link.</p>}
         {admission && (

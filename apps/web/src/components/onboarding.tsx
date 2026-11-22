@@ -13,7 +13,7 @@ type Step = 1 | 2 | 3;
 
 const STAGES = ["idea", "prototype", "launched", "growing", "established"] as const;
 
-export function OnboardingWizard({ memberships, providersByOrg }: { memberships: Membership[]; providersByOrg: Record<string, ProviderCredential[]> }) {
+export function OnboardingWizard({ memberships, providersByOrg, providerErrors = [], quiet = false }: { memberships: Membership[]; providersByOrg: Record<string, ProviderCredential[]>; providerErrors?: string[]; quiet?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [orgId, setOrgId] = useState(memberships[0]?.organizationId ?? "");
@@ -28,6 +28,8 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
   const [busy, setBusy] = useState(false);
 
   const providers = providersByOrg[orgId] ?? [];
+  const providersUnavailable = quiet && providerErrors.includes(orgId);
+  const Heading = quiet ? "h2" : "h1";
 
   async function create() {
     setBusy(true);
@@ -70,7 +72,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
               />
               <span className={`flex items-center gap-1.5 text-xs ${state === "todo" ? "text-faint" : "text-fg"}`}>
                 {state === "done" ? <Icon.Check size={13} className="text-accent" /> : <span className="tnum">{n}.</span>}
-                <span className="hidden sm:inline">{t}</span>
+                <span className="hidden sm:inline">{quiet && n === 3 ? "Review company" : t}</span>
               </span>
             </li>
           );
@@ -80,7 +82,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
       {step === 1 && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">What are you building?</h1>
+            <Heading className="text-2xl font-semibold tracking-tight">What are you building?</Heading>
             <p className="mt-1 text-sm text-muted">Your agents read this first. Be concrete about the customer, the problem and what &ldquo;done&rdquo; looks like.</p>
           </div>
           {memberships.length > 1 && (
@@ -127,7 +129,7 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
       {step === 2 && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">How much should agents do on their own?</h1>
+            <Heading className="text-2xl font-semibold tracking-tight">How much should agents do on their own?</Heading>
             <p className="mt-1 text-sm text-muted">You can change this at any time. Critical actions always stop for approval.</p>
           </div>
           <fieldset className="space-y-2">
@@ -169,8 +171,8 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
       {step === 3 && (
         <div className="space-y-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Review &amp; launch</h1>
-            <p className="mt-1 text-sm text-muted">Nothing runs until you start a task or send a message.</p>
+            <Heading className="text-2xl font-semibold tracking-tight">{quiet ? "Review company" : "Review & launch"}</Heading>
+            <p className="mt-1 text-sm text-muted">{quiet ? "Creating this company also requests a launch kit from your Chief of Staff, using the autonomy and provider configuration below." : "Nothing runs until you start a task or send a message."}</p>
           </div>
           <dl className="card-inset nb-left-blue grid gap-x-6 gap-y-3 text-sm md:grid-cols-[9rem_1fr]">
             <dt className="text-muted">Company</dt><dd className="font-medium">{name}</dd>
@@ -183,12 +185,12 @@ export function OnboardingWizard({ memberships, providersByOrg }: { memberships:
           <div className={`nb-panel-flat flex items-start gap-2.5 px-3 py-2.5 text-sm ${providers.length ? "nb-left-green text-ok" : "nb-left-yellow text-warn"}`}>
             {providers.length ? <Icon.Check size={16} className="mt-0.5 shrink-0" /> : <Icon.Providers size={16} className="mt-0.5 shrink-0" />}
             <span>
-              {providers.length
+              {providersUnavailable ? "Provider configuration could not be loaded. Review AI providers in this organization before starting work." : providers.length
                 ? `${providers.length} AI provider${providers.length > 1 ? "s" : ""} configured for this organization.`
                 : "No AI provider configured yet. Your company will be created with default agents, policies and budgets, but runs will fail until you add a provider under Providers."}
             </span>
           </div>
-          <p className="hint">Creating a company seeds a Chief of Staff orchestrator plus research, engineering, marketing, sales, support and finance agents, default per-dimension policies and a conservative monthly budget. Nothing runs until you start a task or send a message.</p>
+          <p className="hint">Creating a company seeds a Chief of Staff orchestrator plus research, engineering, marketing, sales, support and finance agents, default per-dimension policies and a conservative monthly budget. {quiet ? "The launch-kit request may start work immediately. If the provider or workflow service is unavailable, your company is still created; check Overview before requesting it again." : "Nothing runs until you start a task or send a message."}</p>
           {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
           <div className="flex justify-between pt-2">
             <button className="btn" onClick={() => setStep(2)} disabled={busy}>Back</button>

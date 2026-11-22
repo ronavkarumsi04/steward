@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ApiError, browserApi } from "@/lib/api";
 import type { GraphClaimForm, GraphEdgeView, GraphEntityForm, GraphEntityView, GraphNeighborhoodView, GraphNodeView, GraphRead } from "@/lib/types";
-import { aliasLine, bodyFromForm, confidenceLabel, confidenceTone, edgeProvenance, emptyClaim, emptyForm, formFromEntity, groupEdges, groupNodes, kindLabel, linksSentence, nodeHref, nodeKey, nodesOfKind, orderClaims, reachableKinds, relationsForKind, typeLabel } from "@/lib/graph";
+import { aliasLine, bodyFromForm, confidenceLabel, confidenceTone, edgeProvenance, emptyClaim, emptyForm, formFromEntity, groupEdges, groupNodes, kindLabel, linksSentence, nodeHref, nodeKey, nodeSubtitle, nodesOfKind, orderClaims, reachableKinds, relationsForKind, typeLabel } from "@/lib/graph";
 import { Ago, Card, Empty, Pill, Spinner } from "./ui";
 
 /**
@@ -28,7 +28,7 @@ import { Ago, Card, Empty, Pill, Spinner } from "./ui";
  * relations live in `@steward/core`, and a second opinion in the browser is how a surface starts disagreeing with
  * the server about what a company is allowed to know.
  */
-export function KnowledgeGraph({ companyId, initial }: { companyId: string; initial: GraphRead }) {
+export function KnowledgeGraph({ companyId, initial, quiet = false }: { companyId: string; initial: GraphRead; quiet?: boolean }) {
   const [data, setData] = useState(initial);
   const [selected, setSelected] = useState<GraphNodeView | null>(null);
   const [hood, setHood] = useState<GraphNeighborhoodView | null>(null);
@@ -202,7 +202,7 @@ export function KnowledgeGraph({ companyId, initial }: { companyId: string; init
               </Pill>
             </span>
           ))}
-          <span data-testid="graph-links">{linksSentence(overview)}</span>
+          <span data-testid="graph-links" className={quiet ? "q-graph-summary" : undefined}>{linksSentence(overview)}</span>
         </div>
         {data.canRecord && (
           <button
@@ -333,11 +333,11 @@ export function KnowledgeGraph({ companyId, initial }: { companyId: string; init
                               }
                             >
                               <span className="block truncate font-medium">{node.label}</span>
-                              <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                              {quiet ? (node.entityType || nodeSubtitle(overview, node)) && <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">{[node.entityType ? typeLabel(overview, node.entityType) : null, nodeSubtitle(overview, node)].filter(Boolean).join(" · ")}</span> : <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
                                 <span>{kindLabel(overview, node.kind)}</span>
                                 {node.entityType && <span>· {typeLabel(overview, node.entityType)}</span>}
                                 {node.sublabel && <span>· {node.sublabel}</span>}
-                              </span>
+                              </span>}
                             </button>
                           </li>
                         );
@@ -363,6 +363,7 @@ export function KnowledgeGraph({ companyId, initial }: { companyId: string; init
             </Card>
           ) : (
             <Neighborhood
+              quiet={quiet}
               companyId={companyId}
               hood={hood}
               known={known}
@@ -503,6 +504,7 @@ function EntityForm({
 }
 
 function Neighborhood({
+  quiet,
   companyId,
   hood,
   known,
@@ -524,6 +526,7 @@ function Neighborhood({
   onSubmitClaim,
   onSubmitMerge,
 }: {
+  quiet: boolean;
   companyId: string;
   hood: GraphNeighborhoodView;
   known: GraphEntityView | null;
@@ -566,7 +569,7 @@ function Neighborhood({
               {node.entityType && <Pill tone="accent">{typeLabel(overview, node.entityType)}</Pill>}
               {known && <Pill tone={confidenceTone(known.confidence)}>{confidenceLabel(known.confidence)}</Pill>}
             </div>
-            <p className="mt-1 text-sm text-muted">{node.sublabel}</p>
+            {(!quiet || nodeSubtitle(overview, node)) && <p className="mt-1 text-sm text-muted">{quiet ? nodeSubtitle(overview, node) : node.sublabel}</p>}
             {known && (
               <div data-testid="graph-known" className="mt-2 space-y-1 text-[11px] text-muted">
                 <p>{aliasLine(known)}</p>

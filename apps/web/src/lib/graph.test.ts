@@ -8,7 +8,7 @@
  * would be refused.
  */
 import { describe, expect, it } from "vitest";
-import { aliasLine, attributesText, bodyFromForm, confidenceLabel, confidenceTone, edgeProvenance, emptyClaim, formFromEntity, groupEdges, groupNodes, kindLabel, linksSentence, nodeHref, nodeKey, nodesOfKind, orderClaims, parseAliases, reachableKinds, relationsForKind, typeLabel } from "./graph";
+import { aliasLine, attributesText, bodyFromForm, confidenceLabel, confidenceTone, edgeProvenance, emptyClaim, formFromEntity, groupEdges, groupNodes, kindLabel, linksSentence, nodeHref, nodeKey, nodeSubtitle, nodesOfKind, orderClaims, parseAliases, reachableKinds, relationsForKind, typeLabel } from "./graph";
 import type { GraphEdgeView, GraphEntityView, GraphNodeView, GraphOverviewView } from "./types";
 
 const KINDS = ["project", "task", "goal", "run", "agent", "decision", "document", "memory", "artifact", "signal", "contact", "lead", "server", "entity"];
@@ -16,6 +16,14 @@ const KIND_LABELS: Record<string, string> = { project: "Project", task: "Task", 
 const TYPE_LABELS: Record<string, string> = { company: "Company", person: "Person", competitor: "Competitor" };
 
 const node = (kind: string, id: string, label = id, sublabel = "todo"): GraphNodeView => ({ kind, id, label, sublabel, at: null });
+
+it("omits repeated type subtitles without losing meaningful status or source metadata", () => {
+  expect(nodeSubtitle(overview(), node("document", "d1", "Brief", "document"))).toBeNull();
+  expect(nodeSubtitle(overview(), node("document", "d1", "Brief", "DOCUMENT"))).toBeNull();
+  expect(nodeSubtitle(overview(), { ...node("entity", "e1", "Ada", "Person"), entityType: "person" })).toBeNull();
+  expect(nodeSubtitle(overview(), node("task", "t1", "Review", "in_progress"))).toBe("in_progress");
+  expect(nodeSubtitle(overview(), node("document", "d1", "Brief", "/research"))).toBe("/research");
+});
 
 const edge = (over: Partial<GraphEdgeView> = {}): GraphEdgeView => ({
   id: "e1",

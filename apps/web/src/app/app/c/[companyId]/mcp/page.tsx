@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { McpMarketplaceRead } from "@/lib/types";
 import { McpMarketplace } from "@/components/mcp-marketplace";
 import { PageHeader } from "@/components/ui";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietToolsFrame, QuietToolsLoading, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
 
 export const metadata: Metadata = { title: "Marketplace" };
 
@@ -16,9 +19,22 @@ export const metadata: Metadata = { title: "Marketplace" };
  * and the closed vocabulary the API will accept. A company whose API cannot be reached gets a 404 from the same
  * read the rest of the app uses — the honest answer, since this page is the servers.
  */
-export default async function McpPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function McpPage(props: Parameters<typeof McpContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><McpContent {...props} /></Suspense>;
+  }
+  return McpContent(props);
+}
+
+async function McpContent({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    const read = await readTools(() => api.get<McpMarketplaceRead>(`/companies/${companyId}/mcp`));
+    return <QuietToolsFrame title="MCP servers" description="Bring your own tools. Inspect what a server offers, then grant only the access each agent needs." scope="Installed for this company only. Installation does not grant agent access.">
+      {read.data ? <><ToolsPermission allowed={read.data.canManage} action="install servers and change tool access" /><McpMarketplace quiet companyId={companyId} initial={read.data} /></> : <ToolsReadError error={read.error} subject="MCP servers" href={`/app/c/${companyId}/mcp`} />}
+    </QuietToolsFrame>;
+  }
   const marketplace = await tryApi(() => api.get<McpMarketplaceRead>(`/companies/${companyId}/mcp`));
   if (!marketplace) notFound();
 

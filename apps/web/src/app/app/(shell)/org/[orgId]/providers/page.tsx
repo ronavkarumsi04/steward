@@ -1,17 +1,33 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { QuietToolsLoading } from "@/components/quiet-tools";
 import { headers } from "next/headers";
 import { requireMe, serverApi } from "@/lib/server";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
 import { CompanionPanel } from "@/components/companion-panel";
 import { ProvidersPanel } from "@/components/providers-panel";
 import { OrgHeader } from "@/components/org-header";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietProviders } from "@/components/quiet-tools-pages";
 
 export const metadata: Metadata = { title: "Providers" };
 
-export default async function ProvidersPage({ params }: { params: Promise<{ orgId: string }> }) {
+export default async function ProvidersPage(props: Parameters<typeof ProvidersContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><ProvidersContent {...props} /></Suspense>;
+  }
+  return ProvidersContent(props);
+}
+
+async function ProvidersContent({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const [me, api, h] = await Promise.all([requireMe(), serverApi(), headers()]);
   const membership = me.memberships.find((m) => m.organizationId === orgId);
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    return <QuietProviders api={api} orgId={orgId} membership={membership} serverUrl={process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? `${proto}://${host}/api`} />;
+  }
   const [{ types }, { providers }, { models }, { usage }, { devices }] = await Promise.all([
     api.get<{ types: ProviderType[] }>("/providers/types"),
     api.get<{ providers: ProviderCredential[] }>(`/orgs/${orgId}/providers`),
