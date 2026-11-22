@@ -552,3 +552,4 @@ export * from "./site.js";
 export * from "./brand.js";
 export * from "./overclock.js";
 export * from "./launch-kit.js";
+export * from "./signup.js";

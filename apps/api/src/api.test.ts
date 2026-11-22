@@ -73,7 +73,8 @@ describe("capped signup and waitlist", () => {
     await signup.join({ email: linkedEmail }, "capped");
     await signup.join({ email: unrelatedEmail }, "closed");
     const linked = await entry(linkedEmail);
-    await signup.admit({ id: linked.id }, null);
+    const admitted = await signup.admit({ id: linked.id }, null);
+    await signup.claim(admitted.token, linkedEmail);
     await signup.complete(linked.id, owner.userId);
     const exported = await privacy.exportUser(owner.userId);
     expect(exported.data.waitlist_entries).toHaveLength(2);

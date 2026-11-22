@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
-import { z } from "zod";
 import { SignupService, renderEmail } from "@steward/core";
+import { WaitlistJoin } from "@steward/schema";
 import { HttpError, param, requireUser, type AppEnv } from "../context.js";
 import { clientIp, rateLimit } from "../middleware.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
@@ -8,7 +8,7 @@ import { defineRoute, type RouteRegistry } from "../route.js";
 export function registerWaitlistRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   app.use("/waitlist", rateLimit({ capacity: 5, refillPerSec: 5 / 300, key: (c) => clientIp(c) }));
 
-  defineRoute(app, reg, { method: "post", path: "/waitlist", tag: "auth", summary: "Join the signup waitlist", auth: "public", body: z.object({ email: z.string().trim().pipe(z.email()), name: z.string().trim().max(120).optional(), note: z.string().trim().max(500).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/waitlist", tag: "auth", summary: "Join the signup waitlist", auth: "public", body: WaitlistJoin }, async (c, { body }) => {
     const deps = c.get("deps");
     const signup = new SignupService(deps.core.db);
     const state = await signup.state(deps.core.config);
