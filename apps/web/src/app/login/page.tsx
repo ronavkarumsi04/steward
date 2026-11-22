@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth-form";
 import { getMeOptional } from "@/lib/server";
+import { quietPublicEnabled } from "@/lib/public-design";
 
 export const metadata = { title: "Sign in" };
 
@@ -12,7 +13,7 @@ export default async function LoginPage() {
   return (
     <AuthFrame>
       <Suspense>
-        <AuthForm mode="login" />
+        <AuthForm mode="login" quiet={quietPublicEnabled(process.env)} />
       </Suspense>
     </AuthFrame>
   );

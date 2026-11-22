@@ -30,7 +30,7 @@ export default async function WorkflowsPage({ params }: { params: Promise<{ comp
       <PageHeader
         eyebrow="Standing work"
         title="Workflows"
-        description="What this company does by itself: when something is recorded or a time comes round, which agent does what, and how often. A workflow is a drawing of the rules and schedules the rest of Steward runs — nothing here runs until it is published."
+        description={quietSpecialistEnabled() ? "Choose when work starts, who does it and the limits. Save a drawing to plan it; publish when you’re ready for it to run." : "What this company does by itself: when something is recorded or a time comes round, which agent does what, and how often. A workflow is a drawing of the rules and schedules the rest of Steward runs — nothing here runs until it is published."}
       />
       <WorkflowStudio companyId={companyId} initial={workspace} />
     </div>

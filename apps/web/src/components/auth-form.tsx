@@ -20,7 +20,7 @@ export interface RequiredAgreement {
   href: string;
 }
 
-export function AuthForm({ mode, invite, waitlistToken, agreements = [] }: { mode: "login" | "register"; invite?: InviteContext; waitlistToken?: string; agreements?: RequiredAgreement[] }) {
+export function AuthForm({ mode, invite, waitlistToken, agreements = [], quiet = false }: { mode: "login" | "register"; invite?: InviteContext; waitlistToken?: string; agreements?: RequiredAgreement[]; quiet?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +142,7 @@ export function AuthForm({ mode, invite, waitlistToken, agreements = [] }: { mod
       </button>
       <p className="text-center text-sm text-muted">
         {mode === "login" ? (
-          <>No account? <Link className="font-medium text-accent hover:underline" href="/register">Register</Link></>
+          <>{quiet ? "Need access?" : "No account?"} <Link className="font-medium text-accent hover:underline" href="/register">{quiet ? "Request access" : "Register"}</Link></>
         ) : (
           <>Already have an account? <Link className="font-medium text-accent hover:underline" href={invite ? `/login?next=${encodeURIComponent(`/invite/${invite.token}`)}` : "/login"}>Sign in</Link></>
         )}
