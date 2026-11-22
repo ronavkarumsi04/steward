@@ -195,10 +195,10 @@ back to 2-second polling (it is built for that — see `streamEvents` in `apps/a
 SSE connection is closed when the function hits its duration limit and reconnects from its last event
 id, and agent runs need a real Temporal endpoint, which this mode does not provide.
 
-#### What this repository's own hosted instance sets
+#### Historical embedded deployment (not current production)
 
-The deployment this repository runs (Vercel project `steward`, team `novara-exosystems-projects`) is this mode,
-for Production only: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `steward-prod`, reached through the
+Before the external-API topology described in §1.2, the hosted instance (Vercel project `steward`, team
+`novara-exosystems-projects`) used this embedded configuration: `EMBEDDED_API=true`, `DATABASE_URL` (Supabase project `steward-prod`, reached through the
 `aws-0-…` pooler with `uselibpqcompat=true&sslmode=require`), `STEWARD_MASTER_KEY`, `SESSION_SECRET`,
 `APP_URL=https://steward-eosin.vercel.app`, `DATABASE_POOL_MAX=2`, `RUN_MIGRATIONS_ON_START=false`,
 `TEMPORAL_DISABLED=true`, `BROWSER_PROVIDER=none`, `TRUST_PROXY=true`. Migrations are applied from a checkout with the same
