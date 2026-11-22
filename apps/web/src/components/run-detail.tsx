@@ -88,7 +88,7 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
 
   const { run, steps, aiCalls, toolCalls, artifacts, approvals } = detail;
   const agent = agents.find((a) => a.id === run.agentId);
-  const pending = approvals.filter((a) => a.status === "pending");
+  const pending = approvals.filter((a) => a.status === "pending" && !TERMINAL.has(run.status));
   const modelCostUsd = aiCalls.reduce((sum, call) => sum + Number(call.costUsd || 0), 0);
   const modelErrors = aiCalls.filter((call) => call.status === "error").length;
   const attempts = modelAttempts(aiCalls);
@@ -248,11 +248,11 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
           </Card>
           {run.plan && <Card title="Plan" className="nb-left-blue"><Json value={run.plan} /></Card>}
           {run.result && <Card title="Result" className="nb-left-green"><Json value={run.result} /></Card>}
-          {approvals.filter((a) => a.status !== "pending").length > 0 && (
+          {approvals.filter((a) => a.status !== "pending" || TERMINAL.has(run.status)).length > 0 && (
             <Card title="Approval history" className="nb-left-yellow">
               <ul className="space-y-1 text-sm">
-                {approvals.filter((a) => a.status !== "pending").map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-2"><span className="truncate">{a.action}</span><StatusPill status={a.status} /></li>
+                {approvals.filter((a) => a.status !== "pending" || TERMINAL.has(run.status)).map((a) => (
+                  <li key={a.id} className="flex items-center justify-between gap-2"><span className="truncate">{a.action}</span>{a.status === "cancelled" || (a.status === "pending" && run.status === "cancelled") ? <span>Cancelled — the run was cancelled before a decision</span> : a.status === "pending" && TERMINAL.has(run.status) ? <span>Closed — the run has finished</span> : <StatusPill status={a.status} />}</li>
                 ))}
               </ul>
             </Card>

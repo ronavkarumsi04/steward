@@ -36,8 +36,8 @@ export default async function ApprovalsPage({ params, searchParams }: { params: 
         description={t(locale, "approvals.description")}
         action={
           <nav aria-label={t(locale, "approvals.filter")} className="segmented">
-            {["pending", "approved", "denied", "expired"].map((s) => (
-              <Link key={s} href={`/app/c/${companyId}/approvals?status=${s}`} aria-current={s === status ? "page" : undefined} className="capitalize">{t(locale, `approvals.${s}` as MessageKey)}</Link>
+            {["pending", "approved", "denied", "expired", "cancelled"].map((s) => (
+              <Link key={s} href={`/app/c/${companyId}/approvals?status=${s}`} aria-current={s === status ? "page" : undefined} className="capitalize">{s === "cancelled" ? "Cancelled" : t(locale, `approvals.${s}` as MessageKey)}</Link>
             ))}
           </nav>
         }

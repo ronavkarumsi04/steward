@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Approval } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
+import { ApprovalsList } from "./approvals-list";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 
@@ -14,6 +15,22 @@ const base: Approval = {
 };
 
 describe("ApprovalCard for an outbox action", () => {
+  it("keeps stale pending requests closed in the legacy approvals list", () => {
+    const html = renderToStaticMarkup(createElement(ApprovalsList, { companyId: "c1", approvals: [base], runsById: { r1: { id: "r1", status: "cancelled" } } }));
+    expect(html).toContain("the run was cancelled before a decision");
+    expect(html).not.toMatch(/<button[^>]*>Approve/);
+  });
+  it.each(["cancelled", "failed", "succeeded"] as const)("closes stale pending approvals when the run is %s", (status) => {
+    const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: base, run: { id: "r1", status } }));
+    expect(html).not.toMatch(/<button[^>]*>Approve/);
+    expect(html).not.toMatch(/<button[^>]*>Decline/);
+    expect(html).toContain("closed");
+  });
+  it("renders a cancelled approval as closed", () => {
+    const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", approval: { ...base, status: "cancelled" } }));
+    expect(html).toContain("the run was cancelled before a decision");
+    expect(html).not.toMatch(/<button[^>]*>Approve/);
+  });
   const post: Approval = { ...base, action: "social.publish", dimension: "social_publish", affectedSystem: "linkedin", reason: "social_publish actions require approval at autonomy level 2", payload: { network: "linkedin", text: "Mixed delimiters. Broken encoding.\n\nMost tools guess." } };
 
   it("shows the post as text with its channel and length, and folds the JSON and blast radius away", () => {

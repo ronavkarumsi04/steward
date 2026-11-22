@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Approval, CompanyOverview, Run } from "@/lib/types";
 import { decisionCopy } from "@/lib/decision-copy";
-import { approvalSnapshot, isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
+import { approvalSnapshot, isDecisionOpen, isRunClosed, recordedUsd } from "@/lib/decision-semantics";
 import { diffPayload } from "@/lib/approval-review";
 import { isOutboxAction, outboxItem } from "@/lib/outbox-item";
 import { statusLabel } from "@/lib/i18n";
@@ -36,7 +36,9 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
   const actions = useRef<HTMLElement>(null);
   const companyId = overview.company.id;
   const path = `/companies/${companyId}/approvals/${state.id}`;
-  const pending = state.status === "pending";
+  const runClosed = isRunClosed(run);
+  const cancelled = state.status === "cancelled" || (state.status === "pending" && run?.status === "cancelled");
+  const pending = state.status === "pending" && !runClosed;
   const canDecide = overview.role !== "viewer" && !lostPermission;
   const persistent = pending && canDecide;
   useBarHeight(actions, "--quiet-action-height", persistent);
@@ -59,7 +61,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
   const savedEdit = state.status === "approved" && state.resolution?.editedPayload;
   const payload = savedEdit && typeof savedEdit === "object" && !Array.isArray(savedEdit) ? savedEdit as Record<string, unknown> : state.payload;
   const message = isOutboxAction(state.action) ? outboxItem({ ...state, payload }) : null;
-  const open = isDecisionOpen(state, now);
+  const open = isDecisionOpen(state, now, run);
   // Company settings accept free text. A legacy/unsupported zone must not block a decision.
   const timeZone = useMemo(() => {
     try { return new Intl.DateTimeFormat(locale, { timeZone: overview.company.timezone }).resolvedOptions().timeZone; }
@@ -89,7 +91,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
 
   async function decide(status: "approved" | "denied") {
     // Ref lock closes the same-tick double-click window before React commits disabled controls.
-    if (lock.current || !canDecide || needsReview || !isDecisionOpen(state) || (status === "approved" && parsed.invalid)) return;
+    if (lock.current || !canDecide || needsReview || !isDecisionOpen(state, Date.now(), run) || (status === "approved" && parsed.invalid)) return;
     lock.current = true;
     setBusy(true);
     setError(null);
@@ -118,7 +120,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
     } finally { lock.current = false; setBusy(false); }
   }
 
-  const statusText = state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
+  const statusText = cancelled ? "Cancelled — the run was cancelled before a decision" : state.status === "pending" && runClosed ? "Closed — the run has finished" : state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
   const terminalRunMessage = run?.status === "failed" ? c.executionFailed : run?.status === "succeeded" ? c.executionSucceeded : run?.status === "cancelled" ? c.executionCancelled : null;
   const decided = !pending;
   const decider = members.find((member) => member.userId === state.resolvedBy);
@@ -127,10 +129,10 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
     <Link href={`/app/c/${companyId}/approvals`} className="q-link"><Icon.ChevronRight size={14} className="rotate-180" />{c.back}</Link>
     <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{statusText}</span></header>
     {(decided || error || !canDecide || !open) && <section className="q-outcome" aria-labelledby="q-outcome-heading">
-      <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? `${c.recorded} · ${statusText}` : c.review}</h2>
-      {decided && <><p>{c.outcome}</p><dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
+      <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? cancelled || (runClosed && state.status === "pending") ? statusText : `${c.recorded} · ${statusText}` : c.review}</h2>
+      {decided && <>{!cancelled && !(runClosed && state.status === "pending") && <p>{c.outcome}</p>}<dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
         {typeof state.resolution?.note === "string" && state.resolution.note && <p>{state.resolution.note}</p>}
-        <p role="status">{state.signalDelivered === false ? c.deliveryFailed : state.signalDelivered === true ? c.delivered : state.workflowId === null ? c.recordOnly : c.deliveryUnknown}</p>
+        {!cancelled && !(runClosed && state.status === "pending") && <p role="status">{state.signalDelivered === false ? c.deliveryFailed : state.signalDelivered === true ? c.delivered : state.workflowId === null ? c.recordOnly : c.deliveryUnknown}</p>}
         <Link className="q-link" href={`/app/c/${companyId}/approvals?status=history`}>{c.history}</Link></>}
       {pending && !canDecide && <p>{c.readOnly}</p>}
       {pending && !open && <p>{c.expired}</p>}

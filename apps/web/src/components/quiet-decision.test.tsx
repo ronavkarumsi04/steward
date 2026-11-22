@@ -4,12 +4,30 @@ import { describe, expect, it, vi } from "vitest";
 import type { Approval, CompanyOverview } from "@/lib/types";
 import { QuietApprovalDetail } from "./quiet-approval-detail";
 import { QuietOverview } from "./quiet-overview";
+import { QuietApprovals } from "./quiet-approvals";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 const approval: Approval = { id: "approval-1", action: "email.send", reason: "Please review this exact draft", payload: { to: "review@example.com", text: "Review draft" }, risk: "HIGH", dimension: "email_send", affectedSystem: "test-email-account", estimatedCostUsd: "0", runId: null, taskId: null, agentId: null, alternatives: [], status: "pending", resolvedAt: null, resolvedBy: null, resolution: null, createdAt: "2026-01-01T00:00:00Z", expiresAt: "2099-01-01T00:00:00Z", workflowId: null };
 const overview = { company: { id: "company-1", name: "Test workspace", organizationId: "org-1", autonomyLevel: 1, timezone: "UTC" }, role: "owner", agents: [], budgets: [], pendingApprovals: 1 } as unknown as CompanyOverview;
 
 describe("Quiet decision surfaces", () => {
+  it("labels cancelled requests in approval history", async () => {
+    const get = vi.fn(async () => ({ approvals: [{ ...approval, status: "cancelled" }] }));
+    const html = renderToStaticMarkup(await QuietApprovals({ companyId: "company-1", status: "cancelled", api: { get } as never, locale: "en" }));
+    expect(html).toContain("Cancelled — the run was cancelled before a decision");
+    expect(html).not.toContain(">Approve action</button>");
+  });
+  it("renders a cancelled approval as closed", () => {
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, status: "cancelled" }, overview, run: null }));
+    expect(html).toContain("the run was cancelled before a decision");
+    expect(html).not.toContain('data-persistent="true"');
+    expect(html).not.toContain(">Approve action</button>");
+  });
+  it("closes a stale pending approval when its run is cancelled", () => {
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval, overview, run: { id: "r1", status: "cancelled" } as never }));
+    expect(html).toContain("the run was cancelled before a decision");
+    expect(html).not.toContain('data-persistent="true"');
+  });
   it("keeps the exact recipient, payload, scope and zero estimate available before deciding", () => {
     const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval, overview, run: null }));
     for (const fact of ["review@example.com", "Review draft", "email_send", "test-email-account", "$0.00", "Approve action", "Decline", "not a cap or a charge"]) expect(html).toContain(fact);
