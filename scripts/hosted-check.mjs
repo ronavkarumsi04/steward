@@ -1,24 +1,16 @@
 #!/usr/bin/env node
 /**
- * The hosted deployment, checked from the outside: the product, the API served by the same deployment, and
- * which commit that deployment is running.
+ * Checks the hosted product, web build, same-origin API and (when required) execution readiness.
  *
- *   pnpm hosted:check                       # BASE=… EXPECT=auto|any|<sha> to point it elsewhere
- *
- * `EXPECT=auto` (the default) compares the commit the deployment reports against this checkout's HEAD,
- * because that is the fact nothing outside could see: every check was green while the hosted instance
- * served a five-day-old build, and the difference only showed up by hand. `EXPECT=any` checks that it is up
- * without claiming to know which commit should be there — for a deliberately older deployment, or a
- * checkout without git. Read-only: no account, no token, no state written anywhere.
- *
- * Node rather than bash+python: this has to run on the machines the repository is worked on, and
- * `python3` on Windows is a Windows Store stub that exits non-zero rather than parsing the JSON, which
- * turns every field into "?" and every check into a lie. Node 24 is a prerequisite of the repo.
+ * EXPECT=auto compares both components with this checkout's HEAD. EXPECT_API=<sha> additionally
+ * pins the API to an approved commit. EXPECT=any skips comparison with the release, but still
+ * requires identifiable releases and checks an API pin if provided. No account or token required.
  */
 import { execFileSync } from "node:child_process";
 
 const BASE = (process.env.BASE ?? "https://steward-eosin.vercel.app").replace(/\/$/, "");
 const EXPECT = process.env.EXPECT ?? "auto";
+const EXPECT_API = process.env.EXPECT_API?.trim() || null;
 const REQUIRE_EXECUTIONS = process.env.REQUIRE_EXECUTIONS === "1";
 
 let pass = 0;
@@ -57,29 +49,55 @@ async function request(path, init) {
 const get = (path) => request(path);
 const post = (path, body) => request(path, { method: "POST", headers: { "content-type": "application/json" }, body });
 
-/**
- * The files the commits between two revisions changed, when every one of them is a file no build reads.
- *
- * A Vercel project answers this question for itself before every build: `ignoreCommand` in
- * `apps/web/vercel.json` is `npx turbo-ignore`, so a merge that touches nothing the web app (or its
- * dependencies) consumes is not deployed at all — Vercel cancels it with `ignored-build-step`. That makes
- * "the deployment is not HEAD" a normal, correct state after a docs-only merge, and calling it drift would
- * leave this check red after every such merge, which is how a check stops being read.
- *
- * This is the conservative half of that rule and nothing more: docs, workflows and helper scripts, and
- * markdown cannot change what is served; anything else is treated as if it could. Being wrong here means
- * complaining about a deployment that was in fact current, never staying quiet about one that is not.
- */
-function changedSince(from, to) {
+const isSha = (sha) => typeof sha === "string" && /^[0-9a-f]{7,40}$/.test(sha);
+const short = (sha) => sha.slice(0, 7);
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+function resolveCommit(rev) {
   try {
-    const files = execFileSync("git", ["diff", "--name-only", `${from}..${to}`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
-    if (files.length === 0) return { kind: "same", files };
-    const unread = files.filter((f) => /^(docs|\.github|scripts)\//.test(f) || /\.md$/.test(f));
-    return { kind: unread.length === files.length ? "unread" : "relevant", files };
+    const commit = git("rev-parse", "--verify", "--end-of-options", `${rev}^{commit}`).trim();
+    return rev === "HEAD" || commit.startsWith(rev) ? commit : null;
   } catch {
-    // The revision is not in this checkout (a shallow clone, or a deployment built from somewhere else), so
-    // the question cannot be answered here; the caller says that instead of assuming either way.
-    return { kind: "unknown", files: [] };
+    return null;
+  }
+}
+
+const nonBuild = (file) => /^(docs|\.github|scripts)\//.test(file) || /^[^/]+\.md$/.test(file);
+// The API and worker build their workspace dependency graphs, not the web app.
+const nonBackend = (file) => nonBuild(file) || file.startsWith("apps/web/") || file === "infra/docker/web.Dockerfile";
+
+function checkRelease(label, reported, expected, irrelevant, verdict, pin = null) {
+  if (!isSha(reported)) {
+    bad(`${label} is unknown or missing`);
+    return;
+  }
+  const actual = EXPECT === "any" && pin === null ? null : resolveCommit(reported);
+  if (pin !== null && (!actual || !isSha(pin) || resolveCommit(pin) !== actual)) {
+    bad(`${label} ${short(reported)} does not match a known, approved API commit (EXPECT_API=${pin})`);
+    return;
+  }
+  if (EXPECT === "any") {
+    ok(`${label} ${short(reported)} (not compared with the release)`);
+    return;
+  }
+  if (!actual || !expected) {
+    bad(`${label} ${short(reported)} cannot be compared: release or reported commit is not in this checkout`);
+    return;
+  }
+  try {
+    if (actual !== expected) {
+      git("merge-base", "--is-ancestor", actual, expected);
+      // A rename out of a backend-owned path must still count as a deletion there.
+      const changes = git("diff", "--no-renames", "--name-only", "-z", actual, expected, "--")
+        .split("\0").filter((file) => file && !irrelevant(file));
+      if (changes.length) {
+        bad(`${label} ${short(actual)} differs from ${short(expected)} in build inputs`, changes.slice(0, 4).join(", "));
+        return;
+      }
+    }
+    ok(`${label} ${short(actual)} is ${verdict}${actual === expected ? "" : ` (build inputs unchanged through ${short(expected)})`}`);
+  } catch {
+    bad(`${label} ${short(actual)} is not a verifiable ancestor of ${short(expected)}`);
   }
 }
 
@@ -99,7 +117,17 @@ if (terms.status === 200) {
   bad(`GET /legal/terms -> HTTP ${terms.status}`, terms.body);
 }
 
-step("the API this same deployment serves");
+step("web release identity");
+
+const expected = EXPECT === "auto" ? resolveCommit("HEAD") : isSha(EXPECT) ? resolveCommit(EXPECT) : null;
+const web = await get("/web-version");
+if (web.status === 200) {
+  checkRelease("web build", web.json?.commit, expected, nonBuild, "current");
+} else {
+  bad(`web build identity -> GET /web-version HTTP ${web.status}`);
+}
+
+step("the same-origin API");
 
 const legal = await get("/api/v1/legal/documents");
 const documents = Array.isArray(legal.json?.documents) ? legal.json.documents : [];
@@ -128,69 +156,22 @@ if (login.status === 401 && loginCode === "invalid_credentials") {
   bad(`POST /api/v1/auth/login -> HTTP ${login.status} (${loginCode ?? "no error code"})`, login.body);
 }
 
-step("which commit is running");
-
 const health = await get("/health");
 if (health.status === 200 && health.json?.ok === true && health.json?.db === "ok") {
-  ok("GET /health -> ok, db ok");
+  ok("API health -> GET /health, db ok");
+  checkRelease("API commit", health.json.commit, expected, nonBackend, "compatible", EXPECT_API);
 } else {
-  bad(`GET /health -> HTTP ${health.status} (ok: ${health.json?.ok}, db: ${health.json?.db})`, health.body);
-}
-
-const reported = typeof health.json?.commit === "string" ? health.json.commit : null;
-const expected =
-  EXPECT === "auto"
-    ? (() => {
-        try {
-          return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        } catch {
-          return null;
-        }
-      })()
-    : EXPECT;
-const short = (sha) => String(sha ?? "").trim().slice(0, 7).toLowerCase();
-
-if (health.status !== 200 || health.json === null) {
-  // The health answer itself is already reported above. Saying "no commit" here as well would blame the
-  // build for an answer that never arrived — a deployment behind Vercel Authentication answers 302, and its
-  // HTML would otherwise be read as an old build with an honest-looking second failure on top.
-  bad("which commit is running cannot be checked: /health did not answer with JSON");
-} else if (reported === null) {
-  bad("the deployment reports no commit: it was built before /health carried one, so which commit is being served cannot be checked");
-} else if (EXPECT === "any") {
-  ok(`the deployment is running ${reported === "unknown" ? "an unnamed commit (built without VERCEL_GIT_COMMIT_SHA or GIT_COMMIT_SHA)" : reported} (not compared)`);
-} else if (short(expected) === "") {
-  bad(`EXPECT=${EXPECT} but there is no commit to compare against; use EXPECT=any if that is intended`);
-} else if (reported === "unknown") {
-  bad(`the deployment cannot name its commit, so it cannot be compared against ${short(expected)}`);
-} else if (reported === short(expected)) {
-  ok(`the deployment is running ${reported}`);
-} else {
-  const diff = changedSince(reported, short(expected));
-  if (diff.kind === "unread") {
-    // Vercel's own ignoreCommand cancels exactly these builds, so a deployment that is behind by them is
-    // current in the only sense that matters: nothing a build reads has changed.
-    const shown = diff.files.slice(0, 3).join(", ");
-    ok(`the deployment is running ${reported}, and the ${diff.files.length} file(s) changed after it are ones no build reads (${shown}${diff.files.length > 3 ? ", …" : ""})`);
-  } else if (diff.kind === "same") {
-    ok(`the deployment is running ${reported}, whose tree is the same as this checkout's ${short(expected)}`);
-  } else if (diff.kind === "relevant") {
-    // Direction-free on purpose: the expected commit can be older than the deployed one as easily as newer
-    // (that is what pointing the check at a past release does), and a sentence that names the wrong direction
-    // is worse than one that only says the two are not the same commit.
-    bad(`the deployment is running ${reported}, this checkout is at ${short(expected)} — the hosted instance is not this repository's commit`);
-  } else {
-    bad(`the deployment is running ${reported} and this checkout is at ${short(expected)}; whether they differ in anything a build reads cannot be checked from here (git could not compare ${reported} with ${short(expected)})`);
-  }
+  bad(`API health -> GET /health HTTP ${health.status} (ok: ${health.json?.ok}, db: ${health.json?.db})`, health.body);
 }
 
 if (REQUIRE_EXECUTIONS) {
   step("agent execution readiness");
   const ready = await get("/ready");
-  if (ready.status === 200 && ready.json?.ok === true && ready.json?.db === "ok" && ready.json?.temporal === "connected" && ready.json?.executions === "ready") {
+  const sameApi = isSha(health.json?.commit) && ready.json?.commit === health.json.commit;
+  if (ready.status === 200 && ready.json?.ok === true && ready.json?.db === "ok" && ready.json?.temporal === "connected" && ready.json?.executions === "ready" && sameApi) {
     ok("GET /ready -> namespace connected, workflow and activity workers recently polling");
   } else {
-    bad(`GET /ready -> HTTP ${ready.status}; agent execution is UNVERIFIED (temporal: ${ready.json?.temporal}, executions: ${ready.json?.executions})`);
+    bad(`GET /ready -> HTTP ${ready.status}; agent execution is UNVERIFIED (temporal: ${ready.json?.temporal}, executions: ${ready.json?.executions}, matches API commit: ${sameApi})`);
   }
 }
 
