@@ -8,6 +8,10 @@ WITH RECURSIVE entries AS (
       ELSE e.value END AS rest
   FROM agents a
   CROSS JOIN LATERAL jsonb_array_elements_text(a.tool_allowlist) WITH ORDINALITY AS e(value, ordinality)
+  WHERE NOT (e.value ~ '^mcp\.[^.]+\..+$'
+    AND split_part(e.value, '.', 2) <> regexp_replace(lower(split_part(e.value, '.', 2)), '[^a-z0-9_]', '_', 'g')
+    AND (SELECT count(*) FROM mcp_servers s WHERE s.company_id = a.company_id
+      AND regexp_replace(lower(s.slug), '[^a-z0-9_]', '_', 'g') = regexp_replace(lower(split_part(e.value, '.', 2)), '[^a-z0-9_]', '_', 'g')) > 1)
 ), collapsed AS (
   SELECT id, position, original, namespace, rest FROM entries
   UNION ALL
@@ -23,7 +27,8 @@ WITH RECURSIVE entries AS (
 ), deduped AS (
   SELECT id, entry, min(position) AS position FROM canonical GROUP BY id, entry
 ), rewritten AS (
-  SELECT id, jsonb_agg(entry ORDER BY position) AS allowlist FROM deduped GROUP BY id
+  SELECT a.id, coalesce(jsonb_agg(d.entry ORDER BY d.position) FILTER (WHERE d.entry IS NOT NULL), '[]'::jsonb) AS allowlist
+  FROM agents a LEFT JOIN deduped d ON d.id = a.id GROUP BY a.id
 )
 UPDATE agents a SET tool_allowlist = r.allowlist
 FROM rewritten r WHERE a.id = r.id AND a.tool_allowlist IS DISTINCT FROM r.allowlist;

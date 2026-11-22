@@ -93,15 +93,18 @@ describe("migration invariants", () => {
     const client = await pool!.connect();
     try {
       await client.query("BEGIN");
-      await client.query("CREATE TEMP TABLE agents (id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text DEFAULT 'unique', tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (company_id text, slug text) ON COMMIT DROP");
+      await client.query("INSERT INTO mcp_servers VALUES ('collision', 'a-b'), ('collision', 'a_b')");
       const before = ["web.*", "mcp.local-protocol-check.*", "mcp.local_protocol_check.*", "mcp.local-protocol-check.delete_customer", "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", "mcp.a-b.mcp.other.tool"];
-      await client.query("INSERT INTO agents VALUES ('legacy', $1), ('empty', '[]')", [JSON.stringify(before)]);
+      await client.query("INSERT INTO agents (id, tool_allowlist) VALUES ('legacy', $1), ('empty', '[]')", [JSON.stringify(before)]);
+      await client.query("INSERT INTO agents VALUES ('collision', 'collision', '[\"mcp.a-b.*\",\"mcp.a-b.lookup_invoice\"]')");
       const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
       const expected = ["web.*", "mcp.local_protocol_check.*", "mcp.local_protocol_check.delete_customer", "mcp.a_b.mcp.other.tool"];
       for (let pass = 0; pass < 2; pass++) {
         await client.query(migration);
-        const { rows } = await client.query("SELECT * FROM agents ORDER BY id");
-        expect(rows).toEqual([{ id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
+        const { rows } = await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id");
+        expect(rows).toEqual([{ id: "collision", tool_allowlist: [] }, { id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
       }
     } finally {
       await client.query("ROLLBACK");

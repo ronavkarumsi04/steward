@@ -2494,6 +2494,8 @@ describe("mcp marketplace", () => {
     expect(rejected.status).toBe(422);
     expect(rejected.body.error.details.problems[0]!.message).toContain("namespace");
     const second = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
+    const unrelated = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "unrelated" }));
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${unrelated.body.server.id}/inspect`, {});
     for (const server of [first.body.server, second.body.server]) await me.api.json("POST", `/companies/${me.companyId}/mcp/${server.id}/inspect`, {});
     await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [second.body.server.id]);
     await core.pool.query("UPDATE mcp_tools SET tool_name='mcp.a_b.lookup_invoice' WHERE server_id=$1 AND name='lookup_invoice'", [second.body.server.id]);
@@ -2505,9 +2507,37 @@ describe("mcp marketplace", () => {
         const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
         expect(registry.get("mcp.a_b.lookup_invoice")).toBeUndefined();
         expect(registry.get("mcp.a_b.reschedule")).toBeUndefined();
-        expect(registry.get("mcp.other.reschedule")).toBeDefined();
+        expect(registry.get("mcp.other.reschedule")).toBeUndefined();
+        expect(registry.get("mcp.unrelated.reschedule")).toBeDefined();
       }
       expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  }, 60_000);
+
+  d("keeps uninspected and paused aliases closed and removes namespace grants on uninstall", async () => {
+    const me = await marketplace();
+    const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const second = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${second.body.server.id}/inspect`, {});
+    await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [second.body.server.id]);
+    await core.pool.query("UPDATE mcp_tools SET tool_name=replace(tool_name, 'mcp.other.', 'mcp.a_b.') WHERE server_id=$1", [second.body.server.id]);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    await core.pool.query("UPDATE agents SET tool_allowlist=$1 WHERE id=$2", [JSON.stringify(["web.*", "mcp.a-b.*", "mcp.a_b.lookup_invoice", "mcp.a_b.*"]), me.agentId]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const enabled of [true, false]) {
+        await core.pool.query("UPDATE mcp_servers SET enabled=$1 WHERE id=$2", [enabled, first.body.server.id]);
+        const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+        expect(registry.list({ allow: ["mcp.a_b.*"] })).toEqual([]);
+      }
+      await me.api.call("DELETE", `/companies/${me.companyId}/mcp/${first.body.server.id}`);
+      const agent = await services.agents.get(scope, me.agentId);
+      expect(agent!.toolAllowlist).toEqual(["web.*"]);
+      const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+      expect(registry.get("mcp.a_b.lookup_invoice")).toBeDefined();
+      expect(registry.list({ allow: agent!.toolAllowlist }).filter((tool) => tool.manifest.source === "mcp")).toEqual([]);
     } finally {
       warn.mockRestore();
     }

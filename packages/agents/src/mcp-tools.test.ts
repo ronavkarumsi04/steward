@@ -67,4 +67,19 @@ describe("mcp tools in the registry", () => {
       warn.mockRestore();
     }
   });
+
+  it("excludes an inspected namespace when an uninspected alias is installed", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const registry = registerMcpTools(buildToolRegistry(), [
+        { install: { ...install, slug: "a-b" }, tools: [] },
+        { install: { ...install, slug: "a_b" }, tools: [stored("lookup_invoice", { toolName: "mcp.a_b.lookup_invoice" })] },
+        { install, tools: [stored("reschedule")] },
+      ]);
+      expect(registry.list({ allow: ["mcp.a_b.*"] })).toEqual([]);
+      expect(registry.get("mcp.ledger.reschedule")).toBeDefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

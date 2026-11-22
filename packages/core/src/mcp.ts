@@ -36,7 +36,7 @@
  */
 
 import { isIP } from "node:net";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { agents, emitEvent, mcpServers, mcpTools, scoped, type Db, type McpToolAnnotationsShape } from "@steward/db";
 import type { RiskLevel, TenantScope, ToolManifest } from "@steward/schema";
 import {
@@ -542,14 +542,16 @@ export class McpService {
     return row as unknown as McpToolRow;
   }
 
-  /**
-   * Removing an install removes its tools with it, because a tool whose server is gone is a grant to nothing.
-   * The rest of the product is deliberately untouched: an agent's allowlist still names patterns, and a pattern
-   * for a server that is not installed simply matches nothing, which is a state the runtime already has to handle.
-   */
+  /** Removing an install also removes its namespace grants, so another install cannot inherit them. */
   async remove(scope: TenantScope, id: string): Promise<{ slug: string; tools: number }> {
     const existing = await this.required(scope, id);
     return this.db.transaction(async (tx) => {
+      await tx.update(agents).set({ toolAllowlist: sql`(
+        SELECT coalesce(jsonb_agg(entry ORDER BY position), '[]'::jsonb)
+        FROM jsonb_array_elements_text(${agents.toolAllowlist}) WITH ORDINALITY AS grants(entry, position)
+        WHERE NOT (entry ~ '^mcp\\.[^.]+\\..+$' AND
+          'mcp.' || regexp_replace(lower(split_part(entry, '.', 2)), '[^a-z0-9_]', '_', 'g') = ${mcpNamespace(existing.slug)})
+      )`, updatedAt: this.now() }).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }));
       const removed = await tx.delete(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, eq(mcpTools.serverId, id))).returning({ id: mcpTools.id });
       await tx.delete(mcpServers).where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }, eq(mcpServers.id, id)));
       await emitEvent(tx, {
@@ -714,6 +716,12 @@ export class McpService {
       .from(mcpTools)
       .where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, inArray(mcpTools.serverId, servers.map((server) => server.id))))) as unknown as McpToolRow[];
     const owners = new Map<string, Set<string>>();
+    for (const server of servers) {
+      const namespace = mcpNamespace(server.slug);
+      const ids = owners.get(namespace) ?? new Set<string>();
+      ids.add(server.id);
+      owners.set(namespace, ids);
+    }
     for (const tool of rows) {
       const namespace = tool.toolName.split(".").slice(0, 2).join(".");
       const ids = owners.get(namespace) ?? new Set<string>();
@@ -723,10 +731,10 @@ export class McpService {
     const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([namespace]) => namespace));
     const collisions = new Set(rows.filter((tool) => ambiguous.has(tool.toolName.split(".").slice(0, 2).join("."))).map((tool) => tool.toolName));
     if (collisions.size) console.warn("MCP tools omitted because multiple servers offer the same name", [...collisions]);
-    return servers.filter((server) => server.enabled).map((server) => ({
+    return servers.map((server) => ({
       install: installOf(server),
       tools: rows
-        .filter((tool) => tool.serverId === server.id && tool.enabled && !collisions.has(tool.toolName))
+        .filter((tool) => server.enabled && !ambiguous.has(mcpNamespace(server.slug)) && tool.serverId === server.id && tool.enabled && !collisions.has(tool.toolName))
         .map((tool) => ({
           serverId: server.id,
           serverName: server.name,
