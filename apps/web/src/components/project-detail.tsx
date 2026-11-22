@@ -33,7 +33,7 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
   }
 
   return <div className="space-y-5">
-    <div className="flex items-start justify-between gap-4">
+    <div className={`flex items-start justify-between gap-4${quiet ? " q-project-heading" : ""}`}>
       <PageHeader eyebrow="Project" title={project.name} description={project.objective || project.description || "No objective recorded."} />
       <Link href={`/app/c/${companyId}/projects`} className="btn btn-sm"><Icon.ArrowRight className="rotate-180" size={14} />Projects</Link>
     </div>

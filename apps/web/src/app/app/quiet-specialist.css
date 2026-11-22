@@ -7,6 +7,9 @@
 .q-specialist > :first-child { margin-top: 0; }
 .q-specialist .desk-heading { margin-bottom: 28px; padding-bottom: 0; border: 0; }
 .q-specialist .desk-description { max-width: 72ch; margin-top: 12px; line-height: 1.65; }
+.q-specialist .q-project-heading { flex-wrap: wrap; }
+.q-specialist .q-project-heading > .desk-heading { flex: 1 1 24rem; }
+.q-specialist .q-project-heading > .btn { flex: none; max-width: 100%; }
 .q-specialist :is(.card, .nb-panel-flat) { padding: 24px; background: var(--bg); }
 .q-specialist :is(.card, .nb-panel-flat, .card-inset) { border-color: var(--line); box-shadow: none; }
 .q-specialist .card :is(.card, .nb-panel-flat, .card-inset) { box-shadow: none; background: var(--bg-tint); }
@@ -89,6 +92,8 @@
   .q-specialist[data-surface="conversations"] .chat-transcript { min-height: 480px; max-height: none; }
 }
 @media (max-width: 767px) {
+  .q-specialist .q-project-heading > .btn { order: -1; }
+  .q-specialist .q-project-heading > .desk-heading { flex-basis: 100%; }
   .q-specialist :is(.card, .nb-panel-flat) { padding: 20px 16px; }
   .q-specialist .card.p-0, .q-specialist .card.overflow-hidden { padding: 0; }
   .q-specialist [data-specialist-metrics] { grid-template-columns: 1fr 1fr; gap: 24px 16px; }
