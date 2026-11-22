@@ -5,6 +5,7 @@ import type { Agent, CompanyOverview, Run } from "@/lib/types";
 import { depthCopy } from "@/lib/depth-copy";
 import { statusLabel, t, type MessageKey } from "@/lib/i18n";
 import { recordedUsd } from "@/lib/decision-semantics";
+import { agentMatches } from "@/lib/team-search";
 import { useLocale } from "./locale-provider";
 import { Ago, StatusPill } from "./ui";
 import { Icon } from "./icons";
@@ -14,7 +15,7 @@ export function QuietAgentRoster({ companyId, agents, runs, overview, busy, edit
   const c = depthCopy(locale);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"list" | "map">("list");
-  const shown = agents.filter((a) => `${a.name} ${a.kind} ${a.description} ${a.toolAllowlist.join(" ")}`.toLocaleLowerCase(locale).includes(query.toLocaleLowerCase(locale)));
+  const shown = agents.filter((agent) => agentMatches(agent, query, locale));
   const list = (items: Agent[]) => <ul className="q-agent-list">{items.map((agent) => {
     const recent = runs?.filter((run) => run.agentId === agent.id).sort((a, b) => Date.parse(b.finishedAt ?? b.startedAt ?? b.createdAt) - Date.parse(a.finishedAt ?? a.startedAt ?? a.createdAt))[0];
     return <li key={agent.id} data-agent-kind={agent.kind}>
