@@ -1,6 +1,8 @@
 import type { Locale } from "./i18n";
 
 const en = {
+  closed: "Closed",
+  runCancelled: "Cancelled — the run was cancelled before a decision", runClosed: "Closed — the run has finished",
   memberUnavailable: "Member name not available", auditUserId: "Audit user ID",
   overview: "Overview", intro: "A clear view of what needs you, and what is moving forward.", delegate: "Delegate work",
   decisions: "Needs your decision", allApprovals: "View approvals", clear: "No decisions waiting.", clearHint: "Review active work or delegate the next outcome. Expired requests remain inspectable in Approvals.", pendingRecords: "Pending records",
@@ -19,6 +21,8 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  closed: "Cerrada",
+  runCancelled: "Cancelada — la ejecución se canceló antes de tomar una decisión", runClosed: "Cerrada — la ejecución ha terminado",
   memberUnavailable: "Nombre del miembro no disponible", auditUserId: "ID de usuario de auditoría",
   overview: "Resumen", intro: "Una vista clara de lo que te necesita y lo que avanza.", delegate: "Delegar trabajo",
   decisions: "Necesita tu decisión", allApprovals: "Ver aprobaciones", clear: "No hay decisiones pendientes.", clearHint: "Revisa el trabajo activo o delega el siguiente objetivo. Las solicitudes vencidas siguen disponibles en Aprobaciones.", pendingRecords: "Registros pendientes",

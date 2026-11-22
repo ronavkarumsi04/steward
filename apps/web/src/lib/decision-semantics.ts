@@ -25,6 +25,10 @@ export function approvalSnapshot(a: Approval): string {
     agentId: a.agentId, runId: a.runId, workflowId: a.workflowId, alternatives: a.alternatives, warnings: a.warnings ?? [] });
 }
 
-export function isDecisionOpen(a: Approval, now = Date.now()): boolean {
-  return a.status === "pending" && Number.isFinite(Date.parse(a.expiresAt)) && Date.parse(a.expiresAt) > now;
+export function isDecisionOpen(a: Approval, now = Date.now(), run?: { status: string } | null): boolean {
+  return a.status === "pending" && !isRunClosed(run) && Number.isFinite(Date.parse(a.expiresAt)) && Date.parse(a.expiresAt) > now;
+}
+
+export function isRunClosed(run?: { status: string } | null): boolean {
+  return !!run && ["cancelled", "failed", "succeeded"].includes(run.status);
 }

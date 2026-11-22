@@ -25,5 +25,8 @@ describe("decision and cost semantics", () => {
     expect(isDecisionOpen(a, Date.parse(a.expiresAt))).toBe(false);
     expect(isDecisionOpen({ ...a, expiresAt: "bad" })).toBe(false);
     expect(isDecisionOpen({ ...a, status: "approved" }, 0)).toBe(false);
+    expect(isDecisionOpen({ ...a, status: "cancelled" }, 0)).toBe(false);
+    for (const status of ["cancelled", "failed", "succeeded"]) expect(isDecisionOpen(a, 0, { status })).toBe(false);
+    expect(isDecisionOpen(a, 0, { status: "waiting_approval" })).toBe(true);
   });
 });
