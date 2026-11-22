@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, CompanyOverview, Run } from "@/lib/types";
 import { QuietAgentRoster } from "./quiet-agent-roster";
+import { scheduleAccess } from "@/lib/team-access";
 import { AgentOverclock } from "./overclock";
 import Link from "next/link";
 import { RoutingPolicy } from "@steward/schema";
@@ -34,8 +35,9 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
 
-  async function change(action: () => Promise<unknown>) {
-    if (quiet && (lock.current || !isAdmin)) return;
+  const canTrigger = scheduleAccess(overview?.role).trigger;
+  async function change(action: () => Promise<unknown>, allowed = isAdmin) {
+    if (quiet && (lock.current || !allowed)) return;
     lock.current = true; setBusy(true); setError(null);
     try { await action(); } finally { lock.current = false; setBusy(false); }
   }
@@ -151,7 +153,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
           </div>
           {overclockEnabled && <label className="block text-xs text-muted">{t("agents.routingPolicy")}<textarea name="routing" aria-label={t("agents.routingPolicyLabel")} className="input mono mt-1 min-h-36" defaultValue={JSON.stringify(editing.routingPolicy, null, 2)} /><span className="hint">Explicit provider/model, ordered fallback chain and capability requirements. Credentials remain in Providers.</span></label>}
           <div className="flex justify-end gap-2"><button type="button" className="btn" disabled={quiet && busy} onClick={() => setEditing(null)}>{t("agents.cancel")}</button><button className="btn btn-primary" disabled={quiet && (busy || !isAdmin)}>{t("agents.save")}</button></div>
-        </form>
+        </form></fieldset>
       )}
 
       {editing && overclockEnabled && <AgentOverclock key={editing.id} companyId={companyId} agent={editing} isAdmin={isAdmin} />}
@@ -174,15 +176,14 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
                   <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} /></div>
                 </div>
                 <div className="flex gap-1">
-                  <button className="btn" onClick={() => quiet ? change(() => scheduleAction(s, "trigger")) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
-                  <button className="btn" onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
-                  <button className="btn btn-danger" onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
+                  <button className="btn" disabled={quiet && (!canTrigger || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "trigger"), canTrigger) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
+                  <button className="btn" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
+                  <button className="btn btn-danger" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
                 </div>
               </li>
             ))}
           </ul>
         )}
-        </fieldset>
       </Card>}
     </div>
   );
