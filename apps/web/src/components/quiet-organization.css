@@ -1,0 +1,12 @@
+/* Shared Quiet page chrome; token definitions and rollout stay in the shell. */
+.quiet-page-heading { padding-bottom: 24px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
+.quiet-page-heading h1 { font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 700; letter-spacing: -.035em; }
+.quiet-page-heading > p { max-width: 70ch; margin-top: 10px; color: var(--muted); font-size: max(14px, .875rem); }
+.quiet-page-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: var(--muted); font-size: max(12px, .75rem); overflow-wrap: anywhere; }
+.quiet-organization { max-width: 1160px; min-width: 0; margin: 0 auto; padding: 32px 24px 64px; }
+.quiet-organization-nav { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin: -12px 0 24px; padding-bottom: 12px; }
+.quiet-organization-nav a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 8px; color: var(--muted); }
+.quiet-organization-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+@media (max-width: 600px) {
+  .quiet-organization { padding: 24px 16px 48px; }
+}

@@ -1,12 +1,5 @@
 /* Depth surfaces reuse the Quiet shell's semantic tokens; nothing selects the incumbent shell. */
 .quiet-tools { min-width: 0; font-size: 14px; }
-.quiet-tools-heading { padding-bottom: 24px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
-.quiet-tools-heading h1 { font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 700; letter-spacing: -.035em; }
-.quiet-tools-heading > p { max-width: 70ch; margin-top: 10px; color: var(--muted); font-size: 14px; }
-.quiet-tools-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.quiet-tools-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin: -12px 0 24px; padding-bottom: 12px; }
-.quiet-tools-tabs a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 8px; color: var(--muted); }
-.quiet-tools-tabs a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .quiet-tools-org { max-width: 1160px; margin: 0 auto; padding: 32px 24px 64px; }
 .quiet-tools .card { background: transparent; border: 0; border-radius: 0; padding: 0 0 28px; box-shadow: none; }
 .quiet-tools .card + .card, .quiet-tools .space-y-5 > .card + .card { padding-top: 24px; border-top: 1px solid var(--line); }
@@ -16,6 +9,11 @@
 .quiet-tools :is(p, li, td, input, select, textarea) { font-size: max(14px, .875rem); }
 .quiet-tools :is(.text-xs, .hint, .label, code, th, [class*="text-[11px]"]) { font-size: max(12px, .75rem); }
 .quiet-tools :is(input, select, textarea, .btn) { min-height: 44px; max-width: 100%; }
+/* The compatibility nb-left-* classes no longer paint these neutral sections.
+   A legacy class name alone must not make every field look focused. */
+.quiet-tools :is(input, select, textarea, .btn):where(:not(.btn-primary):not(.btn-danger)) { border-color: var(--control-border); }
+.quiet-tools :where([class*="bg-accent-soft"], [class*="bg-warn-soft"]) :is(input, select, textarea, .btn):where(:not(.btn-primary):not(.btn-danger)) { border-color: var(--accent); }
+.quiet-tools [aria-invalid="true"] { border-color: var(--danger); }
 /* Pressed primary controls must retain foreground contrast on the accent fill. */
 .quiet-tools .btn.btn-primary[aria-pressed="true"] { color: var(--accent-fg); }
 /* Block field labels participate in vertical spacing; inline labels swallowed it.

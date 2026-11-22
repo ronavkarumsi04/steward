@@ -135,7 +135,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           ) : (
             <p className="text-sm text-muted md:col-span-2">No credential needed. Make sure the server can reach the base URL below.</p>
           )}
-          <div><label className="block"><span className="label">Base URL {info?.defaultBaseUrl && <span className="text-muted">(default {info.defaultBaseUrl})</span>}</span><input name="baseUrl" type="url" className="input mono" placeholder={info?.defaultBaseUrl ?? "https://"} required={!info?.defaultBaseUrl && info?.authMethod !== "companion"} /></label></div>
+          <div><label className="block"><span className="label">Base URL {!quiet && info?.defaultBaseUrl && <span className="text-muted">(default {info.defaultBaseUrl})</span>}</span><input name="baseUrl" type="url" className="input mono" placeholder={info?.defaultBaseUrl ?? "https://"} required={!info?.defaultBaseUrl && info?.authMethod !== "companion"} /></label></div>
           <div><label className="block"><span className="label">Priority (lower is preferred)</span><input name="priority" type="number" min={0} max={1000} defaultValue={100} className="input" /></label></div>
           {info?.authMethod === "azure_api_key" && <div className="md:col-span-2"><label className="block"><span className="label">Extra config (JSON)</span><textarea name="config" className="input mono" placeholder='{"apiVersion":"2024-10-21","deployments":{"gpt-4o":"my-deployment"}}' /></label></div>}
         </div>
