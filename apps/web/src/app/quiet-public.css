@@ -186,6 +186,8 @@
   [data-public-design="quiet"] .public-legal > .grid { grid-template-columns: 240px minmax(0, 1fr); }
 }
 @media (max-width: 1023px) {
+  /* A wrapped header must not cover keyboard skip targets on small screens. */
+  [data-public-design="quiet"] .public-legal > header { position: static; }
   [data-public-design="quiet"] .public-hero { grid-template-columns: 1fr; padding-block: 64px; gap: 48px; }
   [data-public-design="quiet"] .public-hero h1 { font-size: clamp(40px, 7vw, 60px); }
   [data-public-design="quiet"] .public-workflow { max-width: 640px; width: 100%; }
