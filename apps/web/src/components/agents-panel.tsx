@@ -34,13 +34,14 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   useEffect(() => { setHydrated(true); }, []);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleFeedback, setScheduleFeedback] = useState<{ id: string | null; message: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
 
   const canTrigger = scheduleAccess(overview?.role).trigger;
   async function change(action: () => Promise<unknown>, allowed = isAdmin) {
     if (quiet && (lock.current || !allowed)) return;
-    lock.current = true; setBusy(true); setError(null);
+    lock.current = true; setBusy(true); setError(null); setScheduleFeedback(null);
     try { await action(); } finally { lock.current = false; setBusy(false); }
   }
 
@@ -99,7 +100,8 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
       form.reset();
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("agents.scheduleCreateFailed"));
+      if (quiet) setScheduleFeedback({ id: null, message: err instanceof ApiError && err.status < 500 ? err.message : c.scheduleFailed, error: true });
+      else setError(err instanceof ApiError ? err.message : t("agents.scheduleCreateFailed"));
     }
   }
 
@@ -109,9 +111,11 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
       if (action === "toggle") await browserApi.patch(`/companies/${companyId}/schedules/${s.id}`, { enabled: !s.enabled });
       if (action === "trigger") await browserApi.post(`/companies/${companyId}/schedules/${s.id}/trigger`, {});
       if (action === "delete") await browserApi.del(`/companies/${companyId}/schedules/${s.id}`);
+      if (quiet && action === "trigger") setScheduleFeedback({ id: s.id, message: c.scheduleRequested, error: false });
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("agents.scheduleActionFailed"));
+      if (quiet) setScheduleFeedback({ id: s.id, message: err instanceof ApiError && err.status < 500 ? err.message : c.scheduleFailed, error: true });
+      else setError(err instanceof ApiError ? err.message : t("agents.scheduleActionFailed"));
     }
   }
 
@@ -170,6 +174,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
           <button className="btn btn-primary">{t("agents.add")}</button>
           <input name="instruction" className="input md:col-span-5" placeholder={t("agents.instructionPlaceholder")} aria-label={t("agents.instruction")} />
         </form></fieldset>
+        {quiet && scheduleFeedback?.id === null && <p role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {schedules.map((s) => (
@@ -183,6 +188,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
                   <button className="btn" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
                   <button className="btn btn-danger" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
                 </div>
+                {quiet && scheduleFeedback?.id === s.id && <p role={scheduleFeedback.error ? "alert" : "status"} className={`w-full text-sm ${scheduleFeedback.error ? "text-danger" : "text-muted"}`}>{scheduleFeedback.message}{!scheduleFeedback.error && <> <Link className="q-link" href={`/app/c/${companyId}/runs?view=all`}>{c.followRun}</Link></>}</p>}
               </li>
             ))}
           </ul>
