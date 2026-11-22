@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { QuietToolsLoading } from "@/components/quiet-tools";
 import { headers } from "next/headers";
 import { requireMe, serverApi } from "@/lib/server";
 import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, UsageRow } from "@/lib/types";
@@ -10,7 +12,14 @@ import { QuietProviders } from "@/components/quiet-tools-pages";
 
 export const metadata: Metadata = { title: "Providers" };
 
-export default async function ProvidersPage({ params }: { params: Promise<{ orgId: string }> }) {
+export default async function ProvidersPage(props: Parameters<typeof ProvidersContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><ProvidersContent {...props} /></Suspense>;
+  }
+  return ProvidersContent(props);
+}
+
+async function ProvidersContent({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const [me, api, h] = await Promise.all([requireMe(), serverApi(), headers()]);
   const membership = me.memberships.find((m) => m.organizationId === orgId);
