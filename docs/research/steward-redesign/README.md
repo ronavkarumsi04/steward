@@ -8,7 +8,8 @@ Research and design-direction handoff · researched 21–22 November 2026.
 
 - [Clickable prototype](prototype.html): download and open in any modern browser. It is self-contained, including its font. The repository's raw HTML preview is not the experience; open the downloaded file.
 - [CTO build specification](HANDOFF.md): navigation migration, behavior contracts, state matrix, accessibility, milestones and acceptance criteria.
-- [Proposed tokens](tokens.json): light/dark starting values, not production configuration.
+- [Canonical design tokens](tokens.json): the single source for the light/dark palette, type floors and depth policy; not production runtime configuration.
+- [Prototype token sync](sync-prototype-tokens.mjs): regenerates the embedded palette so the downloaded HTML stays self-contained without a second source of colors. Run `node docs/research/steward-redesign/sync-prototype-tokens.mjs`; add `--check` to detect drift without writing.
 - [Font license](Manrope-OFL.txt): Manrope is distributed under the SIL Open Font License.
 
 The prototype includes Overview, Approvals, Work, Run detail, Team, Knowledge, Tools, Settings, Delegate work, the public website, assisted pilot and waitlist. Its top study bar switches between the public and workspace concepts. Use Ctrl/⌘ K for navigation; use the theme button to inspect dark mode. Refresh to reset all example actions.
@@ -99,11 +100,17 @@ At narrow widths, one column puts the decision and work before context. A labele
 
 White canvas, fog navigation, pine ink, forest primary action and pale sage selection. Amber means a decision is waiting; red means failure or destruction; blue means progress. Status also has words and icons. Panels are opaque. Use restrained 1px borders and 8–10px control/panel radii. Avoid inset bevels, glossy chrome, neon, decorative gradients, hard shadows and colored left-stripe cards.
 
-Dark mode changes the surface hierarchy rather than inverting a screenshot. The primary action becomes readable pale green with dark text. Warning, danger and progress have dedicated dark backgrounds. Check focus and fine borders separately; do not merely reuse light-mode colors.
+Dark mode changes the surface hierarchy rather than inverting a screenshot. The primary action becomes readable pale green with dark text. Warning, danger and progress have dedicated dark backgrounds. **`tokens.json` is authoritative for every semantic color in both themes**; the prototype's marked CSS block is generated from it, and the dark palette matches the CTO's Quiet momentum foundation. Do not hand-tune a second palette in the prototype or copy conflicting values into the app.
+
+Use `border` for decorative dividers and passive panels only. Inputs, checkboxes, selects and outlined controls use `controlBorder`: **#7d8a81 light / #6c8474 dark**, at least 3:1 against canvas, surface, raised surface and pending backgrounds (minimum 3.19:1 light / 3.17:1 dark across those pairs). A low-contrast divider is not a valid control boundary. Primary fills/focus indicators must independently meet their contrast requirements. Depth is **no shadows**; opaque surfaces, borders and the themed modal scrim establish layers.
+
+For controls on sage or other tinted fills, use the existing `action` color as the outline (**#245c41 light / #a2d1af dark**; the app calls it `--accent`, the prototype `--brand`). Do not add a second color. Ordinary dark `controlBorder` is only 2.87:1 on dark sage; the accent passes 3:1 on all current tinted surfaces. Verify new backgrounds/hover states rather than assuming the neutral-surface rule applies.
 
 ### Type and rhythm
 
-Manrope supplies a precise but human sans-serif voice; the prototype embeds the Latin font, under OFL. Pair it with system fallback and international-script coverage in production. Workspace body starts at 14px, secondary metadata at 12–13px; important decisions and public copy have more space. Marketing headings can be expressive, but operational labels remain literal. Use tabular numbers for spend and timestamps. Do not apply marketing-scale headings to every task page.
+Manrope supplies a precise but human sans-serif voice; the prototype embeds the Latin font, under OFL. Pair it with system fallback and international-script coverage in production. **Never render text below 12px**—including metadata, bottom-nav labels and study annotations. Body/prose is at least 14px; secondary metadata is 12–13px. Mobile must not shrink these floors to fit desktop content. Important decisions and public copy have more space. Marketing headings can be expressive, but operational labels remain literal. Use tabular numbers for spend and timestamps. Do not apply marketing-scale headings to every task page.
+
+On mobile, pending approval has a persistent Approve/Decline bar and an active run has a persistent Cancel bar **above** bottom navigation. Keep recipient/payload/scope/evidence readable in the scrollable detail; sticky controls do not replace review. Measure both bars, including navigation safe-area padding, and reserve their combined height plus 28px in content and focus-scroll clearance. The prototype uses `ResizeObserver` so wrapping labels do not cover the last detail. Production controls still respect loading, permissions, stale/concurrent decisions and cancellation semantics.
 
 ### Voice
 
