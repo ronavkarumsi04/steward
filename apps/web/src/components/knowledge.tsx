@@ -255,6 +255,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
       </nav>
       {quiet && <p className="q-caption">{c.sourcesHint}</p>}
       {quiet && ["documents", "playbooks"].includes(tab) && <div className="q-depth-search"><label>{c.searchSources}<input type="search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>{query && <button className="btn" onClick={() => setQuery("")}>{c.clear}</button>}</div>}
+      {quiet && <p role="status" className="sr-only">{query.trim() && !(tab === "playbooks" ? playbooks : regularDocuments).length ? c.noMatches : ""}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {tab === "playbooks" && (
