@@ -932,6 +932,11 @@ const en = {
   "approvals.wasDenied": "Denied",
   "approvals.lapsed": "Lapsed before a decision",
   "approvals.withdrawn": "Withdrawn",
+  "approvals.runCancelled": "Cancelled — the run was cancelled before a decision",
+  "approvals.runClosed": "Closed — the run has finished",
+  "approvals.closed": "Closed",
+  "approvals.noDecision": "This request is closed. No decision can be recorded and nothing will resume.",
+  "approvals.notPending": "This approval is closed, its run has finished, or the reviewed payload changed. Reload to see the outcome.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1856,6 +1861,11 @@ const es: Record<MessageKey, string> = {
   "approvals.wasDenied": "Denegada",
   "approvals.lapsed": "Venció sin decisión",
   "approvals.withdrawn": "Retirada",
+  "approvals.runCancelled": "Cancelada — la ejecución se canceló antes de tomar una decisión",
+  "approvals.runClosed": "Cerrada — la ejecución ha terminado",
+  "approvals.closed": "Cerrada",
+  "approvals.noDecision": "Esta solicitud está cerrada. No se puede registrar ninguna decisión y no se reanudará nada.",
+  "approvals.notPending": "Esta aprobación está cerrada, su ejecución ha terminado o los datos revisados han cambiado. Vuelve a cargar para ver el resultado.",
 };
 
 const MESSAGES: Record<Locale, Record<MessageKey, string>> = { en, es };

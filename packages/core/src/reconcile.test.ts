@@ -82,6 +82,28 @@ describe("run state machine", () => {
 });
 
 describe("reconciliation", () => {
+  d("leaves cancelled approvals alone when their run is stranded waiting for cancellation", async () => {
+    const { scope, agentId, userId } = await tenant();
+    const runs = new RunService(db);
+    const approvals = new ApprovalService(db);
+    for (const status of ["waiting_approval", "waiting_budget"] as const) {
+      const id = crypto.randomUUID();
+      await runs.create(scope, { id, workflowId: `run-${id}`, agentId, trigger: { kind: "user", instruction: "Cancel signal lost" } });
+      await runs.setStatus(scope, id, status);
+      const approval = await approvals.request(scope, { runId: id, workflowId: `run-${id}`, action: "email.send", reason: "Review", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 3600 });
+      await approvals.cancelForRun(scope, id);
+      // Give recovery all the human-decision metadata too: status alone must exclude cancellation.
+      await db.update(approvalRows).set({ resolvedBy: userId }).where(eq(approvalRows.id, approval.id));
+      const delivered: string[] = [];
+      await new ReconcileService(db, null, undefined, { notify: async (_workflow, approvalId) => { delivered.push(approvalId); } }).sweep({ limit: 10_000 });
+      expect(delivered).not.toContain(approval.id);
+      expect((await approvals.get(scope, approval.id))?.status).toBe("cancelled");
+      expect((await runs.get(scope, id))?.status).toBe(status);
+      expect(await approvals.resolve(scope, approval.id, { status: "approved" })).toBeNull();
+      await runs.setStatus(scope, id, "cancelled");
+    }
+  });
+
   d("recovers a persisted human decision after signal loss and stops after the run resumes", async () => {
     const { scope, agentId } = await tenant();
     const runs = new RunService(db);
@@ -186,6 +208,43 @@ describe("reconciliation", () => {
     const report = await new ReconcileService(db, null).sweep();
     expect(report.approvalsExpired).toBeGreaterThanOrEqual(1);
     expect((await approvals.get(scope, approval.id))?.status).toBe("expired");
+  });
+
+  d("closes cancelled-run approvals immediately and refuses stale pending decisions", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const approvals = new ApprovalService(db);
+    const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Cancel this" } });
+    const request = { action: "email.send", reason: "Review", payload: {}, risk: "HIGH" as const, dimension: "email_send" as const, affectedSystem: "email", alternatives: [], expiresInSeconds: 3600, runId: run.id };
+    const approval = await approvals.request(scope, request);
+    expect(await approvals.pendingCount(scope)).toBe(1);
+    await runs.setStatus(scope, run.id, "cancelled");
+    expect((await approvals.get(scope, approval.id))?.status).toBe("cancelled");
+    expect((await approvals.get(scope, approval.id))?.resolution?.note).toContain("run was cancelled");
+    expect(await approvals.pendingCount(scope)).toBe(0);
+    await db.update(approvalRows).set({ status: "pending" }).where(eq(approvalRows.id, approval.id));
+    expect(await approvals.pendingCount(scope)).toBe(0);
+    expect(await approvals.resolve(scope, approval.id, { status: "approved" })).toBeNull();
+    expect(await approvals.resolve(scope, approval.id, { status: "denied" })).toBeNull();
+    await new ReconcileService(db, null).sweep({ limit: 10_000 });
+    expect((await approvals.get(scope, approval.id))?.status).toBe("cancelled");
+    expect((await new EventService(db).since(scope, 0, 200, ["approval.resolved"])).filter((event) => event.payload.status === "cancelled")).toHaveLength(2);
+    expect(await approvals.cancelForRun(scope, run.id)).toBe(0);
+    expect(await approvals.cancelForRun(scope, crypto.randomUUID())).toBe(0);
+  });
+
+  d("refuses decisions and excludes counts for stale approvals on succeeded and failed runs", async () => {
+    const { scope, agentId } = await tenant();
+    const runs = new RunService(db);
+    const approvals = new ApprovalService(db);
+    for (const status of ["succeeded", "failed"] as const) {
+      const run = await runs.create(scope, { agentId, trigger: { kind: "user", instruction: "Finish" } });
+      await runs.setStatus(scope, run.id, "executing");
+      await runs.setStatus(scope, run.id, status);
+      const a = await approvals.request(scope, { runId: run.id, action: "email.send", reason: "Review", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 3600 });
+      for (const decision of ["approved", "denied"] as const) expect(await approvals.resolve(scope, a.id, { status: decision })).toBeNull();
+    }
+    expect(await approvals.pendingCount(scope)).toBe(0);
   });
 
   d("releases a task parked on an approval that no longer exists", async () => {
