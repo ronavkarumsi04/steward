@@ -2440,6 +2440,79 @@ describe("mcp marketplace", () => {
     expect(server.tools).toEqual([]);
   }, 60_000);
 
+  d("grants, revokes and blocks hyphenated tools in the runtime namespace, refusing unknown tools", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "local-protocol-check" }));
+    const path = `/companies/${me.companyId}/mcp/${installed.body.server.id}`;
+    await me.api.json("POST", `${path}/inspect`, {});
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    const target = "mcp.local_protocol_check.delete_customer";
+    const grant = (granted: boolean, toolNames: string[] | null = null) => me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `${path}/grant`, { agentId: me.agentId, toolNames, granted });
+    const names = async () => {
+      const agent = await services.agents.get(scope, me.agentId);
+      return (await registryWithMcpTools(buildToolRegistry(), services.forScope(scope))).list({ allow: agent!.toolAllowlist }).map((tool) => tool.manifest.name).filter((name) => name.startsWith("mcp."));
+    };
+    expect(await names()).toEqual([]);
+    expect((await grant(true)).body.agent.toolAllowlist).toContain("mcp.local_protocol_check.*");
+    expect(await names()).toHaveLength(6);
+    expect((await me.read()).body.servers[0]!.tools.every((tool) => tool.grantedTo.some((g) => g.agentId === me.agentId))).toBe(true);
+    await grant(false, [target]);
+    expect(await names()).toHaveLength(5);
+    expect(await names()).not.toContain(target);
+    await grant(false);
+    expect(await names()).toEqual([]);
+    for (const requested of [target, "delete_customer"]) {
+      expect((await grant(true, [requested])).body.agent.toolAllowlist).toContain(target);
+      expect(await names()).toEqual([target]);
+      await grant(false);
+    }
+    const before = (await services.agents.get(scope, me.agentId))!.toolAllowlist;
+    for (const granted of [true, false]) {
+      const rejected = await me.api.json<{ error: { message: string } }>("POST", `${path}/grant`, { agentId: me.agentId, granted, toolNames: [target, "missing"] });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error.message).toContain("not a recorded tool");
+      expect((await services.agents.get(scope, me.agentId))!.toolAllowlist).toEqual(before);
+    }
+    await grant(true, [target]);
+    const tool = (await me.read()).body.servers[0]!.tools.find((tool) => tool.name === "delete_customer")!;
+    await me.api.json("PATCH", `${path}/tools/${tool.id}`, { enabled: false });
+    expect(await names()).toEqual([]);
+    await core.pool.query("UPDATE agents SET tool_allowlist=$1 WHERE id=$2", [JSON.stringify(["web.*", "mcp.local-protocol-check.*", "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer"]), me.agentId]);
+    await grant(false);
+    expect((await services.agents.get(scope, me.agentId))!.toolAllowlist).toEqual(["web.*"]);
+    const legacy = ["mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", target];
+    const created = await me.api.json<{ agent: { id: string; toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/agents`, { kind: "custom", name: "Legacy writer", toolAllowlist: legacy });
+    expect(created.body.agent.toolAllowlist).toEqual([target]);
+    const updated = await me.api.json<{ agent: { toolAllowlist: string[] } }>("PATCH", `/companies/${me.companyId}/agents/${created.body.agent.id}`, { toolAllowlist: ["mcp.local-protocol-check.*", "mcp.local_protocol_check.*"] });
+    expect(updated.body.agent.toolAllowlist).toEqual(["mcp.local_protocol_check.*"]);
+  }, 60_000);
+
+  d("refuses namespace aliases and fails closed on stored collisions without losing other tools", async () => {
+    const me = await marketplace();
+    const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const rejected = await me.api.json<{ error: { details: { problems: Array<{ message: string }> } } }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a_b" }));
+    expect(rejected.status).toBe(422);
+    expect(rejected.body.error.details.problems[0]!.message).toContain("namespace");
+    const second = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
+    for (const server of [first.body.server, second.body.server]) await me.api.json("POST", `/companies/${me.companyId}/mcp/${server.id}/inspect`, {});
+    await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [second.body.server.id]);
+    await core.pool.query("UPDATE mcp_tools SET tool_name='mcp.a_b.lookup_invoice' WHERE server_id=$1 AND name='lookup_invoice'", [second.body.server.id]);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const blocked of [false, true]) {
+        if (blocked) await core.pool.query("UPDATE mcp_tools SET enabled=false WHERE server_id=$1 AND name='lookup_invoice'", [first.body.server.id]);
+        const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+        expect(registry.get("mcp.a_b.lookup_invoice")).toBeUndefined();
+        expect(registry.get("mcp.a_b.reschedule")).toBeUndefined();
+        expect(registry.get("mcp.other.reschedule")).toBeDefined();
+      }
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  }, 60_000);
+
   d("grants a server by writing the agent's own allowlist, and takes it back the same way", async () => {
     const me = await marketplace();
     const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());

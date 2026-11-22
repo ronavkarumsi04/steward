@@ -155,7 +155,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     if (err instanceof McpError) {
       // An install this deployment will not accept says which field is wrong, because that list is what the form
       // marks up; a server that is not installed here is not found, the same answer a deleted one gives.
-      const status = err.code === "not_found" ? 404 : 422;
+      const status = err.code === "not_found" ? 404 : err.code === "invalid_tool" ? 400 : 422;
       const problems = (err.details as { problems?: unknown }).problems;
       return c.json({ error: { code: `mcp_${err.code}`, message: err.message, details: Array.isArray(problems) && problems.length ? { problems } : undefined, requestId: rid } }, status);
     }

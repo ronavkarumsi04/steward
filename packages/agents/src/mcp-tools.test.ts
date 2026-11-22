@@ -5,7 +5,7 @@
  * and yet never actually in front of an agent. These cases are about the shape of that wiring rather than about
  * the protocol — the seam's own tests spawn a real server — so they run anywhere.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mcpToolName, type StoredMcpTool } from "@steward/tools";
 import { registerMcpTools } from "./mcp-tools.js";
 import { buildToolRegistry, DEFAULT_TOOL_ALLOWLIST } from "./tools.js";
@@ -54,7 +54,17 @@ describe("mcp tools in the registry", () => {
     expect(registerMcpTools(buildToolRegistry(), []).list()).toHaveLength(base);
   });
 
-  it("refuses two servers claiming one tool name rather than letting the second win silently", () => {
-    expect(() => registerMcpTools(buildToolRegistry(), [{ install, tools: [stored("lookup_invoice")] }, { install, tools: [stored("lookup_invoice")] }])).toThrow(/already registered/);
+  it("drops both servers' colliding tools, logs it, and keeps unrelated tools", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const registry = registerMcpTools(buildToolRegistry(), [{ install, tools: [stored("lookup_invoice"), stored("reschedule")] }, { install: { ...install, slug: "other" }, tools: [stored("lookup_invoice", { serverId: "srv_2" }), stored("delete_customer", { serverId: "srv_2" }), stored("search", { serverId: "srv_2", toolName: "mcp.other.search" })] }]);
+      expect(registry.get("mcp.ledger.lookup_invoice")).toBeUndefined();
+      expect(registry.list({ allow: ["mcp.ledger.*"] })).toEqual([]);
+      expect(registry.get("mcp.other.search")).toBeDefined();
+      expect(registry.get("memory.search")).toBeDefined();
+      expect(warn).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(["mcp.ledger.lookup_invoice", "mcp.ledger.reschedule", "mcp.ledger.delete_customer"]));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

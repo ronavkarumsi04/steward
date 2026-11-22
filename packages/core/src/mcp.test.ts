@@ -143,6 +143,20 @@ describe("installing, as a request", () => {
 // ---------- grants, as an allowlist ----------
 
 describe("grants", () => {
+  it("grants and revokes hyphenated tools without retaining the revoked tool", () => {
+    const serverTools = ["mcp.local_protocol_check.lookup_invoice", "mcp.local_protocol_check.delete_customer"];
+    const input = { slug: "local-protocol-check", serverTools, granted: true };
+    expect(applyGrant({ ...input, allowlist: [], toolNames: null })).toEqual(["mcp.local_protocol_check.*"]);
+    for (const name of ["delete_customer", serverTools[1]!]) {
+      expect(applyGrant({ ...input, allowlist: [], toolNames: [name] })).toEqual([serverTools[1]]);
+      const narrowed = applyGrant({ ...input, allowlist: ["mcp.local-protocol-check.*", serverTools[1]!], toolNames: [name], granted: false });
+      expect(narrowed).toEqual([serverTools[0]]);
+      expect(applyGrant({ ...input, allowlist: [...narrowed, "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer"], toolNames: null, granted: false })).toEqual([]);
+    }
+    for (const granted of [true, false]) expect(() => applyGrant({ ...input, allowlist: [], toolNames: ["missing"], granted })).toThrow(McpError);
+    expect(() => applyGrant({ ...input, allowlist: ["*"], toolNames: [serverTools[1]!], granted: false })).toThrow("broader grant");
+    expect(() => applyGrant({ ...input, serverTools: ["mcp.local_protocol_check.group.tool"], allowlist: ["mcp.local_protocol_check.group.*"], toolNames: ["mcp.local_protocol_check.group.tool"], granted: false })).toThrow("broader grant");
+  });
   const tools = ["mcp.ledger.lookup_invoice", "mcp.ledger.delete_customer", "mcp.ledger.reschedule"];
 
   it("grants a whole server in one pattern and finds it with the runtime's own matcher", () => {

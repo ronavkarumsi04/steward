@@ -89,6 +89,25 @@ async function fixture() {
 }
 
 describe("migration invariants", () => {
+  live("canonicalises legacy MCP grants, dedupes and is idempotent", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, tool_allowlist jsonb) ON COMMIT DROP");
+      const before = ["web.*", "mcp.local-protocol-check.*", "mcp.local_protocol_check.*", "mcp.local-protocol-check.delete_customer", "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", "mcp.a-b.mcp.other.tool"];
+      await client.query("INSERT INTO agents VALUES ('legacy', $1), ('empty', '[]')", [JSON.stringify(before)]);
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      const expected = ["web.*", "mcp.local_protocol_check.*", "mcp.local_protocol_check.delete_customer", "mcp.a_b.mcp.other.tool"];
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        const { rows } = await client.query("SELECT * FROM agents ORDER BY id");
+        expect(rows).toEqual([{ id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
   live("has applied every migration in the journal", async () => {
     const { rows } = await pool!.query<{ n: string }>(`select count(*)::text as n from drizzle.__drizzle_migrations`);
     expect(Number(rows[0]!.n)).toBeGreaterThanOrEqual(journal.entries.length);

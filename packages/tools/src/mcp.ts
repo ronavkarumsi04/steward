@@ -104,19 +104,34 @@ const READ_ONLY_NAME = /^(get|list|read|search|find|fetch|describe|query|show|vi
 /** The same, for a name that reads as a change. Deliberately narrower than "anything not a read". */
 const DESTRUCTIVE_NAME = /(delete|remove|drop|destroy|purge|revoke|terminate|overwrite|reset)/i;
 
+export function mcpNamespace(slug: string): string {
+  return `mcp.${slug.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+}
+
+export function canonicalizeMcpAllowlistEntry(entry: string): string {
+  const match = /^mcp\.([^.]+)\.(.+)$/.exec(entry);
+  if (!match) return entry;
+  const namespace = mcpNamespace(match[1]!);
+  let rest = match[2]!;
+  if (`mcp.${match[1]}` !== namespace) {
+    while (rest.startsWith(`${namespace}.`)) rest = rest.slice(namespace.length + 1);
+  }
+  return `${namespace}.${rest}`;
+}
+
 /**
  * The name Steward knows a tool by: `mcp.<slug>.<tool>`, lowercased and reduced to characters a tool pattern
  * can hold, and never starting with a digit — ChatGPT-style tool names have to be identifier-shaped, and a
  * server is free to call its tool `2fa verify`.
  */
 export function mcpToolName(slug: string, toolName: string): string {
-  const raw = `mcp.${slug}.${toolName}`.toLowerCase().replace(/[^a-z0-9_.]/g, "_").slice(0, 120);
+  const raw = `${mcpNamespace(slug)}.${toolName}`.toLowerCase().replace(/[^a-z0-9_.]/g, "_").slice(0, 120);
   return raw.replace(/^[^a-z]+/, "m");
 }
 
 /** The pattern that grants every tool of a server, written the way the allowlist matches: `mcp.<slug>.*`. */
 export function mcpToolPattern(slug: string): string {
-  return `mcp.${slug}.*`;
+  return `${mcpNamespace(slug)}.*`;
 }
 
 /** Where this install points, in the words a founder would use. */

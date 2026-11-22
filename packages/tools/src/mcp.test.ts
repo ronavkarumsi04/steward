@@ -9,6 +9,7 @@ import {
   mcpToolDefinitions,
   mcpToolName,
   mcpToolPattern,
+  canonicalizeMcpAllowlistEntry,
   mcpTarget,
   riskForMcpTool,
   type McpInstall,
@@ -46,6 +47,22 @@ const install = (over: Partial<McpInstall> = {}): McpInstall => ({
 const spec = (over: Partial<McpToolSpec> = {}): McpToolSpec => ({ name: "do_thing", description: "", inputSchema: { type: "object", properties: {} }, annotations: {}, ...over });
 
 describe("mcp names", () => {
+  it("uses one namespace for hyphenated names and grants and repairs legacy entries", () => {
+    expect(mcpToolPattern("local-protocol-check")).toBe("mcp.local_protocol_check.*");
+    for (const [before, after] of [
+      ["web.*", "web.*"],
+      ["", ""],
+      ["mcp.local-protocol-check.*", "mcp.local_protocol_check.*"],
+      ["mcp.local-protocol-check.delete_customer", "mcp.local_protocol_check.delete_customer"],
+      ["mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", "mcp.local_protocol_check.delete_customer"],
+      ["mcp.local_protocol_check.delete_customer", "mcp.local_protocol_check.delete_customer"],
+      ["mcp.a-b.mcp.other.tool", "mcp.a_b.mcp.other.tool"],
+      ["mcp.a_b.mcp.a_b.tool", "mcp.a_b.mcp.a_b.tool"],
+    ]) {
+      expect(canonicalizeMcpAllowlistEntry(before!)).toBe(after);
+      expect(canonicalizeMcpAllowlistEntry(after!)).toBe(after);
+    }
+  });
   it("names a tool after its install, so two servers cannot mean the same thing", () => {
     expect(mcpToolName("ledger", "lookup_invoice")).toBe("mcp.ledger.lookup_invoice");
     // A server is free to call a tool something a model provider would refuse as a function name.

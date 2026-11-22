@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
+import { canonicalizeMcpAllowlistEntry } from "@steward/tools";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -122,11 +123,12 @@ export class AgentService {
     return a ?? null;
   }
   async create(scope: TenantScope, input: { kind: AgentKind; name: string; description?: string; systemPrompt?: string; toolAllowlist?: string[]; routingPolicy?: Record<string, unknown>; maxIterations?: number; budgetUsdPerRun?: number }) {
-    const [a] = await this.db.insert(agents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, kind: input.kind, name: input.name, description: input.description ?? "", systemPrompt: input.systemPrompt ?? "", toolAllowlist: input.toolAllowlist ?? [], routingPolicy: input.routingPolicy ?? {}, maxIterations: input.maxIterations ?? 24, budgetUsdPerRun: input.budgetUsdPerRun?.toFixed(4) }).returning();
+    const [a] = await this.db.insert(agents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, kind: input.kind, name: input.name, description: input.description ?? "", systemPrompt: input.systemPrompt ?? "", toolAllowlist: [...new Set((input.toolAllowlist ?? []).map(canonicalizeMcpAllowlistEntry))], routingPolicy: input.routingPolicy ?? {}, maxIterations: input.maxIterations ?? 24, budgetUsdPerRun: input.budgetUsdPerRun?.toFixed(4) }).returning();
     return a!;
   }
   async update(scope: TenantScope, id: string, patch: Partial<{ name: string; description: string; systemPrompt: string; enabled: boolean; toolAllowlist: string[]; routingPolicy: Record<string, unknown>; maxIterations: number; budgetUsdPerRun: number | null; config: Record<string, unknown> }>) {
     const set: Record<string, unknown> = { ...patch, updatedAt: new Date() };
+    if (patch.toolAllowlist !== undefined) set.toolAllowlist = [...new Set(patch.toolAllowlist.map(canonicalizeMcpAllowlistEntry))];
     if (patch.budgetUsdPerRun !== undefined) set.budgetUsdPerRun = patch.budgetUsdPerRun === null ? null : patch.budgetUsdPerRun.toFixed(4);
     const [a] = await this.db.update(agents).set(set).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }, eq(agents.id, id))).returning();
     if (a) await emitEvent(this.db, { organizationId: scope.organizationId, companyId: scope.companyId, type: "agent.updated", actor: scope.actor, payload: { agentId: id, fields: Object.keys(patch) } });

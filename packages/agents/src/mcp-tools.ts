@@ -28,7 +28,17 @@ export interface McpServerTools {
 
 /** Adds a company's inspected MCP tools to a registry, leaving every built-in tool exactly as it was. */
 export function registerMcpTools(registry: ToolRegistry, servers: McpServerTools[]): ToolRegistry {
-  for (const { install, tools } of servers) for (const tool of mcpToolDefinitions(install, tools)) registry.register(tool);
+  const owners = new Map<string, Set<string>>();
+  for (const { tools } of servers) for (const tool of tools) {
+    const namespace = tool.toolName.split(".").slice(0, 2).join(".");
+    const ids = owners.get(namespace) ?? new Set<string>();
+    ids.add(tool.serverId);
+    owners.set(namespace, ids);
+  }
+  const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([namespace]) => namespace));
+  const collisions = new Set(servers.flatMap(({ tools }) => tools).filter((tool) => ambiguous.has(tool.toolName.split(".").slice(0, 2).join("."))).map((tool) => tool.toolName));
+  if (collisions.size) console.warn("MCP tools omitted because multiple servers offer the same name", [...collisions]);
+  for (const { install, tools } of servers) for (const tool of mcpToolDefinitions(install, tools.filter((row) => !collisions.has(row.toolName)))) registry.register(tool);
   return registry;
 }
 

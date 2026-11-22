@@ -41,10 +41,12 @@ import { agents, emitEvent, mcpServers, mcpTools, scoped, type Db, type McpToolA
 import type { RiskLevel, TenantScope, ToolManifest } from "@steward/schema";
 import {
   MCP_TRANSPORTS,
+  canonicalizeMcpAllowlistEntry,
   isPrivateAddress,
   listMcpTools,
   matchTool,
   mcpFailureSentence,
+  mcpNamespace,
   mcpTarget,
   mcpToolName,
   mcpToolPattern,
@@ -170,7 +172,7 @@ export function validateMcpInstall(input: McpInstallInput, ctx: McpInstallContex
   const slug = input.slug?.trim().toLowerCase() ?? "";
   if (!slug) bad("slug_required", "slug", "A slug is needed: it is the part of every tool name this server contributes.");
   else if (!MCP_SLUG_RE.test(slug)) bad("slug_invalid", "slug", "Use lowercase letters, digits, dashes and underscores, starting with a letter or digit.");
-  else if (ctx.takenSlugs.includes(slug)) bad("slug_taken", "slug", `Another server already uses the slug “${slug}”. Tool names would collide, so this one needs its own.`);
+  else if (ctx.takenSlugs.some((taken) => mcpNamespace(taken) === mcpNamespace(slug))) bad("slug_taken", "slug", `Another server already uses the tool namespace “${mcpNamespace(slug)}”. Tool names would collide: dashes and underscores share a namespace. Choose a different slug.`);
 
   if (ctx.existing >= MCP_LIMITS.serversPerCompany) bad("too_many_servers", "server", `This company already has ${MCP_LIMITS.serversPerCompany} servers installed, which is the limit.`);
   if ((input.purpose ?? "").length > MCP_LIMITS.purposeChars) bad("purpose_too_long", "purpose", `Keep the note to ${MCP_LIMITS.purposeChars} characters.`);
@@ -284,7 +286,7 @@ export interface McpInspection {
 }
 
 export class McpError extends Error {
-  constructor(readonly code: "not_found" | "invalid", message: string, readonly details: Record<string, unknown> = {}) {
+  constructor(readonly code: "not_found" | "invalid" | "invalid_tool", message: string, readonly details: Record<string, unknown> = {}) {
     super(message);
     this.name = "McpError";
   }
@@ -705,16 +707,26 @@ export class McpService {
     const servers = (await this.db
       .select()
       .from(mcpServers)
-      .where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }, eq(mcpServers.enabled, true)))) as unknown as McpServerRow[];
+      .where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }))) as unknown as McpServerRow[];
     if (!servers.length) return [];
     const rows = (await this.db
       .select()
       .from(mcpTools)
       .where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, inArray(mcpTools.serverId, servers.map((server) => server.id))))) as unknown as McpToolRow[];
-    return servers.map((server) => ({
+    const owners = new Map<string, Set<string>>();
+    for (const tool of rows) {
+      const namespace = tool.toolName.split(".").slice(0, 2).join(".");
+      const ids = owners.get(namespace) ?? new Set<string>();
+      ids.add(tool.serverId);
+      owners.set(namespace, ids);
+    }
+    const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([namespace]) => namespace));
+    const collisions = new Set(rows.filter((tool) => ambiguous.has(tool.toolName.split(".").slice(0, 2).join("."))).map((tool) => tool.toolName));
+    if (collisions.size) console.warn("MCP tools omitted because multiple servers offer the same name", [...collisions]);
+    return servers.filter((server) => server.enabled).map((server) => ({
       install: installOf(server),
       tools: rows
-        .filter((tool) => tool.serverId === server.id && tool.enabled)
+        .filter((tool) => tool.serverId === server.id && tool.enabled && !collisions.has(tool.toolName))
         .map((tool) => ({
           serverId: server.id,
           serverName: server.name,
@@ -753,23 +765,34 @@ export function grantedBy(allowlist: readonly string[], toolName: string): strin
  * would either do nothing or take the other five away too, and both are worse than a longer list.
  */
 export function applyGrant(input: { allowlist: readonly string[]; slug: string; toolNames: string[] | null; serverTools: readonly string[]; granted: boolean }): string[] {
-  const { allowlist, slug, toolNames, serverTools, granted } = input;
-  const prefix = `mcp.${slug}.`;
+  const { slug, toolNames, serverTools, granted } = input;
+  const allowlist = [...new Set(input.allowlist.map(canonicalizeMcpAllowlistEntry))];
+  const prefix = `${mcpNamespace(slug)}.`;
   const wildcard = mcpToolPattern(slug);
   const unique = (patterns: string[]) => [...new Set(patterns)];
+  const requested = toolNames?.map((name) => {
+    const tool = serverTools.includes(name) ? name : mcpToolName(slug, name);
+    if (!serverTools.includes(tool)) throw new McpError("invalid_tool", `Tool “${name}” is not a recorded tool of this server.`);
+    return tool;
+  });
+  if (!granted) {
+    const targets = requested ?? serverTools;
+    const broad = allowlist.find((pattern) => pattern !== wildcard && (pattern === "*" || pattern.endsWith(".*")) && (toolNames !== null || !pattern.startsWith(prefix)) && targets.some((tool) => matchTool(pattern, tool)));
+    if (broad) throw new McpError("invalid_tool", `Remove the broader grant “${broad}” before revoking this server's tools.`);
+  }
 
   if (granted) {
     if (toolNames === null) {
       // Everything, and so nothing narrower that it already covers.
       return unique([...allowlist.filter((pattern) => !(pattern.startsWith(prefix) && pattern !== wildcard)), wildcard]);
     }
-    const added = toolNames.map((tool) => (tool.startsWith(prefix) ? tool : `${prefix}${tool}`)).filter((tool) => !grantedBy(allowlist, tool));
+    const added = requested!.filter((tool) => !grantedBy(allowlist, tool));
     return unique([...allowlist, ...added]);
   }
 
   if (toolNames === null) return allowlist.filter((pattern) => !pattern.startsWith(prefix));
 
-  const revoked = new Set(toolNames.map((tool) => (tool.startsWith(prefix) ? tool : `${prefix}${tool}`)));
+  const revoked = new Set(requested!);
   if (!allowlist.includes(wildcard)) return allowlist.filter((pattern) => !revoked.has(pattern));
-  return unique([...allowlist.filter((pattern) => pattern !== wildcard), ...serverTools.filter((tool) => !revoked.has(tool))]);
+  return unique([...allowlist.filter((pattern) => pattern !== wildcard && !revoked.has(pattern)), ...serverTools.filter((tool) => !revoked.has(tool))]);
 }
