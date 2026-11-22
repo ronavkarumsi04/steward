@@ -36,7 +36,7 @@
 .q-specialist [data-specialist-metrics] > div:first-child { padding-inline-start: 0; border: 0; }
 .q-specialist [data-specialist-metrics] :is(.eyebrow, [class*="uppercase"]) { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .q-specialist[data-surface="projects"] .q-project-list { display: block; }
-.q-specialist[data-surface="projects"] .q-project-list > a { display: block; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 24px 20px; background: var(--bg); transform: none; translate: none; transition: none; }
+.q-specialist[data-surface="projects"] .q-project-list > a { display: block; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 24px 20px; background: var(--bg); transform: none; transition: none; }
 .q-specialist[data-surface="projects"] .q-project-list > a:hover { background: var(--bg-tint); }
 .q-specialist .q-project-list h2 { font-size: 20px; overflow-wrap: anywhere; }
 .q-specialist .q-project-list > a > div:first-child { flex-wrap: wrap; }
