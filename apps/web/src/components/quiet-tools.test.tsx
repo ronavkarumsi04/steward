@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import type { CompanyOverview, Integration, IntegrationCatalogEntry, ProviderCredential } from "@/lib/types";
-import { IntegrationsPanel } from "./integrations-panel";
+import { filterConnectionCatalog, IntegrationsPanel } from "./integrations-panel";
 import { ProvidersPanel } from "./providers-panel";
 import { QuietConnections, QuietProviders } from "./quiet-tools-pages";
 import { QuietToolsFrame, ToolsReadError } from "./quiet-tools";
@@ -27,6 +27,12 @@ const connection: Integration = { id: "inherited", companyId: null, type: "githu
 const html = (node: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(node);
 
 describe("Quiet connections", () => {
+  it("finds services by the category label displayed to people", () => {
+    const github = { ...entry, category: "source_control" };
+    expect(filterConnectionCatalog([github], " SOURCE CONTROL ")).toEqual([github]);
+    expect(filterConnectionCatalog([github], "github")).toEqual([github]);
+    expect(filterConnectionCatalog([github], "calendar")).toEqual([]);
+  });
   it("keeps inherited connections read-only and does not echo upstream errors or webhook credentials", () => {
     const output = html(createElement(IntegrationsPanel, { quiet: true, orgId: "org", companyId: "company", catalog: [], integrations: [connection], isAdmin: true }));
     expect(output).toContain("Managed at organization level");

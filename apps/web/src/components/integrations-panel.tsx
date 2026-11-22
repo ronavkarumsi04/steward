@@ -7,6 +7,11 @@ import type { Integration, IntegrationCatalogEntry } from "@/lib/types";
 import { Card, Empty, StatusPill, Ago } from "./ui";
 import { copyWebhookUrl, downloadWebhookUrl } from "@/lib/webhook-export";
 
+export function filterConnectionCatalog(catalog: IntegrationCatalogEntry[], query: string) {
+  const search = query.trim().toLowerCase();
+  return catalog.filter(entry => `${entry.name} ${entry.category.replace(/_/g, " ")}`.toLowerCase().includes(search));
+}
+
 export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, companyId, companyPath, quiet = false }: { orgId: string; catalog: IntegrationCatalogEntry[]; integrations: Integration[]; isAdmin: boolean; companyId?: string; companyPath?: string; quiet?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState<IntegrationCatalogEntry | null>(null);
@@ -72,7 +77,7 @@ export function IntegrationsPanel({ orgId, catalog, integrations, isAdmin, compa
     }
   }
 
-  const visibleCatalog = quiet ? catalog.filter(c => `${c.name} ${c.category}`.toLowerCase().includes(query.toLowerCase())) : catalog;
+  const visibleCatalog = quiet ? filterConnectionCatalog(catalog, query) : catalog;
   const categories = [...new Set(visibleCatalog.map((c) => c.category))];
 
   return (
