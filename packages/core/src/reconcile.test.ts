@@ -82,6 +82,28 @@ describe("run state machine", () => {
 });
 
 describe("reconciliation", () => {
+  d("leaves cancelled approvals alone when their run is stranded waiting for cancellation", async () => {
+    const { scope, agentId, userId } = await tenant();
+    const runs = new RunService(db);
+    const approvals = new ApprovalService(db);
+    for (const status of ["waiting_approval", "waiting_budget"] as const) {
+      const id = crypto.randomUUID();
+      await runs.create(scope, { id, workflowId: `run-${id}`, agentId, trigger: { kind: "user", instruction: "Cancel signal lost" } });
+      await runs.setStatus(scope, id, status);
+      const approval = await approvals.request(scope, { runId: id, workflowId: `run-${id}`, action: "email.send", reason: "Review", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 3600 });
+      await approvals.cancelForRun(scope, id);
+      // Give recovery all the human-decision metadata too: status alone must exclude cancellation.
+      await db.update(approvalRows).set({ resolvedBy: userId }).where(eq(approvalRows.id, approval.id));
+      const delivered: string[] = [];
+      await new ReconcileService(db, null, undefined, { notify: async (_workflow, approvalId) => { delivered.push(approvalId); } }).sweep({ limit: 10_000 });
+      expect(delivered).not.toContain(approval.id);
+      expect((await approvals.get(scope, approval.id))?.status).toBe("cancelled");
+      expect((await runs.get(scope, id))?.status).toBe(status);
+      expect(await approvals.resolve(scope, approval.id, { status: "approved" })).toBeNull();
+      await runs.setStatus(scope, id, "cancelled");
+    }
+  });
+
   d("recovers a persisted human decision after signal loss and stops after the run resumes", async () => {
     const { scope, agentId } = await tenant();
     const runs = new RunService(db);
