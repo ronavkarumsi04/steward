@@ -556,7 +556,7 @@ export class McpService {
           THEN jsonb_build_array(${EXPLICIT_NO_TOOLS}::text) ELSE '[]'::jsonb END
           || coalesce(jsonb_agg(entry ORDER BY position) FILTER (WHERE entry <> ${EXPLICIT_NO_TOOLS}), '[]'::jsonb)
         FROM jsonb_array_elements_text(${agents.toolAllowlist}) WITH ORDINALITY AS grants(entry, position)
-        WHERE NOT (entry ~ '^!?mcp\\.[^.]+\\..+$' AND
+        WHERE NOT (entry ~ '^mcp\\.[^.]+\\..+$' AND
           'mcp.' || regexp_replace(lower(split_part(entry, '.', 2)), '[^a-z0-9_]', '_', 'g') = ${mcpNamespace(existing.slug)})
       )`, updatedAt: this.now() }).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }));
       const removed = await tx.delete(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, eq(mcpTools.serverId, id))).returning({ id: mcpTools.id });
