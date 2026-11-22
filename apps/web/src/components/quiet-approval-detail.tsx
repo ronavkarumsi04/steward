@@ -116,7 +116,7 @@ export function QuietApprovalDetail({ approval, overview, run }: { approval: App
     } finally { lock.current = false; setBusy(false); }
   }
 
-  const statusText = state.status === "pending" ? c.pending : state.status === "expired" ? c.expiredStatus : c[state.status];
+  const statusText = state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
   const terminalRunMessage = run?.status === "failed" ? c.executionFailed : run?.status === "succeeded" ? c.executionSucceeded : run?.status === "cancelled" ? c.executionCancelled : null;
   const decided = !pending;
   return <div className="q-decision-page">

@@ -882,11 +882,11 @@ describe("tenancy + RBAC", () => {
     expect((await viewer.api.json("GET", `/companies/${co.body.company.id}`)).status).toBe(200);
     expect((await viewer.api.json("POST", `/companies/${co.body.company.id}/goals`, { title: "Nope" })).status).toBe(403);
     const approvalScope: TenantScope = { organizationId: owner.orgId, companyId: co.body.company.id, actor: { type: "system", component: "test" } };
-    const approval = await services.forScope(approvalScope).approvals.request(approvalScope, { action: "email.send", reason: "Read-only review", payload: { to: "review@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60 });
+    const approval = await services.forScope(approvalScope).approvals.request(approvalScope, { action: "email.send", reason: "Read-only review", payload: { to: "review@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInMs: 60_000 });
     expect((await viewer.api.json("GET", `/companies/${co.body.company.id}/approvals/${approval.id}`)).status).toBe(200);
     expect((await viewer.api.json("POST", `/companies/${co.body.company.id}/approvals/${approval.id}/decide`, { status: "approved", expectedPayload: approval.payload })).status).toBe(403);
-    const outsider = await register("Outside organization");
-    expect((await outsider.api.json("GET", `/companies/${co.body.company.id}/approvals/${approval.id}`)).status).toBe(403);
+    const outsider = await register("Outside");
+    expect((await outsider.api.json("GET", `/companies/${co.body.company.id}/approvals/${approval.id}`)).status).toBe(404);
     const members = await owner.api.json<{ members: Array<{ userId: string }> }>("GET", `/orgs/${owner.orgId}/members`);
     expect(members.body.members.some((x) => x.userId === viewer.userId)).toBe(true);
     expect((await owner.api.json("PATCH", `/orgs/${owner.orgId}/members/${viewer.userId}`, { role: "member" })).status).toBe(200);

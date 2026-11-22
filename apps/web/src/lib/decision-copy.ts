@@ -2,7 +2,7 @@ import type { Locale } from "./i18n";
 
 const en = {
   overview: "Overview", intro: "A clear view of what needs you, and what is moving forward.", delegate: "Delegate work",
-  decisions: "Needs your decision", allApprovals: "View approvals", clear: "No decisions waiting.", clearHint: "Review active work or delegate the next outcome.",
+  decisions: "Needs your decision", allApprovals: "View approvals", clear: "No decisions waiting.", clearHint: "Review active work or delegate the next outcome. Expired requests remain inspectable in Approvals.", pendingRecords: "Pending records",
   review: "Review action", work: "Work in motion", allWork: "All work", noWork: "No active runs right now.", noWorkHint: "Give your team an outcome to work toward.",
   spend: "AI spend · last 30 days", unavailable: "Not available", spendHint: "USD · company-scoped provider usage ledger. Recorded costs can include provider estimates; this is not a provider invoice or an account balance.",
   budget: "Configured budget", budgetHint: "A limit for its own period, not a balance. It is separate from the rolling 30-day usage above.", noBudget: "No AI or total budget configured.",
@@ -19,7 +19,7 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   overview: "Resumen", intro: "Una vista clara de lo que te necesita y lo que avanza.", delegate: "Delegar trabajo",
-  decisions: "Necesita tu decisión", allApprovals: "Ver aprobaciones", clear: "No hay decisiones pendientes.", clearHint: "Revisa el trabajo activo o delega el siguiente objetivo.",
+  decisions: "Necesita tu decisión", allApprovals: "Ver aprobaciones", clear: "No hay decisiones pendientes.", clearHint: "Revisa el trabajo activo o delega el siguiente objetivo. Las solicitudes vencidas siguen disponibles en Aprobaciones.", pendingRecords: "Registros pendientes",
   review: "Revisar acción", work: "Trabajo en curso", allWork: "Todo el trabajo", noWork: "No hay ejecuciones activas ahora.", noWorkHint: "Dale a tu equipo un objetivo.",
   spend: "Gasto de IA · últimos 30 días", unavailable: "No disponible", spendHint: "USD · registro de uso de proveedores de esta empresa. Puede incluir estimaciones; no es una factura del proveedor ni un saldo.",
   budget: "Presupuesto configurado", budgetHint: "Un límite para su propio período, no un saldo. Es independiente del uso de los últimos 30 días.", noBudget: "No hay presupuesto de IA o total configurado.",

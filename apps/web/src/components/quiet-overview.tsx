@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { decisionCopy } from "@/lib/decision-copy";
-import { recordedUsd } from "@/lib/decision-semantics";
+import { isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
 import { mostUrgent } from "@/lib/approval-review";
 import { statusLabel, t, type Locale, type MessageKey } from "@/lib/i18n";
 import type { ApiClient } from "@/lib/api";
@@ -18,7 +18,8 @@ export async function QuietOverview({ overview, api, locale }: { overview: Compa
     api.get<{ runs: Run[] }>(`/companies/${company.id}/runs?status=queued,building_context,planning,executing,verifying,waiting_approval,waiting_budget,needs_review&limit=8`),
     api.get<{ usage: UsageRow[] }>(`/orgs/${company.organizationId}/providers/usage?companyId=${company.id}&days=30`),
   ]);
-  const decision = queue.status === "fulfilled" ? mostUrgent(queue.value.approvals) : null;
+  const now = Date.now();
+  const decision = queue.status === "fulfilled" ? mostUrgent(queue.value.approvals.filter((approval) => isDecisionOpen(approval, now))) : null;
   const spend = usage.status === "fulfilled" ? usage.value.usage.reduce((sum, row) => sum + row.costUsd, 0) : null;
   const budget = budgets.find((b) => b.category === "ai") ?? budgets.find((b) => b.category === "total");
   const profile = overview.profile?.profile;
@@ -28,7 +29,7 @@ export async function QuietOverview({ overview, api, locale }: { overview: Compa
     <div className="q-overview-grid"><div>
       <section aria-labelledby="q-decisions"><div className="q-section-heading"><h2 id="q-decisions">{c.decisions}</h2><Link className="q-link" href={`${base}/approvals`}>{c.allApprovals}<Icon.ChevronRight size={14} /></Link></div>
         {queue.status === "rejected" ? failure : decision ? <article className="q-pending">
-          <div className="q-row"><span className="pill pill-warn">{c.pending} · {overview.pendingApprovals}</span><Ago iso={decision.createdAt} locale={locale} /></div>
+          <div className="q-row"><span className="pill pill-warn">{c.pendingRecords} · {overview.pendingApprovals}</span><Ago iso={decision.createdAt} locale={locale} /></div>
           <h3>{decision.action}</h3><p className="q-request-reason">{decision.reason || c.notRecorded}</p>
           <Link className="btn btn-primary" href={`${base}/approvals/${decision.id}`}>{c.review}<Icon.ChevronRight size={16} /></Link>
           <div className="q-decision-meta"><Icon.Agents size={16} /><span>{agents.find((a) => a.id === decision.agentId)?.name ?? decision.agentId ?? c.noAgent}</span><span>{decision.affectedSystem || c.notRecorded}</span></div>

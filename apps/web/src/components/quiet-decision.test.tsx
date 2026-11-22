@@ -54,4 +54,13 @@ describe("Quiet decision surfaces", () => {
     expect(html).not.toContain("$0.00");
     expect(get.mock.calls.some(([path]) => path.includes("companyId=company-1&days=30"))).toBe(true);
   });
+  it("does not let an expired pending record displace a request that can be decided", async () => {
+    const get = vi.fn(async (path: string) => path.includes("approvals") ? { approvals: [
+      { ...approval, id: "expired", action: "expired.action", expiresAt: "2000-01-01T00:00:00Z" },
+      { ...approval, id: "open", action: "actionable.action" },
+    ] } : path.includes("providers/usage") ? { usage: [] } : { runs: [] });
+    const html = renderToStaticMarkup(await QuietOverview({ overview, locale: "en", api: { get } as never }));
+    expect(html).toContain("actionable.action");
+    expect(html).not.toContain("expired.action");
+  });
 });
