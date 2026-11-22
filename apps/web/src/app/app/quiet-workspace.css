@@ -117,6 +117,14 @@
 .quiet-dialog-email { overflow-wrap: anywhere; margin-bottom: 12px; color: var(--muted); }
 .quiet-logout { width: 100%; margin-top: 16px; }
 
+@media (min-width: 1024px) {
+  /* Keep the global controls and company navigation available while the canvas
+     scrolls. The measured header also covers wrapping at enlarged text sizes. */
+  .quiet-topbar { position: sticky; top: 0; z-index: var(--z-nav); background: var(--bg); }
+  .quiet-rail { position: sticky; top: var(--workspace-header-height, 64px); align-self: start; height: calc(100dvh - var(--workspace-header-height, 64px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scroll-padding-block: 12px; }
+  .quiet-rail > * { flex-shrink: 0; }
+}
+
 @media (max-width: 1023px) {
   .quiet-topbar { padding-inline: 16px; }
   .quiet-frame { display: block; }
