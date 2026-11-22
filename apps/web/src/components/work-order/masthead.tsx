@@ -2,7 +2,7 @@ import Link from "next/link";
 import { StewardMark } from "@/components/brand";
 import s from "./work-order.module.css";
 
-export function Masthead({ current, href, label }: { current: "home" | "pricing" | "compare"; href: string; label: string }) {
+export function Masthead({ current, href, label }: { current: "home" | "pricing" | "compare" | "pilot"; href: string; label: string }) {
   return (
     <header className={s.binding}>
       <nav className={s.bindingInner} aria-label="Primary">
