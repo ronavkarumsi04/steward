@@ -89,18 +89,26 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
     const form = e.currentTarget;
     const fd = new FormData(form);
     setError(null);
+    const timezone = String(fd.get("timezone") || "UTC");
+    if (quiet) {
+      try { new Intl.DateTimeFormat(undefined, { timeZone: timezone }); }
+      catch { setScheduleFeedback({ id: null, message: c.invalidTimeZone, error: true }); return; }
+    }
     try {
       await browserApi.post(`/companies/${companyId}/schedules`, {
         agentId: String(fd.get("agentId")),
         name: String(fd.get("name")),
         cron: String(fd.get("cron")),
-        timezone: String(fd.get("timezone") || "UTC"),
+        timezone,
         instruction: String(fd.get("instruction") ?? ""),
       });
       form.reset();
       router.refresh();
     } catch (err) {
-      if (quiet) setScheduleFeedback({ id: null, message: err instanceof ApiError && err.status < 500 ? err.message : c.scheduleFailed, error: true });
+      if (quiet) {
+        setScheduleFeedback({ id: null, message: err instanceof ApiError && err.status < 500 ? err.message : c.scheduleCreateUnconfirmed, error: true });
+        router.refresh();
+      }
       else setError(err instanceof ApiError ? err.message : t("agents.scheduleCreateFailed"));
     }
   }
@@ -181,7 +189,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>
                   <span className="font-medium">{s.name}</span> <span className="mono text-xs text-muted">{s.cron} {s.timezone}</span>
-                  <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} /></div>
+                  <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · {quiet && !s.temporalScheduleId ? <span className="pill text-warn">{c.registrationUnconfirmed}</span> : <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} />}</div>
                 </div>
                 <div className="flex gap-1">
                   <button className="btn" disabled={quiet && (!canTrigger || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "trigger"), canTrigger) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
