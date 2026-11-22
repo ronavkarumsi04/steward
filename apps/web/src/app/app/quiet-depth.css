@@ -45,6 +45,9 @@
 .q-depth .q-source-meta { display: block; color: var(--muted); font-size: 12px; margin-top: 7px; }
 .q-document-row { flex-wrap: wrap; }
 .q-document-row > button { flex-basis: 240px; }
+.q-document-source { flex-basis: 100%; min-width: 0; max-width: 100%; }
+/* A machine path owns its scroll region; it must not size or split the title button. */
+.q-document-source code { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; overflow-wrap: normal; }
 .q-depth .q-member-list > li { padding-block: 22px; gap: 18px; }
 .q-member-identity { display: flex; gap: 14px; align-items: start; min-width: 0; flex: 1 1 260px; }
 .q-member-identity > div { min-width: 0; }

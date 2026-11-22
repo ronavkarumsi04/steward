@@ -27,6 +27,10 @@
 .q-specialist :is(button, .btn, summary) { min-height: 44px; white-space: normal; overflow-wrap: normal; }
 .q-specialist summary { cursor: pointer; padding-block: 12px; font-size: max(14px, .875rem); color: var(--accent); }
 .q-specialist :is(.truncate, [class*="line-clamp-"]) { overflow: visible; text-overflow: clip; white-space: normal; -webkit-line-clamp: unset; display: block; overflow-wrap: normal; }
+.q-finance-model-row { flex-wrap: wrap; }
+.q-finance-model-row > div { max-width: 100%; }
+.q-finance-model-row > .tnum { flex-shrink: 0; overflow-wrap: normal; }
+.q-specialist .q-finance-model-id { overflow-wrap: anywhere; }
 .q-specialist :is(pre, code) { overflow-wrap: anywhere; }
 .q-specialist .empty-note { padding: 36px 20px; background: var(--bg-tint); border-radius: 8px; }
 .q-specialist-create { border: 1px solid var(--control-border); border-radius: 10px; margin-block: 20px 28px; }
