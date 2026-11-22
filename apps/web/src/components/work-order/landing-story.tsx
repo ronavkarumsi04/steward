@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { StewardMark } from "@/components/brand";
 import { Icon } from "@/components/icons";
 import { useStoryController } from "./use-story-controller";
@@ -22,7 +23,7 @@ export function LandingStory({ entryForm }: { entryForm: ReactNode }) {
         <h1 id="hero-title" className={s.headline}>Agents do the work.<br /><span>You keep<br /> the record.</span></h1>
         <p className={s.lede}>Give AI agents a job, a budget and rules for when to ask you. Get back the work and a record of every step.</p>
         {entryForm}
-        <a href="#story-plan" className={s.follow}>Follow an instruction <Icon.ArrowRight size={18} /></a>
+        <Link href="#story-plan" className={s.follow}>Follow an instruction <Icon.ArrowRight size={18} /></Link>
       </section>
 
       <aside className={s.visual} aria-label="Work order illustration">
@@ -52,7 +53,8 @@ export function LandingStory({ entryForm }: { entryForm: ReactNode }) {
         {sceneState === "loading" && <p className={s.fallbackNote} role="status">Loading 3D. The illustration remains available.</p>}
         {sceneState === "unavailable" && <p className={s.fallbackNote} role="status">3D is unavailable. The illustrated story is still here.</p>}
         <nav className={s.chapters} aria-label="Story chapters">
-          {CHAPTERS.map((chapter, index) => <a key={chapter.id} href={`#story-${chapter.id}`} data-story-link={index}><span>{String(index + 1).padStart(2, "0")}</span>{chapter.label}</a>)}
+          {/* Next retains its history tree for Back after a chapter and a cross-page visit. */}
+          {CHAPTERS.map((chapter, index) => <Link key={chapter.id} href={`#story-${chapter.id}`} data-story-link={index}><span>{String(index + 1).padStart(2, "0")}</span>{chapter.label}</Link>)}
         </nav>
       </aside>
 
@@ -72,7 +74,7 @@ export function LandingStory({ entryForm }: { entryForm: ReactNode }) {
         <span className={s.sequence}>03 → 04</span>
         <h2 id="story-evidence-title">The work moves on.<br /><span>The evidence stays.</span></h2>
         <p>Inspect the plan, every model and tool call, the cost and the approval that allowed each step. Cancel a run and the remaining side effects stop.</p>
-        <a href="#how" className={s.follow}>Inspect the three copies <Icon.ArrowRight size={18} /></a>
+        <Link href="#how" className={s.follow}>Inspect the three copies <Icon.ArrowRight size={18} /></Link>
         <a href="/pilot" className={s.pilot}>Explore the assisted pilot</a>
       </section>
     </div>

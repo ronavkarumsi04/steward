@@ -39,6 +39,9 @@ or export, and does not depend on any Spline account or future quota reset.
 - `storyProgress` maps actual chapter positions, not assumed viewport heights.
   Anchor navigation, restored scroll, zoom and responsive reflow use the same
   absolute state. `storyPoses` interpolates four authored poses in both directions.
+- Chapter links use Next's link enhancement to retain the router history tree
+  across hash entries and later cross-page visits. Without JavaScript they remain
+  ordinary document anchors; browser Back must restore both the URL and story.
 - White, canary and pink sheets occupy separate depth lanes, curl at their free
   corners and fan aside to reveal each copy without passing through one another.
   Tests cover full-sheet depth bounds between every pair of authored poses.
