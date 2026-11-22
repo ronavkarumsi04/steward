@@ -2522,6 +2522,14 @@ describe("mcp marketplace", () => {
     const updated = await me.api.json<{ agent: { toolAllowlist: string[] } }>("PATCH", `/companies/${me.companyId}/agents/${created.body.agent.id}`, { toolAllowlist: ["mcp.a-b.billing.invoices.*"] });
     expect(updated.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.invoices.*"]);
     expect(registry.list({ allow: updated.body.agent.toolAllowlist }).map((tool) => tool.manifest.name)).toEqual(["mcp.a_b.billing.invoices.read"]);
+    await me.api.call("PATCH", `/companies/${me.companyId}/agents/${created.body.agent.id}`, { toolAllowlist: ["mcp.a-b.billing.*", "mcp.a_b.billing.invoices.*"] });
+    const grantPath = `/companies/${me.companyId}/mcp/${installed.body.server.id}/grant`;
+    const narrowed = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: created.body.agent.id, toolNames: ["billing.invoices.read"], granted: false });
+    expect(narrowed.status).toBe(200);
+    expect(narrowed.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.write"]);
+    expect(registry.list({ allow: narrowed.body.agent.toolAllowlist }).map((tool) => tool.manifest.name)).toEqual(["mcp.a_b.billing.write"]);
+    const emptied = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: created.body.agent.id, toolNames: ["mcp.a_b.billing.write"], granted: false });
+    expect(emptied.body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
   }, 60_000);
 
   d("refuses namespace aliases and fails closed on stored collisions without losing other tools", async () => {

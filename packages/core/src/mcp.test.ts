@@ -156,7 +156,7 @@ describe("grants", () => {
     }
     for (const granted of [true, false]) expect(() => applyGrant({ ...input, allowlist: [], toolNames: ["missing"], granted })).toThrow(McpError);
     expect(() => applyGrant({ ...input, allowlist: ["*"], toolNames: [serverTools[1]!], granted: false })).toThrow("broader grant");
-    expect(() => applyGrant({ ...input, serverTools: ["mcp.local_protocol_check.group.tool"], allowlist: ["mcp.local_protocol_check.group.*"], toolNames: ["mcp.local_protocol_check.group.tool"], granted: false })).toThrow("broader grant");
+    expect(applyGrant({ ...input, serverTools: ["mcp.local_protocol_check.group.tool"], allowlist: ["mcp.local_protocol_check.group.*"], toolNames: ["mcp.local_protocol_check.group.tool"], granted: false })).toEqual([EXPLICIT_NO_TOOLS]);
   });
   const tools = ["mcp.ledger.lookup_invoice", "mcp.ledger.delete_customer", "mcp.ledger.reschedule"];
 
@@ -222,6 +222,18 @@ describe("grants", () => {
     expect(grantedBy(allowlist, serverTools[1]!)).toBe("mcp.a_b.billing.*");
     expect(grantedBy(allowlist, serverTools[2]!)).toBeNull();
     expect(applyGrant({ allowlist, slug: "a-b", toolNames: null, serverTools, granted: false })).toEqual([EXPLICIT_NO_TOOLS]);
+  });
+  it("narrows overlapping in-namespace wildcard grants without granting adjacent branches", () => {
+    const serverTools = ["mcp.a_b.billing.read", "mcp.a_b.billing.invoices.read", "mcp.a_b.billing.invoices.write", "mcp.a_b.billing_extra.read", "mcp.a_b.reports.read"];
+    const input = { slug: "a-b", serverTools, granted: false, toolNames: ["billing.invoices.read"] };
+    const allowlist = ["mcp.a-b.billing.*", "mcp.a_b.billing.invoices.*", serverTools[1]!, "mcp.a_b.reports.*", "web.*"];
+    const narrowed = applyGrant({ ...input, allowlist });
+    expect(narrowed).toEqual(["mcp.a_b.reports.*", "web.*", serverTools[0], serverTools[2]]);
+    expect(grantedBy(narrowed, serverTools[1]!)).toBeNull();
+    expect(grantedBy(narrowed, serverTools[3]!)).toBeNull();
+    expect(applyGrant({ ...input, allowlist: ["mcp.a_b.billing.invoices.*"], toolNames: [serverTools[1]!, serverTools[2]!] })).toEqual([EXPLICIT_NO_TOOLS]);
+    for (const broad of ["*", "mcp.*"]) expect(() => applyGrant({ ...input, allowlist: [broad, ...allowlist] })).toThrow("broader grant");
+    expect(() => applyGrant({ ...input, allowlist, toolNames: ["missing"] })).toThrow(McpError);
   });
 });
 

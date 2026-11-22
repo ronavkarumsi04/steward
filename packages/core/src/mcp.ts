@@ -789,7 +789,7 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
   });
   if (!granted) {
     const targets = requested ?? serverTools;
-    const broad = allowlist.find((pattern) => pattern !== wildcard && (pattern === "*" || pattern.endsWith(".*")) && (toolNames !== null || !pattern.startsWith(prefix)) && targets.some((tool) => matchTool(pattern, tool)));
+    const broad = allowlist.find((pattern) => !pattern.startsWith(prefix) && (pattern === "*" || pattern.endsWith(".*")) && targets.some((tool) => matchTool(pattern, tool)));
     if (broad) throw new McpError("invalid_tool", `Remove the broader grant “${broad}” before revoking this server's tools.`);
   }
 
@@ -805,6 +805,6 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
   if (toolNames === null) return unique(allowlist.filter((pattern) => !pattern.startsWith(prefix)));
 
   const revoked = new Set(requested!);
-  if (!allowlist.includes(wildcard)) return unique(allowlist.filter((pattern) => !revoked.has(pattern)));
-  return unique([...allowlist.filter((pattern) => pattern !== wildcard && !revoked.has(pattern)), ...serverTools.filter((tool) => !revoked.has(tool))]);
+  const narrowed = allowlist.filter((pattern) => pattern.startsWith(prefix) && pattern.endsWith(".*") && requested!.some((tool) => matchTool(pattern, tool)));
+  return unique([...allowlist.filter((pattern) => !narrowed.includes(pattern) && !revoked.has(pattern)), ...serverTools.filter((tool) => !revoked.has(tool) && narrowed.some((pattern) => matchTool(pattern, tool)))]);
 }
