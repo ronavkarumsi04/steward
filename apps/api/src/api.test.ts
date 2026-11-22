@@ -62,6 +62,31 @@ describe("capped signup and waitlist", () => {
     await expect(privacy.deleteAccount(owner.userId)).rejects.toMatchObject({ code: "not_found" });
   });
 
+  d("exports only the account's waitlist personal data without admission credentials", async () => {
+    const owner = await register();
+    const signup = new SignupService(core.db);
+    const privacy = new PrivacyService(core.db);
+    expect((await privacy.exportUser(owner.userId)).data.waitlist_entries).toEqual([]);
+    const linkedEmail = `old-export-${uniq()}@example.com`;
+    const unrelatedEmail = `other-export-${uniq()}@example.com`;
+    await signup.join({ email: owner.email.toUpperCase(), name: "Founder", note: "Research studio" }, "closed");
+    await signup.join({ email: linkedEmail }, "capped");
+    await signup.join({ email: unrelatedEmail }, "closed");
+    const linked = await entry(linkedEmail);
+    await signup.admit({ id: linked.id }, null);
+    await signup.complete(linked.id, owner.userId);
+    const exported = await privacy.exportUser(owner.userId);
+    expect(exported.data.waitlist_entries).toHaveLength(2);
+    expect(exported.data.waitlist_entries).toEqual(expect.arrayContaining([
+      { email: owner.email, name: "Founder", note: "Research studio", reason: "closed", createdAt: expect.any(Date), admittedAt: null, registeredAt: null },
+      { email: linkedEmail, name: null, note: null, reason: "capped", createdAt: expect.any(Date), admittedAt: expect.any(Date), registeredAt: expect.any(Date) },
+    ]));
+    expect(exported.manifest.included.waitlist_entries).toBe(2);
+    expect(exported.manifest.counts.tables).toBe(Object.keys(exported.data).length);
+    expect(exported.manifest.counts.rows).toBe(Object.values(exported.data).reduce((sum, rows) => sum + rows.length, 0));
+    expect((await privacy.exportUser(`missing-${uniq()}`)).data.waitlist_entries).toEqual([]);
+  });
+
   it("parses optional non-negative caps and rejects malformed startup configuration", () => {
     expect(loadConfig(ENV)).toMatchObject({ signupTotalCap: undefined, signupDailyCap: undefined });
     expect(loadConfig({ ...ENV, SIGNUP_TOTAL_CAP: " ", SIGNUP_DAILY_CAP: "0" })).toMatchObject({ signupTotalCap: undefined, signupDailyCap: 0 });

@@ -255,19 +255,28 @@ export class PrivacyService {
     const members = (await this.db.execute(sql`select organization_id, role, created_at from memberships where user_id = ${userId}`)).rows as unknown[];
     const accepts = await this.db.select().from(agreements).where(eq(agreements.userId, userId));
     const requests = await this.db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId));
+    const waitlist = await this.db.select({
+      email: waitlistEntries.email,
+      name: waitlistEntries.name,
+      note: waitlistEntries.note,
+      reason: waitlistEntries.reason,
+      createdAt: waitlistEntries.createdAt,
+      admittedAt: waitlistEntries.admittedAt,
+      registeredAt: waitlistEntries.registeredAt,
+    }).from(waitlistEntries).where(or(eq(waitlistEntries.userId, userId), eq(waitlistEntries.email, sql`(select lower(trim(email)) from users where id = ${userId})`)));
     return {
       manifest: {
         generatedAt: new Date().toISOString(),
         scope: { kind: "user" as const, userId },
-        included: { account: account.length, memberships: members.length, agreements: accepts.length, privacy_requests: requests.length },
+        included: { account: account.length, memberships: members.length, agreements: accepts.length, privacy_requests: requests.length, waitlist_entries: waitlist.length },
         excluded: EXPORT_EXCLUSIONS,
-        counts: { tables: 4, rows: account.length + members.length + accepts.length + requests.length },
+        counts: { tables: 5, rows: account.length + members.length + accepts.length + requests.length + waitlist.length },
         notes: [
           "This is your personal data as an account holder. Organization data is exported per organization from its settings page.",
           "Your agreement history is included, including the version and statement you accepted.",
         ],
       },
-      data: { account, memberships: members, agreements: accepts, privacy_requests: requests },
+      data: { account, memberships: members, agreements: accepts, privacy_requests: requests, waitlist_entries: waitlist },
     };
   }
 
