@@ -4,6 +4,9 @@ The landing preview follows one instruction through work, approval and the recor
 Its three paper copies extend Steward's existing carbon-copy visual language.
 The narrative, email entry and links are HTML; the canvas is decorative.
 
+[ADR-0029](adr/0029-preview-only-3d-story.md) records the preview-only WebGL
+exception to the incumbent showcase's no-new-renderer architecture.
+
 ## Review without launching
 
 - Development: open `/?experience=story`.
