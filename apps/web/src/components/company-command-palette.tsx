@@ -57,6 +57,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
   const [selected, setSelected] = useState(0);
   const [data, setData] = useState<PaletteData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<PaletteAction | null>(null);
   const [picking, setPicking] = useState<{ taskId: string; picking: "assign" | "run" } | null>(null);
@@ -99,6 +100,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
 
   useEffect(() => {
     setSelected(0);
+    setActionError(null);
   }, [query, picking, confirming]);
 
   function openPalette() {
@@ -112,6 +114,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
     setQuery("");
     setConfirming(null);
     setPicking(null);
+    setActionError(null);
   }
 
   const act = useCallback(
@@ -130,6 +133,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
         return;
       }
       setBusy(true);
+      setActionError(null);
       try {
         switch (target.kind) {
           case "approve": {
@@ -190,7 +194,8 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
         void load();
       } catch (e) {
         // The palette stays open on failure: the next attempt should not need re-typing.
-        toast("err", e instanceof ApiError ? e.message : "The action did not reach the API.");
+        // Native modal dialogs make the global toast region inert. Keep retry feedback in the active dialog.
+        setActionError(e instanceof ApiError ? e.message : "The action did not reach the API.");
       } finally {
         setBusy(false);
       }
@@ -371,6 +376,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
                 aria-activedescendant={!confirming && matches[selected] ? `command-${selected}` : undefined}
               />
               {countsLine && <p className="mt-1.5 text-[11px] font-semibold text-muted">{countsLine}</p>}
+              {actionError && <p role="alert" className="mt-2 text-sm font-semibold text-danger">{actionError}</p>}
             </div>
 
             {confirming ? (
