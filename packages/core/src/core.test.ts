@@ -14,7 +14,7 @@ import { BudgetExhaustedError, BudgetService } from "./budgets.js";
 import { ProviderCredentialService } from "./providers.js";
 import { IntegrationService } from "./integrations.js";
 import { EventService } from "./events.js";
-import { RunService, TaskService } from "./work.js";
+import { AgentService, RunService, TaskService } from "./work.js";
 import { TenantError } from "@steward/db";
 
 const url = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
@@ -168,6 +168,34 @@ describe("core services (postgres)", () => {
     expect(runEvents.length).toBeGreaterThanOrEqual(5);
     // Events are ordered and strictly increasing.
     expect(evs.every((e, i) => i === 0 || e.seq > evs[i - 1]!.seq)).toBe(true);
+  });
+
+  d("finishing a run closes interrupted steps without changing completed or foreign steps", async () => {
+    const auth = new AuthService(db);
+    const reg = await auth.register({ email: `recovery-${uniq()}@example.com`, password: "correct horse battery", name: "Owner" });
+    const orgScope: TenantScope = { organizationId: reg.organization.id, actor: { type: "user", userId: reg.user.id } };
+    const company = await new CompanyService(db).create(orgScope, { name: "Recovery" });
+    const scope: TenantScope = { ...orgScope, companyId: company.id };
+    const [first] = await new AgentService(db).list(scope);
+    const runs = new RunService(db);
+    const makeRun = () => runs.create(scope, { agentId: first!.id, trigger: { kind: "user", instruction: "Recovery test" } });
+    const foreign = await makeRun();
+    const untouched = await runs.beginStep(scope, foreign.id, { kind: "plan", title: "Still active" });
+    for (const status of ["succeeded", "failed", "cancelled", "needs_review"] as const) {
+      const run = await makeRun();
+      await runs.setStatus(scope, run.id, "executing");
+      const completed = await runs.beginStep(scope, run.id, { kind: "context", title: "Context" });
+      await runs.finishStep(scope, completed.id, { status: "succeeded", output: { preserved: true } });
+      const interrupted = await runs.beginStep(scope, run.id, { kind: "plan", title: "Interrupted attempt" });
+      await runs.setStatus(scope, run.id, status);
+      const steps = await runs.steps(scope, run.id);
+      expect(steps.find((step) => step.id === interrupted.id)).toMatchObject({ status: "failed", error: "Run finished before this step completed", finishedAt: expect.any(Date), durationMs: expect.any(Number) });
+      expect(steps.find((step) => step.id === completed.id)).toMatchObject({ status: "succeeded", output: { preserved: true } });
+    }
+    expect((await runs.steps(scope, foreign.id)).find((step) => step.id === untouched.id)?.status).toBe("running");
+    const empty = await makeRun();
+    await runs.setStatus(scope, empty.id, "failed");
+    expect(await runs.steps(scope, empty.id)).toEqual([]);
   });
 
   d("budgets: charge, threshold events and hard stop", async () => {
