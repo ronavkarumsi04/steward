@@ -6,7 +6,7 @@ import type { CompanyOverview, RunDetail, Task } from "@/lib/types";
 import { statusLabel } from "@/lib/i18n";
 import { recordedUsd } from "@/lib/decision-semantics";
 import { workCopy } from "@/lib/work-copy";
-import { cancellable, lastRecordedAt, runCostValue } from "@/lib/work-loop";
+import { cancellable, lastRecordedAt, runCostValue, runCostCompatibility } from "@/lib/work-loop";
 import { useLiveEvents } from "@/lib/use-events";
 import { useBarHeight } from "@/lib/use-bar-height";
 import { useLocale } from "./locale-provider";
@@ -27,6 +27,9 @@ export function QuietRunDetail({ companyId, initial, task: initialTask = null, o
   const [contextFailed, setContextFailed] = useState(!initialOverview);
   const [lostAccess, setLostAccess] = useState(false);
   const [cancelState, setCancelState] = useState<"idle" | "requested" | "uncertain">("idle");
+  const [cancelFocus, setCancelFocus] = useState(0);
+  const outcome = useRef<HTMLParagraphElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const lock = useRef(false);
   const readSeq = useRef(0);
   const mounted = useRef(true);
@@ -39,12 +42,14 @@ export function QuietRunDetail({ companyId, initial, task: initialTask = null, o
   const persistent = active && canChange;
   useBarHeight(actions, "--quiet-action-height", persistent);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; readSeq.current++; }; }, []);
+  // Only a user-confirmed cancellation moves focus, never live updates or polling.
+  useEffect(() => { if (cancelFocus) (outcome.current ?? heading.current)?.focus(); }, [cancelFocus]);
 
   /** Read-only retries never replay a tool or a cancel signal. Sequence guards reject older snapshots. */
   const refresh = useCallback(async () => {
     const seq = ++readSeq.current;
     const [next, company, linked] = await Promise.allSettled([
-      browserApi.get<RunDetail>(path), browserApi.get<CompanyOverview>(`/companies/${companyId}`),
+      browserApi.get<RunDetail>(`${path}?view=quiet`), browserApi.get<CompanyOverview>(`/companies/${companyId}`),
       initial.run.taskId ? browserApi.get<{ task: Task | null }>(`/companies/${companyId}/tasks/${initial.run.taskId}`) : Promise.resolve({ task: null }),
     ]);
     if (!mounted.current || seq !== readSeq.current) return null;
@@ -86,14 +91,14 @@ export function QuietRunDetail({ companyId, initial, task: initialTask = null, o
     } catch (e) {
       if (e instanceof ApiError && [401, 403, 404].includes(e.status)) { setLostAccess(true); setOverview(null); }
       else { setCancelState("uncertain"); setFailed(true); }
-    } finally { lock.current = false; if (mounted.current) setBusy(false); }
+    } finally { lock.current = false; if (mounted.current) { setBusy(false); setCancelFocus((value) => value + 1); } }
   }
 
-  if (lostAccess) return <div className="q-decision-page"><h1>{c.runs}</h1><p role="alert" className="q-notice">{c.lostAccess}</p><Link className="q-link" href={`/app/c/${companyId}/runs`}>{c.back}</Link></div>;
+  if (lostAccess) return <div className="q-decision-page"><h1 ref={heading} tabIndex={-1}>{c.runs}</h1><p role="alert" className="q-notice">{c.lostAccess}</p><Link className="q-link" href={`/app/c/${companyId}/runs`}>{c.back}</Link></div>;
   const agent = overview?.agents.find((a) => a.id === run.agentId);
   const timeZone = (() => { try { return new Intl.DateTimeFormat(locale, { timeZone: overview?.company.timezone || "UTC" }).resolvedOptions().timeZone; } catch { return "UTC"; } })();
   const date = (value: string) => new Date(value).toLocaleString(locale, { timeZone, timeZoneName: "short" });
-  const cost = recordedUsd(runCostValue(run, detail.aiCalls), locale) ?? c.unavailable;
+  const cost = recordedUsd(runCostValue(run), locale) ?? c.unavailable;
   const budget = recordedUsd(agent?.budgetUsdPerRun, locale) ?? c.unavailable;
   const latest = lastRecordedAt(detail);
   const current = [...detail.steps].reverse().find((step) => !step.finishedAt);
@@ -105,9 +110,10 @@ export function QuietRunDetail({ companyId, initial, task: initialTask = null, o
   const time = (value: string | null) => value ? <time dateTime={value}>{date(value)}</time> : c.unavailable;
   return <div className="q-decision-page q-run-page">
     <Link className="q-link q-run-back" href={back}>{c.back}</Link>
-    <header className="q-page-heading"><div><h1>{title}</h1>{instructions && <p className="q-prose q-run-context"><span>{c.instructions}</span>{instructions}</p>}<div className="q-run-heading-meta"><StatusPill status={run.status} label={statusLabel(locale, run.status)} /><span>{agent?.name ?? c.unavailable}</span><span>{c.started}: {time(run.startedAt)}</span></div></div></header>
-    {cancellation && <p role="status" className="q-notice">{cancellation}</p>}
+    <header className="q-page-heading"><div><h1 ref={heading} tabIndex={-1}>{title}</h1>{instructions && <p className="q-prose q-run-context"><span>{c.instructions}</span>{instructions}</p>}<div className="q-run-heading-meta"><StatusPill status={run.status} label={statusLabel(locale, run.status)} /><span>{agent?.name ?? c.unavailable}</span><span>{c.started}: {time(run.startedAt)}</span></div></div></header>
+    {cancellation && <p ref={outcome} tabIndex={-1} role="status" className="q-notice">{cancellation}</p>}
     {failed && <p role="alert" className="q-notice">{c.refreshFailed}</p>}
+    {runCostCompatibility(run, locale) && <p className="q-notice" role="status">{runCostCompatibility(run, locale)}</p>}
     {contextFailed && <p role="alert" className="q-notice">{c.noAuthority}</p>}
     {taskFailed && <p role="alert" className="q-notice">{c.taskUnavailable}</p>}
     {!connected && active && <p className="q-notice">{c.stale}</p>}

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Approval, CompanyOverview, Run } from "@/lib/types";
+import { approvalActionLabel } from "@/lib/approval-row";
+import { runCostValue, runCostCompatibility } from "@/lib/work-loop";
 import { decisionCopy } from "@/lib/decision-copy";
 import { approvalSnapshot, isDecisionOpen, isRunClosed, recordedUsd } from "@/lib/decision-semantics";
 import { diffPayload } from "@/lib/approval-review";
@@ -128,7 +130,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
   const deciderLabel = decider ? `${decider.name} (${decider.email})` : state.resolvedBy ? c.memberUnavailable : c.notRecorded;
   return <div className="q-decision-page">
     <Link href={`/app/c/${companyId}/approvals`} className="q-link"><Icon.ChevronRight size={14} className="rotate-180" />{c.back}</Link>
-    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{shortStatus}</span></header>
+    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{approvalActionLabel(state, locale)}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{shortStatus}</span></header>
     {(decided || error || !canDecide || !open) && <section className="q-outcome" aria-labelledby="q-outcome-heading">
       <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? cancelled || (runClosed && state.status === "pending") ? statusText : `${c.recorded} · ${statusText}` : c.review}</h2>
       {decided && <>{!cancelled && !(runClosed && state.status === "pending") && <p>{c.outcome}</p>}<dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
@@ -162,7 +164,11 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
       {[[c.company, overview.company.name], [c.actor, overview.agents.find((a) => a.id === state.agentId)?.name ?? state.agentId ?? c.notRecorded], [c.action, state.action], [c.system, state.affectedSystem || c.notRecorded], [c.scope, state.dimension], [c.risk, state.risk], [c.estimate, recordedUsd(state.estimatedCostUsd, locale) ?? c.unavailable]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       <div><dt>{c.requested}</dt><dd><time dateTime={state.createdAt}>{date(state.createdAt)}</time></dd></div><div><dt>{c.expiry}</dt><dd><time dateTime={state.expiresAt}>{date(state.expiresAt)}</time></dd></div>
     </dl><p>{c.estimateHint}</p>
-      <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>{state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>{run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(run.costUsd, locale) ?? c.unavailable} USD</p>{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}</> : <p>{c.noRun}</p>}</section>
+      <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>
+        {state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>
+          {run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(runCostValue(run), locale) ?? c.unavailable} USD</p>{runCostCompatibility(run, locale) && <p className="q-notice" role="status">{runCostCompatibility(run, locale)}</p>}{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}
+        </> : <p>{c.noRun}</p>}
+      </section>
     </aside></div>
     {persistent && <footer ref={actions} className="q-actions" data-persistent="true" aria-label={c.review}><div className="q-action-buttons"><button className="btn btn-primary" onClick={() => decide("approved")} disabled={busy || !open || needsReview || parsed.invalid}>{busy ? c.submitting : c.approve}</button><button className="btn btn-danger" onClick={() => decide("denied")} disabled={busy || !open || needsReview}>{c.decline}</button></div></footer>}
   </div>;

@@ -116,6 +116,8 @@ export interface InspectOptions {
   now?: number;
   /** Used to build in-page links back to the approval or step a verdict points at. */
   companyId?: string;
+  /** Opt-in presentation only. Incumbent inspection keeps the original recorded labels. */
+  approvalPresentation?: (approval: Approval) => { title: string; detail: string; headline: string; explanation: string };
 }
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
@@ -338,6 +340,7 @@ export function inspectRun(detail: RunDetail, options: InspectOptions = {}): Run
   for (const call of standaloneToolCalls) toolEntries.push(toolEntryFor(null, call, null));
 
   const approvalEntries: TimelineEntry[] = detail.approvals.map((a) => {
+    const presentation = options.approvalPresentation?.(a);
     const step = approvalStepFor(a.id, detail.steps);
     if (step && step.kind === "approval") mergedStepIds.add(step.id);
     const atMs = step ? time(step.startedAt, time(a.createdAt, startedAtMs)) : time(a.createdAt, startedAtMs);
@@ -353,8 +356,8 @@ export function inspectRun(detail: RunDetail, options: InspectOptions = {}): Run
       durationMs: resolved != null ? Math.max(0, resolved - atMs) : null,
       status: statuses.status,
       secondaryStatus: statuses.secondaryStatus,
-      title: a.action,
-      detail: `${a.affectedSystem} · ${a.dimension}${a.estimatedCostUsd ? ` · est ${a.estimatedCostUsd}` : ""}`,
+      title: presentation?.title ?? a.action,
+      detail: presentation?.detail ?? `${a.affectedSystem} · ${a.dimension}${a.estimatedCostUsd ? ` · est ${a.estimatedCostUsd}` : ""}`,
       failed: isFailedStatus(statuses.status) || isFailedStatus(a.status),
       recovered: false,
       error: null,
@@ -457,6 +460,7 @@ export function inspectRun(detail: RunDetail, options: InspectOptions = {}): Run
     lastFailureEntry,
     pendingApproval,
     companyId: options.companyId,
+    approvalPresentation: pendingApproval ? options.approvalPresentation?.(pendingApproval) : undefined,
   });
 
   const byDuration = timeline.filter((e) => e.durationMs != null).sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
@@ -487,6 +491,7 @@ interface VerdictInput {
   lastFailureEntry: TimelineEntry | null;
   pendingApproval: Approval | null;
   companyId?: string;
+  approvalPresentation?: { title: string; headline: string; explanation: string };
 }
 
 function buildVerdict(input: VerdictInput): RunVerdict {
@@ -549,11 +554,11 @@ function buildVerdict(input: VerdictInput): RunVerdict {
       return {
         ...base,
         outcome: "waiting_approval",
-        headline: `Paused for your approval: ${pendingApproval.action}`,
-        explanation: `${pendingApproval.reason || "The policy requires a person to decide before this action runs."} Risk ${pendingApproval.risk} on ${pendingApproval.affectedSystem}.`,
+        headline: input.approvalPresentation?.headline ?? `Paused for your approval: ${pendingApproval.action}`,
+        explanation: input.approvalPresentation?.explanation ?? `${pendingApproval.reason || "The policy requires a person to decide before this action runs."} Risk ${pendingApproval.risk} on ${pendingApproval.affectedSystem}.`,
         blocker: {
           kind: "approval",
-          label: `Approval: ${pendingApproval.action}`,
+          label: input.approvalPresentation?.title ?? `Approval: ${pendingApproval.action}`,
           detail: `${pendingApproval.risk} risk · waiting ${offsetLabel(waited)}${pendingApproval.expiresAt ? ` · expires ${offsetLabel(Math.max(0, Date.parse(pendingApproval.expiresAt) - now))} from now` : ""}`,
           href: input.companyId ? `/app/c/${input.companyId}/approvals` : null,
           waitingMs: waited,

@@ -1,10 +1,17 @@
 import type { AICall, Run, RunDetail } from "./types";
+import type { Locale } from "./i18n";
 
 /** Run rows begin at zero before any ledger entry exists. Zero needs explicit cost evidence. */
-export function runCostValue(run: Pick<Run, "costUsd">, calls: Pick<AICall, "status" | "costEstimated" | "costUsd">[] = []): string | null {
+export function runCostValue(run: Pick<Run, "costUsd" | "hasRecordedZeroCost">, calls: Pick<AICall, "status" | "costEstimated" | "costUsd">[] = []): string | null {
   if (run.costUsd === "" || run.costUsd == null || !Number.isFinite(Number(run.costUsd)) || Number(run.costUsd) < 0) return null;
-  if (Number(run.costUsd) === 0 && !calls.some((call) => call.status === "ok" && !call.costEstimated && call.costUsd !== "" && Number(call.costUsd) === 0)) return null;
+  if (Number(run.costUsd) === 0 && run.hasRecordedZeroCost !== true && !calls.some((call) => call.status === "ok" && !call.costEstimated && call.costUsd !== "" && Number(call.costUsd) === 0)) return null;
   return run.costUsd;
+}
+
+/** On an older API every Quiet view uses the same conservative zero, even if detail has individual calls. */
+export function runCostCompatibility(run: Pick<Run, "costUsd" | "hasRecordedZeroCost">, locale: Locale): string | null {
+  if (run.costUsd === "" || run.costUsd == null || Number(run.costUsd) !== 0 || typeof run.hasRecordedZeroCost === "boolean") return null;
+  return locale === "es" ? "Aún no se puede verificar el mismo total en todas las vistas. Los costos de llamadas individuales siguen en el registro técnico de cada ejecución." : "The same run total cannot yet be verified across views. Individual model-call costs remain in each run’s technical record.";
 }
 
 export type WorkKind = "tasks" | "runs";

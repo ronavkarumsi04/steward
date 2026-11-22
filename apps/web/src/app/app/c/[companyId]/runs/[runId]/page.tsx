@@ -14,7 +14,7 @@ export default async function RunPage({ params, searchParams }: { params: Promis
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const [detail, context] = await Promise.all([
-      tryApi(() => api.get<RunDetail>(`/companies/${companyId}/runs/${runId}`)),
+      tryApi(() => api.get<RunDetail>(`/companies/${companyId}/runs/${runId}?view=quiet`)),
       api.get<CompanyOverview>(`/companies/${companyId}`).catch(() => null),
     ]);
     if (!detail) notFound();

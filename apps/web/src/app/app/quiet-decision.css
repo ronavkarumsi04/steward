@@ -27,6 +27,7 @@
 .q-grow { flex: 1; min-width: 0; }
 .q-work-row strong { display: block; font-weight: 600; font-size: max(14px, .875rem); }
 .q-work-row .q-grow > span, .q-team-list span { display: block; color: var(--muted); font-size: 12px; margin-top: 5px; }
+.q-work-row .q-grow > .q-approval-action { font-size: max(14px, .875rem); line-height: 1.6; }
 .q-row-end { display: grid; justify-items: end; gap: 8px; flex-shrink: 0; }
 .q-overview-aside > section + section { border-top: 1px solid var(--line); padding-top: 26px; margin-top: 26px; }
 .q-overview-aside p { color: var(--muted); margin-top: 10px; }
