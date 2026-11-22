@@ -21,6 +21,12 @@ describe("Quiet decision surfaces", () => {
     expect(html).not.toContain(">Approve action</button>");
     expect(html).not.toContain('data-persistent="true"');
   });
+  it("keeps approval review usable with an unsupported saved timezone and labels the UTC fallback", () => {
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval, overview: { ...overview, company: { ...overview.company, timezone: "GMT+5" } }, run: null }));
+    expect(html).toContain("Approve action");
+    expect(html).toContain("UTC");
+    expect(html).not.toContain("GMT+5");
+  });
   it("disables expired pending requests before the server sweeper changes their status", () => {
     const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, expiresAt: "2000-01-01T00:00:00Z" }, overview, run: null }));
     expect(html).toContain("cannot be decided");

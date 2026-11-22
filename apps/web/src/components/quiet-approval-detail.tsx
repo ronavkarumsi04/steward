@@ -58,7 +58,12 @@ export function QuietApprovalDetail({ approval, overview, run }: { approval: App
   const payload = savedEdit && typeof savedEdit === "object" && !Array.isArray(savedEdit) ? savedEdit as Record<string, unknown> : state.payload;
   const message = isOutboxAction(state.action) ? outboxItem({ ...state, payload }) : null;
   const open = isDecisionOpen(state, now);
-  const date = (value: string) => new Date(value).toLocaleString(locale, { timeZone: overview.company.timezone });
+  // Company settings accept free text. A legacy/unsupported zone must not block a decision.
+  const timeZone = useMemo(() => {
+    try { return new Intl.DateTimeFormat(locale, { timeZone: overview.company.timezone }).resolvedOptions().timeZone; }
+    catch { return "UTC"; }
+  }, [locale, overview.company.timezone]);
+  const date = (value: string) => new Date(value).toLocaleString(locale, { timeZone });
   const focusOutcome = () => requestAnimationFrame(() => (outcome.current ?? heading.current)?.focus());
 
   async function reviewLatest() {
@@ -148,7 +153,7 @@ export function QuietApprovalDetail({ approval, overview, run }: { approval: App
       {pending && canDecide && <section className="q-detail-section"><label className="q-note-label" htmlFor="q-decision-note">{c.note}</label><textarea id="q-decision-note" className="input q-decision-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} disabled={busy} /></section>}
     </div><aside className="q-detail-aside"><h2>{c.details}</h2><dl className="q-facts">
       {[[c.company, overview.company.name], [c.actor, overview.agents.find((a) => a.id === state.agentId)?.name ?? state.agentId ?? c.notRecorded], [c.action, state.action], [c.system, state.affectedSystem || c.notRecorded], [c.scope, state.dimension], [c.risk, state.risk], [c.estimate, recordedUsd(state.estimatedCostUsd, locale) ?? c.unavailable]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-      <div><dt>{c.requested}</dt><dd><time dateTime={state.createdAt}>{date(state.createdAt)}</time></dd></div><div><dt>{c.expiry}</dt><dd><time dateTime={state.expiresAt}>{date(state.expiresAt)}</time> · {overview.company.timezone}</dd></div>
+      <div><dt>{c.requested}</dt><dd><time dateTime={state.createdAt}>{date(state.createdAt)}</time></dd></div><div><dt>{c.expiry}</dt><dd><time dateTime={state.expiresAt}>{date(state.expiresAt)}</time> · {timeZone}</dd></div>
     </dl><p>{c.estimateHint}</p>
       <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>{state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>{run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(run.costUsd, locale) ?? c.unavailable} USD</p>{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}</> : <p>{c.noRun}</p>}</section>
     </aside></div>
