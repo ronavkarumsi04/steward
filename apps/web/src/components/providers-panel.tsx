@@ -7,7 +7,7 @@ import type { CompanionDevice, ProviderCredential, ProviderModel, ProviderType, 
 import { providerCheckMessage, type ProviderCheckResult } from "@/lib/provider-check";
 import { Card, Empty, StatusPill, Ago, usd } from "./ui";
 
-export function ProvidersPanel({ orgId, types, providers, models, usage, devices, isAdmin }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; devices: CompanionDevice[]; isAdmin: boolean }) {
+export function ProvidersPanel({ orgId, types, providers, models, usage, devices, isAdmin, quiet = false, modelsAvailable = true, usageAvailable = true, devicesAvailable = true }: { orgId: string; types: ProviderType[]; providers: ProviderCredential[]; models: ProviderModel[]; usage: UsageRow[]; devices: CompanionDevice[]; isAdmin: boolean; quiet?: boolean; modelsAvailable?: boolean; usageAvailable?: boolean; devicesAvailable?: boolean }) {
   const router = useRouter();
   const [type, setType] = useState(types[0]?.type ?? "openai");
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
       await test(provider.id);
       router.refresh();
     } catch (err) {
-      setError(err instanceof SyntaxError ? "Config must be valid JSON" : err instanceof ApiError ? err.message : "Failed to add provider");
+      setError(err instanceof SyntaxError ? "Config must be valid JSON" : !quiet && err instanceof ApiError ? err.message : "Failed to add provider. Check the configuration and try again.");
     } finally {
       setBusy(null);
     }
@@ -52,22 +52,22 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
     setBusy(id);
     try {
       const r = await browserApi.post<ProviderCheckResult>(`${base}/providers/${id}/test`, {});
-      setTestResult((m) => ({ ...m, [id]: providerCheckMessage(r) }));
+      setTestResult((m) => ({ ...m, [id]: quiet && !r.ok ? "Connection check did not pass. Check the provider configuration and permissions." : providerCheckMessage(r) }));
       router.refresh();
     } catch (err) {
-      setTestResult((m) => ({ ...m, [id]: err instanceof ApiError ? err.message : "test failed" }));
+      setTestResult((m) => ({ ...m, [id]: !quiet && err instanceof ApiError ? err.message : "Connection check failed. Try again." }));
     } finally {
       setBusy(null);
     }
   }
 
   async function toggle(p: ProviderCredential) {
-    await browserApi.patch(`${base}/providers/${p.id}`, { enabled: !p.enabled }).catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Update failed"));
+    await browserApi.patch(`${base}/providers/${p.id}`, { enabled: !p.enabled }).catch((err: unknown) => setError(!quiet && err instanceof ApiError ? err.message : "Update failed. Reload to check the current status."));
     router.refresh();
   }
   async function remove(p: ProviderCredential) {
     if (!confirm(`Delete ${p.label}? Runs that depend on it will fail over to other credentials.`)) return;
-    await browserApi.del(`${base}/providers/${p.id}`).catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Delete failed"));
+    await browserApi.del(`${base}/providers/${p.id}`).catch((err: unknown) => setError(!quiet && err instanceof ApiError ? err.message : "Delete failed. Reload to check the current status."));
     router.refresh();
   }
 
@@ -86,8 +86,8 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
                 <div className="min-w-0">
                   <div className="flex items-center gap-2"><span className="font-medium">{p.label}</span><span className="pill text-muted">{p.providerType}</span><StatusPill status={p.status} />{!p.enabled && <span className="pill text-warn">disabled</span>}{p.companyId && <span className="pill text-muted">company-scoped</span>}</div>
                   <div className="text-xs text-muted">
-                    {p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · {p.status === "catalog_only" ? "API key and generation unverified" : <>connection checked <Ago iso={p.lastVerifiedAt} /></>}
-                    {p.lastError && <span className="text-danger"> · {p.lastError}</span>}
+                    {quiet ? p.secretLast4 ? "Credential stored" : p.authMethod : p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · {p.status === "catalog_only" ? "API key and generation unverified" : p.lastVerifiedAt || !quiet ? <>connection checked <Ago iso={p.lastVerifiedAt} /></> : "Connection check: Not available"}
+                    {p.lastError && <span className="text-danger"> · {quiet ? "Connection check failed. Check configuration and test again." : p.lastError}</span>}
                   </div>
                   {testResult[p.id] !== undefined && <div role="status" className={`text-xs ${testResult[p.id]?.startsWith("OK") ? "text-ok" : testResult[p.id]?.startsWith("Catalog") ? "text-warn" : "text-danger"}`}>{testResult[p.id]}</div>}
                 </div>
@@ -102,7 +102,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
 
-      <form onSubmit={add} className="card nb-left-purple space-y-3">
+      {(!quiet || types.length > 0) && <form onSubmit={add} className="card nb-left-purple space-y-3">
         <h2 className="font-semibold">Add a provider</h2>
         <p className="text-sm text-muted">Bring your own key. Secrets are encrypted at rest with the server&rsquo;s master key and never returned to the browser. Local servers (Ollama, LM Studio, vLLM) need no key.</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -118,13 +118,13 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           {info?.authMethod === "api_key" || info?.authMethod === "azure_api_key" ? (
             <div className="md:col-span-2"><label className="block"><span className="label">API key</span><input name="secret" type="password" autoComplete="off" className="input mono" required /></label></div>
           ) : info?.authMethod === "aws_sigv4" ? (
-            <div className="md:col-span-2"><label className="block"><span className="label">AWS credentials (JSON)</span><textarea name="secretConfig" className="input mono" placeholder='{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}' required /></label></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">AWS credentials (JSON)</span>{quiet ? <input name="secretConfig" type="password" autoComplete="off" className="input mono" required /> : <textarea name="secretConfig" className="input mono" placeholder='{"accessKeyId":"…","secretAccessKey":"…","region":"us-east-1"}' required />}</label></div>
           ) : info?.authMethod === "gcp_service_account" ? (
-            <div className="md:col-span-2"><label className="block"><span className="label">Service-account JSON</span><textarea name="secretConfig" className="input mono min-h-32" placeholder='{"type":"service_account", …}' required /></label></div>
+            <div className="md:col-span-2"><label className="block"><span className="label">Service-account JSON</span>{quiet ? <input name="secretConfig" type="password" autoComplete="off" className="input mono" required /> : <textarea name="secretConfig" className="input mono min-h-32" placeholder='{"type":"service_account", …}' required />}</label></div>
           ) : info?.authMethod === "companion" ? (
             <div className="md:col-span-2">
               <label className="label">Paired companion</label>
-              {devices.length === 0 ? (
+              {!devicesAvailable ? <p className="text-sm text-warn">Companions are not available. Reload before adding this provider.</p> : devices.length === 0 ? (
                 <p className="text-sm text-warn">No paired companion yet. Pair one in the Local Companions section below first; no secret is stored on the server.</p>
               ) : (
                 <select name="deviceId" className="input" required>
@@ -139,12 +139,12 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
           <div><label className="block"><span className="label">Priority (lower is preferred)</span><input name="priority" type="number" min={0} max={1000} defaultValue={100} className="input" /></label></div>
           {info?.authMethod === "azure_api_key" && <div className="md:col-span-2"><label className="block"><span className="label">Extra config (JSON)</span><textarea name="config" className="input mono" placeholder='{"apiVersion":"2024-10-21","deployments":{"gpt-4o":"my-deployment"}}' /></label></div>}
         </div>
-        <div className="flex justify-end"><button className="btn btn-primary" disabled={busy === "add" || !isAdmin}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button></div>
-      </form>
+        <div className="flex justify-end"><button className="btn btn-primary" disabled={busy === "add" || !isAdmin || (quiet && info?.authMethod === "companion" && (!devicesAvailable || devices.length === 0))}>{busy === "add" ? "Adding & testing…" : "Add and test"}</button></div>
+      </form>}
 
-      <Card title={`Available models (${models.length})`} className="nb-left-blue">
+      <Card title={modelsAvailable ? `Available models (${models.length})` : "Available models · Not available"} className="nb-left-blue">
         <p className="mb-3 text-xs text-muted">Catalog entries and capability estimates are discovery data. A completed agent run is required to verify generation and tool use.</p>
-        {models.length === 0 ? <Empty>No models discovered yet. Add a provider and run Test.</Empty> : (
+        {!modelsAvailable ? <p className="text-muted">Model discovery could not be read. Reload to try again.</p> : models.length === 0 ? <Empty>No models discovered yet. Add a provider and run Test.</Empty> : (
           <div className="max-h-72 overflow-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-panel text-left text-muted"><tr><th className="py-1">Model</th><th>Provider</th><th>Tier</th><th>Capabilities</th><th>Price in/out per 1M</th><th></th></tr></thead>
@@ -153,7 +153,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
                   <tr key={`${m.credentialId}-${m.model.id}`} className="border-t border-line">
                     <td className="mono py-1">{m.model.id}</td><td>{m.provider}</td><td>{m.model.tier}</td>
                     <td>{Object.entries(m.model.capabilities).filter(([, v]) => v === true).map(([k]) => k).join(", ")}</td>
-                    <td>{m.model.pricing ? `${usd(m.model.pricing.inputPerMTok)} / ${usd(m.model.pricing.outputPerMTok)}` : m.model.local ? "local" : "—"}</td>
+                    <td>{m.model.pricing ? `${usd(m.model.pricing.inputPerMTok)} / ${usd(m.model.pricing.outputPerMTok)}` : m.model.local ? "local" : quiet ? "Not available" : "—"}</td>
                     <td>{!m.healthy && <span className="text-warn">unhealthy</span>}</td>
                   </tr>
                 ))}
@@ -163,16 +163,16 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
 
-      <Card title={`Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`} className="nb-left-orange">
-        {usage.length === 0 ? <Empty>No AI calls recorded yet.</Empty> : (
-          <table className="w-full text-sm">
+      <Card title={quiet && (!usageAvailable || usage.length === 0) ? "Usage · last 30 days · Not available" : `Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`} className="nb-left-orange">
+        {!usageAvailable ? <p className="text-muted">Usage could not be read. No spend is inferred from missing data.</p> : usage.length === 0 ? <Empty>No AI calls recorded yet.</Empty> : (
+          <div className={quiet ? "quiet-tools-table" : undefined}><table className="w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">Provider</th><th>Model</th><th>Calls</th><th>Errors</th><th>Tokens in / out</th><th>Cost</th></tr></thead>
             <tbody>
               {usage.map((u) => (
                 <tr key={`${u.provider}-${u.model}`} className="border-t border-line"><td className="py-1">{u.provider}</td><td className="mono">{u.model}</td><td>{u.calls}</td><td className={u.errors ? "text-danger" : ""}>{u.errors}</td><td>{u.inputTokens.toLocaleString()} / {u.outputTokens.toLocaleString()}</td><td>{usd(u.costUsd)}</td></tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>
