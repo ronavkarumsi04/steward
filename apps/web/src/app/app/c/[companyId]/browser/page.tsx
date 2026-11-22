@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import { preferredSession } from "@/lib/browser";
 import type { BrowserSessionRead, BrowserWorkspaceRead } from "@/lib/types";
 import { BrowserWorkspace } from "@/components/browser-workspace";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietToolsFrame, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
+import { QuietToolsFrame, QuietToolsLoading, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
 
 export const metadata: Metadata = { title: "Browser" };
 
@@ -22,7 +23,14 @@ export const metadata: Metadata = { title: "Browser" };
  * API keeps that distinction (`404`) and the page should not show someone else's session because they guessed an
  * id.
  */
-export default async function BrowserPage({
+export default async function BrowserPage(props: Parameters<typeof BrowserContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><BrowserContent {...props} /></Suspense>;
+  }
+  return BrowserContent(props);
+}
+
+async function BrowserContent({
   params,
   searchParams,
 }: {

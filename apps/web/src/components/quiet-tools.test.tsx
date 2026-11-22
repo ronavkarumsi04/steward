@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, Suspense } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
@@ -25,6 +25,12 @@ const overview = { company: { id: "company", organizationId: "org", name: "Test 
 const entry: IntegrationCatalogEntry = { id: "github", name: "GitHub", category: "code", status: "implemented", authKind: "token", oauth: false, fields: [{ key: "token", label: "Token", secret: true }], actions: [], docsUrl: "https://docs.github.com" };
 const connection: Integration = { id: "inherited", companyId: null, type: "github", label: "Test connection", status: "needs_reauth", authKind: "token", externalAccountId: "test-account", scopes: ["repo"], createdAt: "2026-01-01T00:00:00Z", lastCheckedAt: null, lastError: "SECRET_SHOULD_NOT_RENDER", webhookUrl: "https://example.test/SECRET_WEBHOOK", definition: entry };
 const html = (node: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(node);
+
+async function quietContent(boundary: Awaited<ReturnType<typeof CodePage>>) {
+  expect(boundary.type).toBe(Suspense);
+  const content = boundary.props.children;
+  return content.type(content.props);
+}
 
 describe("Quiet connections", () => {
   it("finds services by the category label displayed to people", () => {
@@ -107,19 +113,19 @@ describe("route rollout boundary", () => {
   it("routes company and organization connections and providers through Quiet only when opted in", async () => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
     get.mockResolvedValue(overview);
-    const company = await ConnectionsPage({ params: Promise.resolve({ companyId: "company" }) });
+    const company = await quietContent(await ConnectionsPage({ params: Promise.resolve({ companyId: "company" }) }));
     expect(company.type).toBe(QuietConnections);
     expect(company.props.orgId).toBe("org");
-    const org = await OrgConnectionsPage({ params: Promise.resolve({ orgId: "other-org" }), searchParams: Promise.resolve({}) });
+    const org = await quietContent(await OrgConnectionsPage({ params: Promise.resolve({ orgId: "other-org" }), searchParams: Promise.resolve({}) }));
     expect(org.type).toBe(QuietConnections);
     expect(org.props.membership).toBeUndefined();
-    const providers = await ProvidersPage({ params: Promise.resolve({ orgId: "org" }) });
+    const providers = await quietContent(await ProvidersPage({ params: Promise.resolve({ orgId: "org" }) }));
     expect(providers.type).toBe(QuietProviders);
   });
   it("uses safe, scoped failure views for MCP, browser and code instead of disguising outages as empty lists", async () => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
     get.mockRejectedValue(new ApiError(503, "offline", "SECRET_OUTAGE"));
-    const pages = [await McpPage({ params: Promise.resolve({ companyId: "company" }) }), await BrowserPage({ params: Promise.resolve({ companyId: "company" }), searchParams: Promise.resolve({}) }), await CodePage({ params: Promise.resolve({ companyId: "company" }), searchParams: Promise.resolve({}) })];
+    const pages = await Promise.all([await McpPage({ params: Promise.resolve({ companyId: "company" }) }), await BrowserPage({ params: Promise.resolve({ companyId: "company" }), searchParams: Promise.resolve({}) }), await CodePage({ params: Promise.resolve({ companyId: "company" }), searchParams: Promise.resolve({}) })].map(quietContent));
     for (const page of pages) {
       expect(page.type).toBe(QuietToolsFrame);
       expect(html(page)).toContain("Reload page");
