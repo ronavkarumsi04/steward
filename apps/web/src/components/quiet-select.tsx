@@ -9,18 +9,18 @@ export function QuietSelectScope({ children }: { children: ReactNode }) {
 }
 
 type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
-type OptionProps = { value?: string | number; label?: string; children?: ReactNode };
+type OptionProps = { value?: string | number; label?: string; children?: ReactNode; "data-technical"?: boolean };
 
 function text(node: ReactNode): string {
   return Children.toArray(node).map((child) => typeof child === "string" || typeof child === "number" ? String(child) : isValidElement<OptionProps>(child) ? text(child.props.children) : "").join("");
 }
 
-function options(children: ReactNode): Array<{ value: string; label: string }> {
+function options(children: ReactNode): Array<{ value: string; label: string; technical: boolean }> {
   return Children.toArray(children).flatMap((child) => {
     if (!isValidElement<OptionProps>(child)) return [];
     if (child.type !== "option") return options(child.props.children);
     const label = child.props.label ?? text(child.props.children);
-    return [{ value: String(child.props.value ?? text(child.props.children)), label }];
+    return [{ value: String(child.props.value ?? text(child.props.children)), label, technical: child.props["data-technical"] === true }];
   });
 }
 
@@ -35,7 +35,8 @@ function WrappingSelect({ children, className, onChange, technical, ...props }: 
   const choices = options(children);
   const [selection, setSelection] = useState(String(props.defaultValue ?? choices[0]?.value ?? ""));
   const selected = String(props.value ?? selection);
-  const caption = choices.find((choice) => choice.value === selected)?.label ?? choices[0]?.label ?? "";
+  const choice = choices.find((option) => option.value === selected) ?? choices[0];
+  const caption = choice?.label ?? "";
 
   // Read native selection after option-list changes, including browser fallback selection.
   useLayoutEffect(() => {
@@ -49,7 +50,7 @@ function WrappingSelect({ children, className, onChange, technical, ...props }: 
     return () => form?.removeEventListener("reset", reset);
   }, [props.form]);
 
-  return <span className={`q-reflow-select ${className ?? ""}`} style={props.style} data-technical={technical || undefined}>
+  return <span className={`q-reflow-select ${className ?? ""}`} style={props.style} data-technical={technical || choice?.technical || undefined}>
     <span className="q-select-value" aria-hidden="true">{caption}</span>
     <span className="q-select-caret" aria-hidden="true">▾</span>
     <select {...props} ref={select} className={className} onChange={(event) => { setSelection(event.currentTarget.value); onChange?.(event); }}>{children}</select>

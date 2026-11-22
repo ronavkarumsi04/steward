@@ -71,10 +71,11 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace :is(.input, .select, textarea) { min-width: 0; max-width: 100%; }
 /* The transparent native select still owns focus, keyboard, popup and form values.
    Only its single-line painted value is replaced with a wrapping visual caption. */
-.quiet-workspace .q-reflow-select { position: relative; display: inline-grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; height: auto; min-height: 44px; min-width: 0; max-width: 100%; padding: 10px 12px; line-height: 1.4; white-space: normal; }
-.quiet-workspace .q-select-value { min-width: 0; overflow-wrap: normal; }
-.quiet-workspace .q-reflow-select:is(.mono, [data-technical="true"]) .q-select-value { overflow-wrap: anywhere; }
-.quiet-workspace .q-select-caret { font-size: 12px; }
+.quiet-workspace .q-reflow-select { position: relative; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; height: auto; min-height: 44px; min-width: 0; max-width: 100%; padding: 10px 12px; line-height: 1.4; white-space: normal; }
+.quiet-workspace .q-select-value { flex: 1 1 min-content; min-width: 0; max-width: 100%; overflow-wrap: normal; }
+.quiet-workspace .q-reflow-select.mono:not([data-technical="true"]) .q-select-value { font-family: var(--font-sans); }
+.quiet-workspace .q-reflow-select[data-technical="true"] .q-select-value { overflow-wrap: anywhere; }
+.quiet-workspace .q-select-caret { flex: none; margin-inline-start: auto; font-size: 12px; }
 .quiet-workspace .q-reflow-select > select { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; max-width: none; opacity: 0; cursor: pointer; }
 .quiet-workspace .q-reflow-select:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 .quiet-workspace .q-reflow-select:has(> select:disabled) { opacity: .6; cursor: not-allowed; }

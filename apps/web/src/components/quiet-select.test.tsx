@@ -37,4 +37,11 @@ describe("Quiet native selection reflow", () => {
     expect(html).toContain(`aria-hidden="true">${branch}</span>`);
     expect(html.match(/<select[^>]*>/)?.[0]).not.toContain("technical");
   });
+  it.each([{ value: "", technical: false }, { value: "model", technical: true }])("classifies a mono field's selected option, not its font: $value", ({ value, technical }) => {
+    const children = [createElement("option", { value: "", key: "auto" }, "Auto (routed by requirements)"), createElement("option", { value: "model", key: "model", "data-technical": true }, "provider/" + "a".repeat(128))];
+    const html = renderToStaticMarkup(createElement(QuietSelectScope, { children: createElement(QuietSelect, { className: "input mono", value, onChange: () => {}, children }) }));
+    const wrapper = html.match(/^<span[^>]*>/)?.[0];
+    expect(wrapper?.includes('data-technical="true"')).toBe(technical);
+    if (!technical) expect(html).toContain('aria-hidden="true">Auto (routed by requirements)</span>');
+  });
 });

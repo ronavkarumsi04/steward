@@ -197,6 +197,14 @@
   [data-public-design="quiet"] .public-workflow { max-width: 640px; width: 100%; }
 }
 @media (max-width: 767px) {
+  [data-public-design="quiet"] .quiet-story nav[aria-label="Story chapters"] { display: flex; flex-wrap: wrap; }
+  [data-public-design="quiet"] .quiet-story [data-story-link] { flex: 1 1 min-content; min-width: min-content; max-width: 100%; overflow-wrap: normal; }
+  [data-public-design="quiet"] .quiet-story h2 { font-size: 24px; max-width: 100%; overflow-wrap: normal; }
+  /* Expanded chapter links remain in flow rather than pinning over the copy. */
+  [data-public-design="quiet"] .quiet-story [class*="visual"] { position: relative; top: auto; }
+  [data-public-design="quiet"] .quiet-story section[id^="story-"] { scroll-margin-top: 24px; }
+}
+@media (max-width: 767px) {
   [data-public-design="quiet"] .public-header { padding: 12px 20px; min-height: 72px; flex-wrap: wrap; gap: 8px 16px; }
   [data-public-design="quiet"] .public-header nav { order: 3; width: 100%; margin: 0; border-top: 1px solid var(--line); gap: 24px; }
   [data-public-design="quiet"] .public-header-actions { margin-left: auto; }

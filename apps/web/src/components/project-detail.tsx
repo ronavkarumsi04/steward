@@ -65,7 +65,7 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
       </section>
       <section className="card nb-left-orange overflow-hidden">
         <div className="border-b border-line px-5 py-3"><div className="eyebrow">Work queue</div><h2 className="mt-1 text-base font-semibold">Tasks</h2></div>
-        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={quiet ? `/app/c/${companyId}/tasks?q=${encodeURIComponent(task.title)}` : `/app/c/${companyId}/tasks/${task.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60"><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
+        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={quiet ? `/app/c/${companyId}/tasks?q=${encodeURIComponent(task.title)}` : `/app/c/${companyId}/tasks/${task.id}`} className={`flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60${quiet ? " q-project-work-row" : ""}`}><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
       </section>
     </div>
 
