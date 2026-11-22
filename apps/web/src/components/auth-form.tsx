@@ -150,10 +150,10 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
   );
 }
 
-export function friendly(err: ApiError): string {
+export function friendly(err: ApiError, emailKind = "Email delivery"): string {
   switch (err.code) {
     case "email_unavailable":
-      return "Email delivery is unavailable right now. No email was sent. Ask your organization admin for help.";
+      return `${emailKind} is unavailable right now. No email was sent. Ask your organization admin for help.`;
     case "email_unverified":
       return "Check your email and verify your address before signing in, or request a new link below.";
     case "signup_closed":
