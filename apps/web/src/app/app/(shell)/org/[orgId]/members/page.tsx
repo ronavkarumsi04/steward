@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { MembersPanel, type Invitation, type Member } from "@/components/members-panel";
 import { OrgHeader } from "@/components/org-header";
-import Link from "next/link";
-import { DepthFailure, QuietDepth } from "@/components/quiet-depth";
+import { DepthFailure } from "@/components/quiet-depth";
+import { QuietOrganizationFrame } from "@/components/quiet-organization";
 import { workspaceShell } from "@/lib/workspace-theme";
 import { depthCopy } from "@/lib/depth-copy";
 
@@ -16,14 +17,13 @@ export default async function MembersPage({ params }: { params: Promise<{ orgId:
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const locale = await getLocale();
     const c = depthCopy(locale);
+    const frame = (children: ReactNode) => <QuietOrganizationFrame orgId={orgId} title={c.membersTitle} description={c.membersIntro} scope={`${membership?.name ?? c.organization} · ${membership?.role ?? c.unavailable}`} active="members"><div className="q-depth">{children}</div></QuietOrganizationFrame>;
     let records: { members: Member[]; invitations: Invitation[] };
     try { records = await api.get(`/orgs/${orgId}/members`); }
-    catch (error) { return <QuietDepth title={c.membersTitle} description={c.membersIntro}><DepthFailure error={error} href={`/app/org/${orgId}/members`} locale={locale} /></QuietDepth>; }
-    return <QuietDepth title={c.membersTitle} description={c.membersIntro}>
-      <div className="q-depth-note"><h2>{membership?.name ?? c.organization}</h2><p>{c.organization} · {membership?.role ?? c.unavailable}</p></div>
-      <nav className="q-filter-tabs" aria-label={c.organization}><Link href={`/app/org/${orgId}/integrations`}>{c.connections}</Link><Link href={`/app/org/${orgId}/providers`}>{locale === "es" ? "Proveedores de IA" : "AI providers"}</Link><Link href={`/app/org/${orgId}/members`} aria-current="page">{c.members}</Link><Link href="/app">{locale === "es" ? "Empresas" : "Companies"}</Link></nav>
+    catch (error) { return frame(<DepthFailure error={error} href={`/app/org/${orgId}/members`} locale={locale} />); }
+    return frame(
       <MembersPanel quiet orgId={orgId} members={records.members} invitations={records.invitations} me={me.user.id} myRole={membership?.role} />
-    </QuietDepth>;
+    );
   }
   const { members, invitations } = await api.get<{ members: Member[]; invitations: Invitation[] }>(`/orgs/${orgId}/members`);
   return (
