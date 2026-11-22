@@ -170,6 +170,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)r
 document.addEventListener('submit',e=>{if(e.target.id==='waitlist-form'){e.preventDefault();state.waitlist='success';render();document.getElementById('main').focus()}if(e.target.id==='delegate-form'){e.preventDefault();state.newTask=true;navigate('work');toast('Local example task created. No agent started.')}});
 document.getElementById('theme-toggle').addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';updateThemeButton()});
 document.getElementById('palette-search').addEventListener('input',e=>paletteResults(e.target.value));
+document.querySelector('.skip').addEventListener('click',e=>{e.preventDefault();const main=document.getElementById('main');main?.focus();main?.scrollIntoView({block:'start'})});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();showSearch()}if(e.key==='Escape'&&state.menu){state.menu=false;render()}});
 if(new URLSearchParams(location.search).get('theme')==='dark')document.documentElement.dataset.theme='dark';
 window.addEventListener('hashchange',setRoute);setRoute();
