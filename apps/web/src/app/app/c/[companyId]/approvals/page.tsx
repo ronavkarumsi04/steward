@@ -6,6 +6,8 @@ import type { Approval, Run } from "@/lib/types";
 import { ApprovalsList } from "@/components/approvals-list";
 import { Icon } from "@/components/icons";
 import { Empty, PageHeader } from "@/components/ui";
+import { QuietApprovals } from "@/components/quiet-approvals";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "approvals.title") };
@@ -16,6 +18,9 @@ export default async function ApprovalsPage({ params, searchParams }: { params: 
   const { status = "pending" } = await searchParams;
   const api = await serverApi();
   const locale = await getLocale();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <QuietApprovals companyId={companyId} status={status} api={api} locale={locale} />;
+  }
   // The run behind a request is what makes a decision meaningful or pointless: a run that already finished
   // cannot be resumed, and the surface has to be able to say so. One list call answers it for every card.
   const [{ approvals }, { runs }] = await Promise.all([

@@ -243,10 +243,10 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     if (!a) throw new HttpError(404, "not_found");
     return c.json({ approval: a });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/approvals/:id/decide", tag: "approvals", summary: "Approve or deny; resumes the paused workflow", body: z.object({ status: z.enum(["approved", "denied"]), note: z.string().max(2000).optional(), editedPayload: z.record(z.string(), z.unknown()).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/approvals/:id/decide", tag: "approvals", summary: "Approve or deny; resumes the paused workflow", body: z.object({ status: z.enum(["approved", "denied"]), note: z.string().max(2000).optional(), editedPayload: z.record(z.string(), z.unknown()).optional(), expectedPayload: z.record(z.string(), z.unknown()).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
     const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
-    if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending");
+    if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending or the reviewed payload changed");
     return c.json({ approval: a });
   });
 
