@@ -5,6 +5,7 @@ import PrivacyPage from "@/app/app/(shell)/org/[orgId]/privacy/page";
 import SettingsPage from "@/app/app/c/[companyId]/settings/page";
 import NewCompanyPage from "@/app/app/(shell)/new/page";
 import InboxPage from "@/app/app/(shell)/inbox/page";
+import { QuietUnavailable } from "./quiet-depth";
 
 const { get, requireMe } = vi.hoisted(() => ({ get: vi.fn(), requireMe: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -28,6 +29,12 @@ async function accountData(path: string) {
   if (path === "/auth/agreements") return { history: [], pending: [] };
   throw new Error("Offline");
 }
+
+it("retries section failures with a document navigation rather than a same-page fragment", () => {
+  const html = renderToStaticMarkup(<QuietUnavailable href="/app/account#marketing" />);
+  expect(html).toContain('href="/app/account"');
+  expect(html).not.toContain("#marketing");
+});
 
 it("shows unavailable privacy data, not an empty history or an invented opt-out, in Quiet", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");

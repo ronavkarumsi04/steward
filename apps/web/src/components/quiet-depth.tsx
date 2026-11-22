@@ -4,7 +4,8 @@ import type { Locale } from "@/lib/i18n";
 
 /** Same section-local recovery language used by the decision/work screens. No raw API errors. */
 export function QuietUnavailable({ href, locale = "en" }: { href: string; locale?: Locale }) {
-  return <p className="q-depth-notice" role="status">{locale === "es" ? "No se pudo cargar esta sección. El resto del trabajo sigue disponible." : "This section could not be loaded. Other work is still available."} <Link className="q-link" href={href}>{locale === "es" ? "Reintentar" : "Try again"}</Link></p>;
+  // A native, fragment-free navigation reruns server fetches even when already on this page.
+  return <p className="q-depth-notice" role="status">{locale === "es" ? "No se pudo cargar esta sección. El resto del trabajo sigue disponible." : "This section could not be loaded. Other work is still available."} <a className="q-link" href={href.split("#")[0]}>{locale === "es" ? "Reintentar" : "Try again"}</a></p>;
 }
 
 export function QuietPageHeading({ title, description, scope, actions, level = 1 }: { title: string; description?: ReactNode; scope?: ReactNode; actions?: ReactNode; level?: 1 | 2 }) {
