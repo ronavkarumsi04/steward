@@ -1192,6 +1192,36 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     for (const status of ["approved", "denied"]) expect((await api.json("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status })).status).toBe(409);
   });
 
+  d("a second Cancel recovers after the workflow cancellation signal fails", async () => {
+    const { api, orgId, cookie } = await register();
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: `Retry Cancel ${uniq()}` });
+    const companyId = co.body.company.id;
+    const agents = await api.json<{ agents: Array<{ id: string }> }>("GET", `/companies/${companyId}/agents`);
+    const created = await api.json<{ run: { id: string } }>("POST", `/companies/${companyId}/runs`, { agentId: agents.body.agents[0]!.id, instruction: "Wait for approval" });
+    const runId = created.body.run.id;
+    const scope: TenantScope = { organizationId: orgId, companyId, actor: { type: "system", component: "test" } };
+    await services.runs.setStatus(scope, runId, "waiting_approval");
+    const approval = await services.approvals.request(scope, { runId, action: "email.send", reason: "Review", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 3600 });
+    const workflows = fakeTemporal();
+    let attempts = 0;
+    workflows.cancelRun = async () => {
+      if (++attempts === 1) throw new Error("Temporal temporarily unavailable");
+      return false;
+    };
+    const retryApp = createApp({ core, auth: new AuthService(core.db), mailer, services, workflows, companionHub: new CompanionHub(), env: ENV }, null).app;
+    const retryApi = client("", cookie, () => retryApp);
+    const cancel = () => retryApi.json<{ status: string; signalled: boolean }>("POST", `/companies/${companyId}/runs/${runId}/cancel`, {}, { "x-steward-csrf": "1" });
+    expect((await cancel()).status).toBe(500);
+    expect((await services.runs.get(scope, runId))?.status).toBe("waiting_approval");
+    expect((await services.approvals.get(scope, approval.id))?.status).toBe("cancelled");
+    for (const status of ["approved", "denied"]) expect((await api.json("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status })).status).toBe(409);
+    const retried = await cancel();
+    expect(retried.status).toBe(200);
+    expect(retried.body).toMatchObject({ status: "cancelled", signalled: false });
+    expect(attempts).toBe(2);
+    expect((await services.runs.get(scope, runId))?.status).toBe("cancelled");
+  });
+
   d("cancelling without a workflow stops the run and says so, instead of reporting a signal", async () => {
     // A deployment with no Temporal client is the case that used to look identical to a signal: the response
     // said "requested" while the run had already been stopped here and now. The run is created through a
