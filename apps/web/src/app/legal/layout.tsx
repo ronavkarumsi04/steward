@@ -57,7 +57,7 @@ export default async function LegalLayout({ children }: { children: ReactNode })
           </p>
         </nav>
 
-        <main id="legal-main" className="min-w-0">{children}</main>
+        <main id="legal-main" className="min-w-0 scroll-mt-20" tabIndex={-1}>{children}</main>
       </div>
 
       <footer className="hairline mx-auto max-w-[1200px] border-x-0 border-b-0 px-4 py-8 text-xs text-muted sm:px-6">
