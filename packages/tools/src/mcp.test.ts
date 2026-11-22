@@ -79,6 +79,22 @@ describe("mcp names", () => {
     expect(canonicalizeMcpAllowlistEntry("mcp.a-b.mcp.a_b.mcp.a_b.x", [collapsed])).toBeNull();
     expect(canonicalizeMcpAllowlistEntry("mcp.a-b.*", [], ["mcp.a_b"])).toBeNull();
   });
+  it("preserves nested wildcard scopes and resolves wrapped patterns using tool matching", () => {
+    for (const suffix of ["billing.*", "billing.invoices.*"]) {
+      const repaired = canonicalizeMcpAllowlistEntry(`mcp.a-b.${suffix}`);
+      expect(repaired).toBe(`mcp.a_b.${suffix}`);
+      expect(matchTool(repaired!, "mcp.a_b.billing.invoices.read")).toBe(true);
+      expect(matchTool(repaired!, "mcp.a_b.billing_extra.read")).toBe(false);
+      expect(canonicalizeMcpAllowlistEntry(`mcp.a-b.${suffix}`, [], ["mcp.a_b"])).toBeNull();
+    }
+    const wrapped = "mcp.a-b.mcp.a_b.billing.*";
+    const collapsed = ["mcp.a_b.billing.read", "mcp.a_b.billing.write"];
+    const literal = ["mcp.a_b.mcp.a_b.billing.read"];
+    expect(canonicalizeMcpAllowlistEntry(wrapped, collapsed)).toBe("mcp.a_b.billing.*");
+    expect(canonicalizeMcpAllowlistEntry(wrapped, literal)).toBe("mcp.a_b.mcp.a_b.billing.*");
+    expect(canonicalizeMcpAllowlistEntry(wrapped, [...collapsed, ...literal])).toBeNull();
+    expect(canonicalizeMcpAllowlistEntry(wrapped, [])).toBeNull();
+  });
   it("names a tool after its install, so two servers cannot mean the same thing", () => {
     expect(mcpToolName("ledger", "lookup_invoice")).toBe("mcp.ledger.lookup_invoice");
     // A server is free to call a tool something a model provider would refuse as a function name.

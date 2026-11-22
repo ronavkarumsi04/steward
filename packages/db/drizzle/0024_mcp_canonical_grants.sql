@@ -11,13 +11,18 @@ WITH entries AS (
     WHEN namespace IS NULL OR namespace = 'mcp.' || split_part(original, '.', 2) THEN original
     WHEN (SELECT count(*) FROM mcp_servers s WHERE s.company_id = e.company_id
       AND 'mcp.' || regexp_replace(lower(s.slug), '[^a-z0-9_]', '_', 'g') = e.namespace) > 1 THEN NULL
-    WHEN rest = '*' THEN namespace || '.*'
+    WHEN rest = '*' OR (right(rest, 2) = '.*' AND NOT starts_with(rest, namespace || '.')) THEN namespace || '.' || rest
     ELSE (
-      SELECT CASE WHEN count(DISTINCT t.tool_name) = 1 THEN min(t.tool_name) ELSE NULL END
-      FROM mcp_servers s JOIN mcp_tools t ON t.server_id = s.id AND t.company_id = s.company_id
-      WHERE s.company_id = e.company_id AND s.slug = lower(split_part(e.original, '.', 2))
-        AND (t.tool_name = e.namespace || '.' || e.rest
-          OR (starts_with(e.rest, e.namespace || '.') AND t.tool_name = e.rest))
+      SELECT CASE WHEN count(*) = 1 THEN min(pattern) ELSE NULL END
+      FROM (
+        SELECT DISTINCT p.pattern
+        FROM (VALUES (e.namespace || '.' || e.rest), (CASE WHEN starts_with(e.rest, e.namespace || '.') THEN e.rest END)) AS p(pattern)
+        WHERE p.pattern IS NOT NULL AND EXISTS (
+          SELECT 1 FROM mcp_servers s JOIN mcp_tools t ON t.server_id = s.id AND t.company_id = s.company_id
+          WHERE s.company_id = e.company_id AND s.slug = lower(split_part(e.original, '.', 2))
+            AND (t.tool_name = p.pattern OR (right(p.pattern, 2) = '.*' AND starts_with(t.tool_name, left(p.pattern, length(p.pattern) - 1))))
+        )
+      ) candidates
     ) END AS entry
   FROM entries e
 ), deduped AS (

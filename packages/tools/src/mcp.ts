@@ -26,7 +26,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { RiskLevel, ToolManifest } from "@steward/schema";
 import { z } from "zod";
-import { untrusted, type ToolDefinition } from "./registry.js";
+import { matchTool, untrusted, type ToolDefinition } from "./registry.js";
 import { assertPublicUrl } from "./web.js";
 
 export const MCP_TRANSPORTS = ["stdio", "http", "sse"] as const;
@@ -116,8 +116,9 @@ export function canonicalizeMcpAllowlistEntry(entry: string, recordedTools: read
   if (ambiguousNamespaces.includes(namespace)) return null;
   const rest = match[2]!;
   const canonical = `${namespace}.${rest}`;
-  if (rest === "*") return canonical;
-  const candidates = [...new Set([canonical, ...(rest.startsWith(`${namespace}.`) ? [rest] : [])])].filter((candidate) => recordedTools.includes(candidate));
+  const wrapped = rest.startsWith(`${namespace}.`);
+  if (rest === "*" || (rest.endsWith(".*") && !wrapped)) return canonical;
+  const candidates = [...new Set([canonical, ...(wrapped ? [rest] : [])])].filter((candidate) => recordedTools.some((tool) => matchTool(candidate, tool)));
   return candidates.length === 1 ? candidates[0]! : null;
 }
 

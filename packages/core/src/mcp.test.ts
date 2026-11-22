@@ -214,6 +214,15 @@ describe("grants", () => {
       }
     }
   });
+  it("keeps a legacy nested wildcard scoped to its recorded branch", () => {
+    const serverTools = ["mcp.a_b.billing.invoices.read", "mcp.a_b.billing.write", "mcp.a_b.billing_extra.read"];
+    const allowlist = applyGrant({ allowlist: ["mcp.a-b.billing.*"], slug: "a-b", toolNames: [], serverTools, granted: true });
+    expect(allowlist).toEqual(["mcp.a_b.billing.*"]);
+    expect(grantedBy(allowlist, serverTools[0]!)).toBe("mcp.a_b.billing.*");
+    expect(grantedBy(allowlist, serverTools[1]!)).toBe("mcp.a_b.billing.*");
+    expect(grantedBy(allowlist, serverTools[2]!)).toBeNull();
+    expect(applyGrant({ allowlist, slug: "a-b", toolNames: null, serverTools, granted: false })).toEqual([EXPLICIT_NO_TOOLS]);
+  });
 });
 
 // ---------- against a real database and a real server ----------

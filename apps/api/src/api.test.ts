@@ -2506,7 +2506,22 @@ describe("mcp marketplace", () => {
     expect((await update(["mcp.a-b.mcp.a_b.mcp.a_b.x"])).body.agent.toolAllowlist).toEqual([literal]);
     const alias = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
     await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [alias.body.server.id]);
-    expect((await update(["web.*", "mcp.a-b.*", legacy])).body.agent.toolAllowlist).toEqual(["web.*"]);
+    expect((await update(["web.*", "mcp.a-b.*", "mcp.a-b.billing.*", legacy])).body.agent.toolAllowlist).toEqual(["web.*"]);
+  }, 60_000);
+
+  d("rewrites legacy nested wildcard grants without widening their scope", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${installed.body.server.id}/inspect`, {});
+    await core.pool.query("UPDATE mcp_tools SET tool_name=CASE name WHEN 'lookup_invoice' THEN 'mcp.a_b.billing.invoices.read' WHEN 'reschedule' THEN 'mcp.a_b.billing.write' ELSE 'mcp.a_b.billing_extra.' || name END WHERE server_id=$1", [installed.body.server.id]);
+    const created = await me.api.json<{ agent: { id: string; toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/agents`, { kind: "custom", name: "Billing only", toolAllowlist: ["mcp.a-b.billing.*"] });
+    expect(created.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.*"]);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+    expect(registry.list({ allow: created.body.agent.toolAllowlist }).map((tool) => tool.manifest.name).sort()).toEqual(["mcp.a_b.billing.invoices.read", "mcp.a_b.billing.write"]);
+    const updated = await me.api.json<{ agent: { toolAllowlist: string[] } }>("PATCH", `/companies/${me.companyId}/agents/${created.body.agent.id}`, { toolAllowlist: ["mcp.a-b.billing.invoices.*"] });
+    expect(updated.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.invoices.*"]);
+    expect(registry.list({ allow: updated.body.agent.toolAllowlist }).map((tool) => tool.manifest.name)).toEqual(["mcp.a_b.billing.invoices.read"]);
   }, 60_000);
 
   d("refuses namespace aliases and fails closed on stored collisions without losing other tools", async () => {

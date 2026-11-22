@@ -140,6 +140,39 @@ describe("migration invariants", () => {
       client.release();
     }
   });
+  live("repairs nested wildcard scopes with matchTool prefix semantics and drops ambiguous interpretations", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      for (const company of ["nested", "collapsed", "literal", "ambiguous", "collision"]) {
+        await client.query("INSERT INTO mcp_servers VALUES ($1, $1, 'a-b')", [company]);
+        const grants = company === "nested" || company === "collision" ? ["mcp.a-b.billing.*", "mcp.a-b.billing.invoices.*"] : ["mcp.a-b.mcp.a_b.billing.*"];
+        await client.query("INSERT INTO agents VALUES ($1, $1, $2)", [company, JSON.stringify(grants)]);
+      }
+      await client.query("INSERT INTO mcp_servers VALUES ('alias', 'collision', 'a_b')");
+      for (const company of ["collapsed", "ambiguous"]) {
+        for (const tool of ["mcp.a_b.billing.read", "mcp.a_b.billing.write"]) await client.query("INSERT INTO mcp_tools VALUES ($1, $1, $2)", [company, tool]);
+      }
+      for (const company of ["literal", "ambiguous"]) await client.query("INSERT INTO mcp_tools VALUES ($1, $1, 'mcp.a_b.mcp.a_b.billing.read')", [company]);
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        expect((await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows).toEqual([
+          { id: "ambiguous", tool_allowlist: ["__steward_no_tools__"] },
+          { id: "collapsed", tool_allowlist: ["mcp.a_b.billing.*"] },
+          { id: "collision", tool_allowlist: ["__steward_no_tools__"] },
+          { id: "literal", tool_allowlist: ["mcp.a_b.mcp.a_b.billing.*"] },
+          { id: "nested", tool_allowlist: ["mcp.a_b.billing.*", "mcp.a_b.billing.invoices.*"] },
+        ]);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
   live("has applied every migration in the journal", async () => {
     const { rows } = await pool!.query<{ n: string }>(`select count(*)::text as n from drizzle.__drizzle_migrations`);
     expect(Number(rows[0]!.n)).toBeGreaterThanOrEqual(journal.entries.length);
