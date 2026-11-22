@@ -1,4 +1,6 @@
 /* Slice A: scoped compatibility theme. Public/access pages and the legacy shell retain their identity. */
+/* Keep centered workspace chrome fixed when a collection gains a native scrollbar. */
+html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace {
   color-scheme: light;
   --bg: #ffffff; --bg-tint: #f7f8f7; --panel: #ffffff; --panel-2: #f8faf9; --panel-3: #eef2ef;
