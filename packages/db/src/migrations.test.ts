@@ -89,6 +89,116 @@ async function fixture() {
 }
 
 describe("migration invariants", () => {
+  live("canonicalises legacy MCP grants, dedupes and is idempotent", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text DEFAULT 'unique', tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      await client.query("INSERT INTO mcp_servers VALUES ('c1', 'collision', 'a-b'), ('c2', 'collision', 'a_b'), ('unique', 'unique', 'local-protocol-check')");
+      await client.query("INSERT INTO mcp_tools VALUES ('unique', 'unique', 'mcp.local_protocol_check.delete_customer')");
+      const before = ["web.*", "mcp.local-protocol-check.*", "mcp.local_protocol_check.*", "mcp.local-protocol-check.delete_customer", "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", "mcp.a-b.mcp.other.tool"];
+      await client.query("INSERT INTO agents (id, tool_allowlist) VALUES ('legacy', $1), ('empty', '[]')", [JSON.stringify(before)]);
+      await client.query("INSERT INTO agents VALUES ('collision', 'collision', '[\"mcp.a-b.*\",\"mcp.a-b.lookup_invoice\"]')");
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      const expected = ["web.*", "mcp.local_protocol_check.*", "mcp.local_protocol_check.delete_customer"];
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        const { rows } = await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id");
+        expect(rows).toEqual([{ id: "collision", tool_allowlist: ["__steward_no_tools__"] }, { id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+  live("preserves every reading of ambiguous denies, including unknown tools and installed aliases", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      for (const company of ["ambiguous", "missing", "collision", "literal", "collapsed", "deny_only"]) {
+        await client.query("INSERT INTO mcp_servers VALUES ($1, $1, 'a-b')", [company]);
+        const entries = company === "deny_only" ? ["!mcp.a-b.mcp.a_b.x"] : ["*", "!mcp.a-b.mcp.a_b.x", "!mcp.a-b.billing.*", "!web.*"];
+        await client.query("INSERT INTO agents VALUES ($1, $1, $2)", [company, JSON.stringify(entries)]);
+      }
+      await client.query("INSERT INTO mcp_servers VALUES ('alias', 'collision', 'a_b')");
+      await client.query("INSERT INTO mcp_tools VALUES ('ambiguous','ambiguous','mcp.a_b.x'), ('ambiguous','ambiguous','mcp.a_b.mcp.a_b.x'), ('literal','literal','mcp.a_b.mcp.a_b.x'), ('collapsed','collapsed','mcp.a_b.x')");
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        for (const row of (await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows) {
+          expect(row.tool_allowlist).toEqual(row.id === "deny_only" ? ["__steward_no_tools__", "!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x"] : ["*", "!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x", "!mcp.a_b.billing.*", "!web.*"]);
+        }
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+  live("migrates only the unique recorded interpretation of legacy per-tool grants", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      for (const company of ["collapsed", "literal", "ambiguous", "missing"]) {
+        await client.query("INSERT INTO mcp_servers VALUES ($1, $1, 'a-b')", [company]);
+        await client.query("INSERT INTO agents VALUES ($1, $1, '[\"mcp.a-b.mcp.a_b.x\"]')", [company]);
+      }
+      await client.query("INSERT INTO mcp_tools VALUES ('collapsed','collapsed','mcp.a_b.x'), ('literal','literal','mcp.a_b.mcp.a_b.x'), ('ambiguous','ambiguous','mcp.a_b.x'), ('ambiguous','ambiguous','mcp.a_b.mcp.a_b.x'), ('missing','collapsed','mcp.a_b.x')");
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        expect((await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows).toEqual([
+          { id: "ambiguous", tool_allowlist: ["__steward_no_tools__"] },
+          { id: "collapsed", tool_allowlist: ["mcp.a_b.x"] },
+          { id: "literal", tool_allowlist: ["mcp.a_b.mcp.a_b.x"] },
+          { id: "missing", tool_allowlist: ["__steward_no_tools__"] },
+        ]);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+  live("repairs nested wildcard scopes with matchTool prefix semantics and drops ambiguous interpretations", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      for (const company of ["nested", "collapsed", "literal", "ambiguous", "collision"]) {
+        await client.query("INSERT INTO mcp_servers VALUES ($1, $1, 'a-b')", [company]);
+        const grants = company === "nested" || company === "collision" ? ["mcp.a-b.billing.*", "mcp.a-b.billing.invoices.*"] : ["mcp.a-b.mcp.a_b.billing.*"];
+        await client.query("INSERT INTO agents VALUES ($1, $1, $2)", [company, JSON.stringify(grants)]);
+      }
+      await client.query("INSERT INTO mcp_servers VALUES ('alias', 'collision', 'a_b')");
+      for (const company of ["collapsed", "ambiguous"]) {
+        for (const tool of ["mcp.a_b.billing.read", "mcp.a_b.billing.write"]) await client.query("INSERT INTO mcp_tools VALUES ($1, $1, $2)", [company, tool]);
+      }
+      for (const company of ["literal", "ambiguous"]) await client.query("INSERT INTO mcp_tools VALUES ($1, $1, 'mcp.a_b.mcp.a_b.billing.read')", [company]);
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        expect((await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows).toEqual([
+          { id: "ambiguous", tool_allowlist: ["__steward_no_tools__"] },
+          { id: "collapsed", tool_allowlist: ["mcp.a_b.billing.*"] },
+          { id: "collision", tool_allowlist: ["__steward_no_tools__"] },
+          { id: "literal", tool_allowlist: ["mcp.a_b.mcp.a_b.billing.*"] },
+          { id: "nested", tool_allowlist: ["mcp.a_b.billing.*", "mcp.a_b.billing.invoices.*"] },
+        ]);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
   live("has applied every migration in the journal", async () => {
     const { rows } = await pool!.query<{ n: string }>(`select count(*)::text as n from drizzle.__drizzle_migrations`);
     expect(Number(rows[0]!.n)).toBeGreaterThanOrEqual(journal.entries.length);
