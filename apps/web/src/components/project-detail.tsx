@@ -6,7 +6,7 @@ import { useState } from "react";
 import { browserApi, ApiError } from "@/lib/api";
 import type { ProjectSnapshot, ProjectStatus } from "@/lib/types";
 import { Icon } from "./icons";
-import { PageHeader, Pill, StatusPill, ago, usd } from "./ui";
+import { PageHeader, Pill, StatusPill, ago, statusTone, usd } from "./ui";
 import { useQuietSpecialist } from "./quiet-specialist-context";
 import { useT } from "./locale-provider";
 
@@ -39,7 +39,7 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
     </div>
 
     <section data-specialist-metrics className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="card nb-left-yellow p-4"><div className="eyebrow">Status</div><div className="mt-2"><Pill tone={STATUS_TONE[status]}>{status}</Pill></div></div>
+      <div className="card nb-left-yellow p-4"><div className="eyebrow">Status</div><div className="mt-2"><Pill tone={quiet && status === "active" ? statusTone(status) : STATUS_TONE[status]}>{status}</Pill></div></div>
       <div className="card nb-left-purple p-4"><div className="eyebrow">Workers</div><div className="tnum mt-2 text-2xl font-semibold">{activeRuns.length}</div><div className="mt-1 text-xs text-muted">{initial.runs.length} total runs</div></div>
       <div className="card nb-left-green p-4"><div className="eyebrow">Outputs</div><div className="tnum mt-2 text-2xl font-semibold">{initial.artifacts.length}</div><div className="mt-1 text-xs text-muted">reviewable artifacts</div></div>
       <div className="card nb-left-pink p-4"><div className="eyebrow">Decisions</div><div className="tnum mt-2 text-2xl font-semibold">{initial.decisions.length}</div><div className="mt-1 text-xs text-muted">project-scoped</div></div>

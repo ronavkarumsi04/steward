@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { browserApi, ApiError } from "@/lib/api";
 import type { Project, ProjectStatus } from "@/lib/types";
 import { Icon } from "./icons";
-import { Empty, PageHeader, Pill, ago } from "./ui";
+import { Empty, PageHeader, Pill, ago, statusTone } from "./ui";
 import { SpecialistDisclosure, useQuietSpecialist } from "./quiet-specialist-context";
 
 const STATUS_TONE: Record<ProjectStatus, "neutral" | "accent" | "warn" | "ok"> = { active: "accent", blocked: "warn", complete: "ok", cancelled: "neutral" };
@@ -62,7 +62,7 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
     {active.length === 0 ? <Empty>No active projects yet. Create one above, or start a mission from Studio and Steward will create one automatically.</Empty> : (
       <section className="q-project-list grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Active projects">
         {active.map((project) => <Link key={project.id} href={`/app/c/${companyId}/projects/${project.id}`} className={`card nb-left-green group block p-5${quiet ? "" : " transition hover:-translate-y-0.5"}`}>
-          <div className="flex items-center justify-between gap-3"><Pill tone={STATUS_TONE[project.status]}>{project.status}</Pill><span className="text-xs text-faint">{ago(project.updatedAt)}</span></div>
+          <div className="flex items-center justify-between gap-3"><Pill tone={quiet && project.status === "active" ? statusTone(project.status) : STATUS_TONE[project.status]}>{project.status}</Pill><span className="text-xs text-faint">{ago(project.updatedAt)}</span></div>
           <h2 className="mt-3 text-lg font-semibold tracking-tight group-hover:text-accent">{project.name}</h2>
           <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted">{project.objective || project.description}</p>
           <div className="q-project-context mt-4 space-y-2 border-t border-line pt-3 text-xs">
