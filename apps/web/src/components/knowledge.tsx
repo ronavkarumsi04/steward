@@ -49,7 +49,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
   // three documents and no playbooks does not open on an empty pane.
   const tab: Tab = initialTab && (TAB_IDS as readonly string[]).includes(initialTab)
     ? initialTab as Tab
-    : documents.length ? "documents" : decisions.length ? "decisions" : "playbooks";
+    : documents.some((document) => document.kind !== "playbook") ? "documents" : decisions.length ? "decisions" : "playbooks";
   const [pictures, setPictures] = useState<ImageView[] | null>(null);
   const [open, setOpen] = useState<Document | null>(null);
   const [history, setHistory] = useState<DocumentVersion[] | null>(null);
