@@ -26,13 +26,14 @@ export function MarketingConsentToggle({ optedIn, quiet = false }: { optedIn: bo
     setOutcome(null);
     try {
       await browserApi.post("/privacy/marketing-consent", { optedIn: next });
-      toast("ok", next ? "You are subscribed to product news." : "You have been unsubscribed from product news.");
-      setOutcome({ error: false, text: next ? "You are subscribed to product news." : "You have been unsubscribed from product news." });
+      const text = next ? "You are subscribed to product news." : "You have been unsubscribed from product news.";
+      if (quiet) setOutcome({ error: false, text });
+      else toast("ok", text);
       router.refresh();
     } catch (err) {
       setOn(!next);
-      toast("err", errorText(err));
-      setOutcome({ error: true, text: errorText(err) });
+      if (quiet) setOutcome({ error: true, text: errorText(err) });
+      else toast("err", errorText(err));
     } finally {
       setBusy(false);
     }
