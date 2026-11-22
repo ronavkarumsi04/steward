@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type { TaskStatus } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
+import { useActiveRefresh } from "@/lib/use-active-refresh";
 import type { Agent, Goal, Run, Task } from "@/lib/types";
 import { Icon } from "./icons";
 import { Pill, StatusPill, Ago, type Tone } from "./ui";
@@ -24,6 +25,7 @@ const COLUMNS: Array<{ status: TaskStatus; label: MessageKey }> = [
 
 export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: string; tasks: Task[]; agents: Agent[]; goals: Goal[] }) {
   const router = useRouter();
+  useActiveRefresh(tasks.some((task) => task.status === "in_progress" || task.status === "waiting_approval"));
   const t = useT();
   const locale = useLocale();
   const [error, setError] = useState<string | null>(null);
