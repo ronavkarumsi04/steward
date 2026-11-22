@@ -334,7 +334,7 @@ export function KnowledgeGraph({ companyId, initial, quiet = false }: { companyI
                                 })
                               }
                             >
-                              <span className={`block truncate font-medium${quiet ? " q-graph-node-label" : ""}`}>{node.label}</span>
+                              <span className="block truncate font-medium">{node.label}</span>
                               {quiet ? (node.entityType || nodeSubtitle(overview, node)) && <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">{[node.entityType ? typeLabel(overview, node.entityType) : null, nodeSubtitle(overview, node)].filter(Boolean).join(" · ")}</span> : <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
                                 <span>{kindLabel(overview, node.kind)}</span>
                                 {node.entityType && <span>· {typeLabel(overview, node.entityType)}</span>}

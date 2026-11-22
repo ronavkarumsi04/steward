@@ -97,7 +97,7 @@
 [data-public-design="quiet"] .workflow-top > span:first-child { display: flex; align-items: center; gap: 8px; color: var(--fg); font-weight: 650; }
 [data-public-design="quiet"] .workflow-body { padding: 24px; }
 [data-public-design="quiet"] .workflow-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
-[data-public-design="quiet"] .workflow-heading h2 { font-size: 19px; }
+[data-public-design="quiet"] .public-workflow .workflow-heading h2 { font-size: 19px; }
 [data-public-design="quiet"] .workflow-state { font-size: 12px; color: var(--warn); }
 [data-public-design="quiet"] .workflow-decision { padding: 20px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--warn-soft); }
 [data-public-design="quiet"] .workflow-decision > span:first-child { color: var(--warn); font-size: 12px; font-weight: 650; }
@@ -197,6 +197,10 @@
   [data-public-design="quiet"] .public-workflow { max-width: 640px; width: 100%; }
 }
 @media (max-width: 767px) {
+  /* Leave room for whole heading words at native 200% text-only zoom. */
+  [data-public-design="quiet"] .public-main h1 { font-size: clamp(26px, 8vw, 40px); overflow-wrap: normal; }
+  [data-public-design="quiet"] .public-main h2 { font-size: clamp(24px, 7vw, 28px); }
+  [data-public-design="quiet"] .public-legal h1 { font-size: clamp(18px, 6vw, 30px); overflow-wrap: normal; }
   [data-public-design="quiet"] .quiet-story nav[aria-label="Story chapters"] { display: flex; flex-wrap: wrap; }
   [data-public-design="quiet"] .quiet-story [data-story-link] { flex: 1 1 min-content; min-width: min-content; max-width: 100%; overflow-wrap: normal; }
   [data-public-design="quiet"] .quiet-story h2 { font-size: 24px; max-width: 100%; overflow-wrap: normal; }

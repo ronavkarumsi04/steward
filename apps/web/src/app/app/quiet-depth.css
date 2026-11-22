@@ -36,7 +36,7 @@
 .q-depth .q-depth-panel > .card { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .q-depth .q-depth-panel > .card > div:first-child { margin-bottom: 24px; }
 .q-depth .q-depth-panel > .card li { padding-block: 18px; }
-.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; }
+.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
 .q-depth .q-depth-panel nav { margin-bottom: 30px; }
 .q-depth .q-depth-panel nav .btn { border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px; }
 .q-depth .q-depth-panel nav .btn[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }

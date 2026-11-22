@@ -64,7 +64,6 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace :is(button, .btn, .pill, label, .label, summary, td, th, select) { overflow-wrap: normal; }
 /* Preserve link words in intrinsic sizing, but contain unbroken title/URL content. */
 .quiet-workspace a { overflow-wrap: break-word; }
-.quiet-workspace .q-graph-node-label { overflow-wrap: break-word; }
 /* Action/badge rows yield before their shortest readable label does. */
 .quiet-workspace .flex:has(> :is(.btn, .pill)) { flex-wrap: wrap; }
 .quiet-workspace .flex > :is(.btn, .pill) { min-width: min-content; }
