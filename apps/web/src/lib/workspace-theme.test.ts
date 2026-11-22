@@ -11,7 +11,7 @@ function contrast(a: string, b: string) {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 describe("Quiet momentum token contrast", () => {
-  for (const [theme, block] of [["light", css.split("}")[0]!], ["dark", css.split(':root[data-theme="dark"] .quiet-workspace {')[1]!.split("}")[0]!]] as const) {
+  for (const [theme, block] of [["light", css.split(".quiet-workspace {")[1]!.split("}")[0]!], ["dark", css.split(':root[data-theme="dark"] .quiet-workspace {')[1]!.split("}")[0]!]] as const) {
     const tokens = Object.fromEntries([...block.matchAll(/--([\w-]+):\s*(#[a-f\d]{6})/gi)].map((m) => [m[1], m[2]]));
     it(`${theme}: text, statuses and actions meet AA normal-text contrast`, () => {
       for (const [fg, bg] of [["fg", "bg"], ["muted", "bg"], ["muted", "rail"], ["accent-fg", "accent"], ["accent", "accent-soft"], ["ok", "ok-soft"], ["warn", "warn-soft"], ["danger", "danger-soft"], ["accent-2", "progress-soft"]]) {
