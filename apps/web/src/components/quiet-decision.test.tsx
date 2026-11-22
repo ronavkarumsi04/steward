@@ -45,6 +45,7 @@ describe("Quiet decision surfaces", () => {
     const decided = { ...approval, status: "approved" as const, resolvedBy: "user-1" };
     const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: decided, overview, run: null, members: [{ userId: "user-1", name: "Test reviewer", email: "reviewer@example.test" }] }));
     expect(html).toContain("Test reviewer (reviewer@example.test)");
+    expect(html).toContain("UTC</time>");
     const missing = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: decided, overview, run: null }));
     expect(missing).toContain("Member name not available");
   });

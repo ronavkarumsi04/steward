@@ -65,7 +65,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
     try { return new Intl.DateTimeFormat(locale, { timeZone: overview.company.timezone }).resolvedOptions().timeZone; }
     catch { return "UTC"; }
   }, [locale, overview.company.timezone]);
-  const date = (value: string) => new Date(value).toLocaleString(locale, { timeZone });
+  const date = (value: string) => new Date(value).toLocaleString(locale, { timeZone, timeZoneName: "short" });
   const focusOutcome = () => requestAnimationFrame(() => (outcome.current ?? heading.current)?.focus());
 
   async function reviewLatest() {
