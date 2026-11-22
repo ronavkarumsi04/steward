@@ -1,4 +1,4 @@
-import { and, count, eq, or, sql } from "drizzle-orm";
+import { and, count, eq, getTableColumns, or, sql } from "drizzle-orm";
 import { hmacSign, safeEqual } from "@steward/crypto";
 import {
   agreements,
@@ -14,6 +14,9 @@ import {
   type DbOrTx,
 } from "@steward/db";
 import { AuthError } from "./auth.js";
+
+// Drizzle's upsert builder quotes its targets as column names, not index expressions.
+const messagingConsentConflict = sql`on conflict (company_id, channel, lower(address))`;
 
 /**
  * Implements the promises made in the published legal documents: clickwrap records, data export,
@@ -412,14 +415,16 @@ export class PrivacyService {
   }
 
   async grantConsent(input: { organizationId: string; companyId: string; channel: "email" | "sms"; address: string; source: string; evidence: string }) {
-    const [row] = await this.db
-      .insert(messagingConsents)
-      .values({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address: input.address.trim(), status: "granted", source: input.source, evidence: input.evidence, grantedAt: new Date(), revokedAt: null })
-      .onConflictDoUpdate({
-        target: [messagingConsents.companyId, messagingConsents.channel, messagingConsents.address],
-        set: { status: "granted", source: input.source, evidence: input.evidence, grantedAt: new Date(), revokedAt: null, updatedAt: new Date() },
-      })
-      .returning();
+    const now = new Date();
+    const granted = this.db.$with("granted_consent", getTableColumns(messagingConsents)).as(sql`
+      insert into ${messagingConsents} (organization_id, company_id, channel, address, status, source, evidence, granted_at)
+      values (${input.organizationId}, ${input.companyId}, ${input.channel}, ${input.address.trim()}, 'granted', ${input.source}, ${input.evidence}, ${now})
+      ${messagingConsentConflict} do update set
+        status = excluded.status, source = excluded.source, evidence = excluded.evidence,
+        granted_at = excluded.granted_at, revoked_at = null, updated_at = ${now}
+      returning *
+    `);
+    const [row] = await this.db.with(granted).select().from(granted);
     return row!;
   }
 
@@ -428,13 +433,13 @@ export class PrivacyService {
    * database problem left the person marked as consented while the product told them they were opted out.
    */
   async revokeConsent(input: { organizationId: string; companyId: string; channel: string; address: string; reason: string; source: string }, exec: DbOrTx = this.db) {
-    await exec
-      .insert(messagingConsents)
-      .values({ organizationId: input.organizationId, companyId: input.companyId, channel: input.channel, address: input.address.trim(), status: "revoked", source: input.source, evidence: input.reason, revokedAt: new Date() })
-      .onConflictDoUpdate({
-        target: [messagingConsents.companyId, messagingConsents.channel, messagingConsents.address],
-        set: { status: "revoked", evidence: input.reason, revokedAt: new Date(), updatedAt: new Date() },
-      });
+    const now = new Date();
+    await exec.execute(sql`
+      insert into ${messagingConsents} (organization_id, company_id, channel, address, status, source, evidence, revoked_at)
+      values (${input.organizationId}, ${input.companyId}, ${input.channel}, ${input.address.trim()}, 'revoked', ${input.source}, ${input.reason}, ${now})
+      ${messagingConsentConflict} do update set
+        status = excluded.status, evidence = excluded.evidence, revoked_at = excluded.revoked_at, updated_at = ${now}
+    `);
   }
 
   /** Persists job progress on the request row so a large export or deletion can be resumed by a retry. */
