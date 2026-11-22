@@ -21,5 +21,5 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
     result.approval.runId ? api.get<RunDetail>(`/companies/${companyId}/runs/${result.approval.runId}`).catch(() => null) : null,
     api.get<{ members: DecisionMember[] }>(`/orgs/${overview.company.organizationId}/members`).catch(() => null),
   ]);
-  return <QuietApprovalDetail key={result.approval.id} approval={result.approval} overview={overview} run={detail?.run ?? null} members={people?.members.map(({ userId, name, email }) => ({ userId, name, email })) ?? []} />;
+  return <QuietApprovalDetail key={result.approval.id} approval={result.approval} overview={overview} run={detail?.run ?? null} aiCalls={detail?.aiCalls ?? []} members={people?.members.map(({ userId, name, email }) => ({ userId, name, email })) ?? []} />;
 }

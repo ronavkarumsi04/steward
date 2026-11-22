@@ -4,6 +4,8 @@ import type { Approval } from "@/lib/types";
 import type { Locale } from "@/lib/i18n";
 import { decisionCopy } from "@/lib/decision-copy";
 import { isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
+import { approvalActionLabel, approvalWorkLabel } from "@/lib/approval-row";
+import { loadApprovalContext } from "@/lib/quiet-record-context";
 import { Ago } from "./ui";
 import { Icon } from "./icons";
 
@@ -18,11 +20,12 @@ export async function QuietApprovals({ companyId, status, api, locale }: { compa
   const approvals = results.flatMap((result) => result.status === "fulfilled" ? result.value.approvals : [])
     .sort((a, b) => Date.parse(b.resolvedAt ?? b.createdAt) - Date.parse(a.resolvedAt ?? a.createdAt));
   const failed = results.some((r) => r.status === "rejected");
+  const contexts = await loadApprovalContext(api, companyId, approvals);
   const base = `/app/c/${companyId}/approvals`;
   return <div className="q-decision-page"><header className="q-page-heading"><div><h1>{c.approvals}</h1><p>{c.approvalsIntro}</p></div></header>
     <nav className="q-filter-tabs" aria-label={c.approvals}>{filters.map((filter) => <Link key={filter} href={`${base}?status=${filter}`} aria-current={selected === filter ? "page" : undefined}>{label(filter)}</Link>)}</nav>
     <p className="q-caption">{c.latest}</p>
     {failed && <p role="alert" className="q-notice">{c.loadError} <Link className="q-link" href={`${base}?status=${selected}`}>{c.retry}</Link></p>}
-    {approvals.length === 0 && !failed ? <div className="q-clear"><Icon.Check size={22} /><div><h2>{selected === "pending" ? c.clear : c.emptyHistory}</h2><p>{selected === "pending" ? c.clearHint : c.outcome}</p></div></div> : <ul className="q-approval-list">{approvals.map((a) => <li key={a.id} id={a.id}><Link className="q-work-row" href={`${base}/${a.id}`}><Icon.Approvals size={18} /><div className="q-grow"><strong>{a.action}</strong><span>{a.affectedSystem || c.notRecorded} · {c.estimate}: {recordedUsd(a.estimatedCostUsd, locale) ?? c.unavailable}</span></div><div className="q-row-end"><span className={`pill ${isDecisionOpen(a) ? "pill-warn" : ""}`}>{requestLabel(a)}</span><Ago iso={a.resolvedAt ?? a.createdAt} locale={locale} /></div><Icon.ChevronRight size={16} /></Link></li>)}</ul>}
+    {approvals.length === 0 && !failed ? <div className="q-clear"><Icon.Check size={22} /><div><h2>{selected === "pending" ? c.clear : c.emptyHistory}</h2><p>{selected === "pending" ? c.clearHint : c.outcome}</p></div></div> : <ul className="q-approval-list">{approvals.map((a) => <li key={a.id} id={a.id}><Link className="q-work-row" href={`${base}/${a.id}`}><Icon.Approvals size={18} /><div className="q-grow"><strong>{approvalWorkLabel(a, contexts[a.id], locale)}</strong><span className="q-approval-action">{approvalActionLabel(a, locale)}</span><span>{a.affectedSystem || c.notRecorded} · {c.estimate}: {recordedUsd(a.estimatedCostUsd, locale) ?? c.unavailable}</span></div><div className="q-row-end"><span className={`pill ${isDecisionOpen(a) ? "pill-warn" : ""}`}>{requestLabel(a)}</span><Ago iso={a.resolvedAt ?? a.createdAt} locale={locale} /></div><Icon.ChevronRight size={16} /></Link></li>)}</ul>}
   </div>;
 }

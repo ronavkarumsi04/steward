@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Approval, CompanyOverview, Run } from "@/lib/types";
+import type { AICall, Approval, CompanyOverview, Run } from "@/lib/types";
+import { runCostValue } from "@/lib/work-loop";
 import { decisionCopy } from "@/lib/decision-copy";
 import { approvalSnapshot, isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
 import { diffPayload } from "@/lib/approval-review";
@@ -18,7 +19,7 @@ import { StatusPill } from "./ui";
 export type DecisionMember = { userId: string; name: string; email: string };
 
 /** A real request, one review surface, one durable server decision. Delivery and execution stay distinct. */
-export function QuietApprovalDetail({ approval, overview, run, members = [] }: { approval: Approval; overview: CompanyOverview; run: Run | null; members?: DecisionMember[] }) {
+export function QuietApprovalDetail({ approval, overview, run, aiCalls = [], members = [] }: { approval: Approval; overview: CompanyOverview; run: Run | null; aiCalls?: AICall[]; members?: DecisionMember[] }) {
   const locale = useLocale();
   const c = decisionCopy(locale);
   const router = useRouter();
@@ -159,7 +160,11 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
       {[[c.company, overview.company.name], [c.actor, overview.agents.find((a) => a.id === state.agentId)?.name ?? state.agentId ?? c.notRecorded], [c.action, state.action], [c.system, state.affectedSystem || c.notRecorded], [c.scope, state.dimension], [c.risk, state.risk], [c.estimate, recordedUsd(state.estimatedCostUsd, locale) ?? c.unavailable]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       <div><dt>{c.requested}</dt><dd><time dateTime={state.createdAt}>{date(state.createdAt)}</time></dd></div><div><dt>{c.expiry}</dt><dd><time dateTime={state.expiresAt}>{date(state.expiresAt)}</time></dd></div>
     </dl><p>{c.estimateHint}</p>
-      <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>{state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>{run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(run.costUsd, locale) ?? c.unavailable} USD</p>{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}</> : <p>{c.noRun}</p>}</section>
+      <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>
+        {state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>
+          {run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(runCostValue(run, aiCalls), locale) ?? c.unavailable} USD</p>{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}
+        </> : <p>{c.noRun}</p>}
+      </section>
     </aside></div>
     {persistent && <footer ref={actions} className="q-actions" data-persistent="true" aria-label={c.review}><div className="q-action-buttons"><button className="btn btn-primary" onClick={() => decide("approved")} disabled={busy || !open || needsReview || parsed.invalid}>{busy ? c.submitting : c.approve}</button><button className="btn btn-danger" onClick={() => decide("denied")} disabled={busy || !open || needsReview}>{c.decline}</button></div></footer>}
   </div>;

@@ -7,6 +7,7 @@ import type { Approval, Company } from "@/lib/types";
 import { Inbox, type InboxGroup } from "@/components/inbox";
 import { QuietInbox } from "@/components/quiet-inbox";
 import { workspaceShell } from "@/lib/workspace-theme";
+import { loadApprovalContext } from "@/lib/quiet-record-context";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "inbox.title") };
@@ -54,6 +55,9 @@ async function InboxPageContent() {
     // Newest request first across companies, not company creation order.
     .sort((a, b) => Date.parse(b.approvals[0]!.createdAt) - Date.parse(a.approvals[0]!.createdAt));
   const truncated = orgs.some((o) => o.approvals.length >= INBOX_PAGE);
-  if (quiet) return <QuietInbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} unavailableOrgs={unavailableOrgs} locale={locale} />;
+  if (quiet) {
+    const contexts = Object.assign({}, ...await Promise.all(groups.map((group) => loadApprovalContext(api, group.company.id, group.approvals))));
+    return <QuietInbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} unavailableOrgs={unavailableOrgs} locale={locale} contexts={contexts} />;
+  }
   return <Inbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} />;
 }

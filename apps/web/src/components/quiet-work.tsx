@@ -3,6 +3,7 @@ import type { Agent, CompanyOverview, Goal, Run, Task } from "@/lib/types";
 import type { Locale } from "@/lib/i18n";
 import { workStatuses, workView, type WorkFilters, type WorkKind } from "@/lib/work-loop";
 import { QuietWorkList } from "./quiet-work-list";
+import { loadRunCosts } from "@/lib/quiet-record-context";
 
 /** Independent reads keep work visible when assignment/goal context is temporarily unavailable. */
 export async function QuietWork({ companyId, kind, filters, api, locale }: { companyId: string; kind: WorkKind; filters: WorkFilters; api: ApiClient; locale: Locale }) {
@@ -17,7 +18,8 @@ export async function QuietWork({ companyId, kind, filters, api, locale }: { com
     api.get<CompanyOverview>(`/companies/${companyId}`),
     kind === "tasks" ? api.get<{ goals: Goal[] }>(`/companies/${companyId}/goals`) : Promise.resolve({ goals: [] }),
   ]);
-  return <QuietWorkList key={`${kind}:${view}:${filters.status}:${filters.taskId}:${filters.q}`} companyId={companyId} kind={kind} filters={{ ...filters, view }} locale={locale}
+  const runCosts = kind === "runs" && records.status === "fulfilled" ? await loadRunCosts(api, companyId, records.value.runs ?? []) : {};
+  return <QuietWorkList key={`${kind}:${view}:${filters.status}:${filters.taskId}:${filters.q}`} companyId={companyId} kind={kind} filters={{ ...filters, view }} locale={locale} runCosts={runCosts}
     tasks={records.status === "fulfilled" ? records.value.tasks ?? [] : []} runs={records.status === "fulfilled" ? records.value.runs ?? [] : []}
     agents={people.status === "fulfilled" ? people.value.agents : []} goals={goals.status === "fulfilled" ? goals.value.goals : []}
     overview={company.status === "fulfilled" ? company.value : null} recordsFailed={records.status === "rejected"}

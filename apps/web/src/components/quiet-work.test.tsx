@@ -53,7 +53,7 @@ describe("Quiet work surfaces", () => {
       overview: { ...overview, goals: [{ id: "goal", title: "Prepare the weekly brief" }] } as CompanyOverview,
       observedAt: Date.parse(at), back: "/app/c/company/runs",
     }));
-    expect(html).toContain("<h1>Draft a brief</h1>");
+    expect(html).toMatch(/<h1[^>]*>Draft a brief<\/h1>/);
     expect(html).toContain("Read notes only.");
     expect(html).toContain("Prepare the weekly brief");
     expect(html).toContain("Run details");
@@ -72,7 +72,7 @@ describe("Quiet work surfaces", () => {
   });
   it("preserves a short recorded constraint after a leading newline", () => {
     const html = renderToStaticMarkup(createElement(QuietRunDetail, { companyId: "company", initial: { ...detail, run: { ...detail.run, intent: "\nDo not send." } }, overview, observedAt: Date.parse(at), back: "/app/c/company/runs" }));
-    expect(html).toContain("<h1>Run details</h1>");
+    expect(html).toMatch(/<h1[^>]*>Run details<\/h1>/);
     expect(html).toContain("Do not send.");
   });
   it("keeps the timeline outside the existence of a result and exposes partial artifacts safely", () => {
