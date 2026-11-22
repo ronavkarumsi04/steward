@@ -20,7 +20,7 @@ export interface RequiredAgreement {
   href: string;
 }
 
-export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "register"; invite?: InviteContext; agreements?: RequiredAgreement[] }) {
+export function AuthForm({ mode, invite, waitlistToken, agreements = [] }: { mode: "login" | "register"; invite?: InviteContext; waitlistToken?: string; agreements?: RequiredAgreement[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +42,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
       const org = String(fd.get("orgName") ?? "").trim();
       if (org) body.orgName = org;
       if (invite) body.inviteToken = invite.token;
+      else if (waitlistToken) body.waitlistToken = waitlistToken;
       // Clickwrap: the exact versions the person saw are sent and stored as evidence.
       payload = { ...body, accepted: agreements.map((a) => ({ document: a.document, version: a.version })), marketingOptIn };
     }
@@ -67,7 +68,7 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
       <div className="access-title">
         <h1>{invite ? `Join ${invite.organizationName}` : mode === "login" ? "Sign in to Steward" : "Create your account"}</h1>
         <p className="mt-1 text-sm text-muted">
-          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Use your workspace email and password." : "Create a workspace for your company and its agents."}
+          {invite ? `You were invited as ${invite.role}. Create your account to accept.` : mode === "login" ? "Use your workspace email and password." : waitlistToken ? "Your beta spot is ready. Use the email address that received your waitlist invitation." : "Create a workspace for your company and its agents."}
         </p>
       </div>
       {mode === "register" && (
@@ -158,6 +159,12 @@ export function friendly(err: ApiError, emailKind = "Email delivery"): string {
       return "Check your email and verify your address before signing in, or request a new link below.";
     case "signup_closed":
       return "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.";
+    case "signup_capped":
+      return "The beta is full. Visit registration to join the waitlist.";
+    case "invalid_waitlist_token":
+      return "This waitlist invitation is invalid, expired, or already used. Ask for a new admission link.";
+    case "waitlist_email_mismatch":
+      return "Use the email address that received this waitlist invitation.";
     case "invalid_invitation":
       return "This invitation is invalid or has expired. Ask your admin for a new one.";
     case "invitation_email_mismatch":

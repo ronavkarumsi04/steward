@@ -86,6 +86,7 @@ export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
         )}
 
         <div className="flex items-center gap-2 text-sm">
+          {me.user?.isSuperadmin && <Link href="/app/admin/waitlist" className="btn btn-sm" aria-current={path.startsWith("/app/admin/waitlist") ? "page" : undefined}>Waitlist</Link>}
           <Link href="/app/inbox" className="btn btn-sm" aria-current={path.startsWith("/app/inbox") ? "page" : undefined}>
             <Icon.Approvals size={14} />
             <span className="hidden sm:inline">{t("top.inbox")}</span>

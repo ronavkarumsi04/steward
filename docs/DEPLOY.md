@@ -454,7 +454,9 @@ and caps, verifies the address, creates a personal organization, and consumes ad
 same transaction as account creation. Invalid, expired, or used tokens return `400 invalid_waitlist_token`;
 wrong email returns `400 waitlist_email_mismatch`. An invitation and waitlist token cannot be combined.
 Only hashes are stored. Admissions are audited as `waitlist.admitted` under the `instance` audit scope.
-This backend contract does not by itself add web handling for the query parameter.
+The web registration page recognizes this query parameter and asks the founder to enter the
+admitted email address. Closed/full registration pages offer a waitlist form instead of public
+signup. Superadmins can manage admissions at `/app/admin/waitlist` (the Waitlist navigation link).
 
 ### Provisioning a founder's own organization
 
@@ -504,6 +506,14 @@ node apps/api/dist/cli/waitlist.js admit --email founder@example.com
 Listing prints JSON without admission hashes. Admission prints the accept URL, sends no email,
 and requires no superadmin session because the operator already has direct database access.
 It cannot re-admit a registered entry or grant superadmin privileges.
+
+The opt-in browser regression runs against an already-running **closed-signup** stack, with an
+existing superadmin login. The normal boot harness runs open signup, so this spec is skipped there:
+
+```sh
+E2E_WAITLIST=1 E2E_OPERATOR_EMAIL=operator@example.com E2E_OPERATOR_PASSWORD="$OPERATOR_PASSWORD" \
+  pnpm --filter @steward/web exec playwright test e2e/waitlist.spec.ts
+```
 
 ---
 
