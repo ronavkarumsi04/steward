@@ -41,7 +41,9 @@ import { agents, emitEvent, mcpServers, mcpTools, scoped, type Db, type McpToolA
 import type { RiskLevel, TenantScope, ToolManifest } from "@steward/schema";
 import {
   MCP_TRANSPORTS,
+  EXPLICIT_NO_TOOLS,
   canonicalizeMcpAllowlistEntry,
+  explicitToolAllowlist,
   isPrivateAddress,
   listMcpTools,
   matchTool,
@@ -548,7 +550,8 @@ export class McpService {
     const existing = await this.required(scope, id);
     return this.db.transaction(async (tx) => {
       await tx.update(agents).set({ toolAllowlist: sql`(
-        SELECT coalesce(jsonb_agg(entry ORDER BY position), '[]'::jsonb)
+        SELECT coalesce(jsonb_agg(entry ORDER BY position),
+          CASE WHEN jsonb_array_length(${agents.toolAllowlist}) > 0 THEN jsonb_build_array(${EXPLICIT_NO_TOOLS}::text) ELSE '[]'::jsonb END)
         FROM jsonb_array_elements_text(${agents.toolAllowlist}) WITH ORDINALITY AS grants(entry, position)
         WHERE NOT (entry ~ '^mcp\\.[^.]+\\..+$' AND
           'mcp.' || regexp_replace(lower(split_part(entry, '.', 2)), '[^a-z0-9_]', '_', 'g') = ${mcpNamespace(existing.slug)})
@@ -778,7 +781,7 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
   const allowlist = [...new Set(input.allowlist.map((entry) => canonicalizeMcpAllowlistEntry(entry, serverTools)).filter((entry): entry is string => entry !== null))];
   const prefix = `${mcpNamespace(slug)}.`;
   const wildcard = mcpToolPattern(slug);
-  const unique = (patterns: string[]) => [...new Set(patterns)];
+  const unique = explicitToolAllowlist;
   const requested = toolNames?.map((name) => {
     const tool = serverTools.includes(name) ? name : mcpToolName(slug, name);
     if (!serverTools.includes(tool)) throw new McpError("invalid_tool", `Tool “${name}” is not a recorded tool of this server.`);
@@ -799,9 +802,9 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
     return unique([...allowlist, ...added]);
   }
 
-  if (toolNames === null) return allowlist.filter((pattern) => !pattern.startsWith(prefix));
+  if (toolNames === null) return unique(allowlist.filter((pattern) => !pattern.startsWith(prefix)));
 
   const revoked = new Set(requested!);
-  if (!allowlist.includes(wildcard)) return allowlist.filter((pattern) => !revoked.has(pattern));
+  if (!allowlist.includes(wildcard)) return unique(allowlist.filter((pattern) => !revoked.has(pattern)));
   return unique([...allowlist.filter((pattern) => pattern !== wildcard && !revoked.has(pattern)), ...serverTools.filter((tool) => !revoked.has(tool))]);
 }

@@ -106,7 +106,7 @@ describe("migration invariants", () => {
       for (let pass = 0; pass < 2; pass++) {
         await client.query(migration);
         const { rows } = await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id");
-        expect(rows).toEqual([{ id: "collision", tool_allowlist: [] }, { id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
+        expect(rows).toEqual([{ id: "collision", tool_allowlist: ["__steward_no_tools__"] }, { id: "empty", tool_allowlist: [] }, { id: "legacy", tool_allowlist: expected }]);
       }
     } finally {
       await client.query("ROLLBACK");
@@ -129,10 +129,10 @@ describe("migration invariants", () => {
       for (let pass = 0; pass < 2; pass++) {
         await client.query(migration);
         expect((await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows).toEqual([
-          { id: "ambiguous", tool_allowlist: [] },
+          { id: "ambiguous", tool_allowlist: ["__steward_no_tools__"] },
           { id: "collapsed", tool_allowlist: ["mcp.a_b.x"] },
           { id: "literal", tool_allowlist: ["mcp.a_b.mcp.a_b.x"] },
-          { id: "missing", tool_allowlist: [] },
+          { id: "missing", tool_allowlist: ["__steward_no_tools__"] },
         ]);
       }
     } finally {

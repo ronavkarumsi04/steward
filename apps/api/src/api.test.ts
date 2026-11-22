@@ -2320,6 +2320,7 @@ describe("workflows", () => {
 });
 
 describe("mcp marketplace", () => {
+  const EXPLICIT_NO_TOOLS = "__steward_no_tools__";
   /**
    * Install a server, see what it may do, decide who may call it.
    *
@@ -2501,7 +2502,7 @@ describe("mcp marketplace", () => {
     await core.pool.query("UPDATE mcp_tools SET tool_name=$1 WHERE server_id=$2 AND name='lookup_invoice'", [literal, installed.body.server.id]);
     expect((await update([legacy])).body.agent.toolAllowlist).toEqual([literal]);
     await core.pool.query("UPDATE mcp_tools SET tool_name=$1 WHERE server_id=$2 AND name='reschedule'", [collapsed, installed.body.server.id]);
-    expect((await update([legacy, "mcp.a-b.missing"])).body.agent.toolAllowlist).toEqual([]);
+    expect((await update([legacy, "mcp.a-b.missing"])).body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
     expect((await update(["mcp.a-b.mcp.a_b.mcp.a_b.x"])).body.agent.toolAllowlist).toEqual([literal]);
     const alias = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
     await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [alias.body.server.id]);
@@ -2535,6 +2536,37 @@ describe("mcp marketplace", () => {
     } finally {
       warn.mockRestore();
     }
+  }, 60_000);
+
+  d("keeps the last MCP revoke or uninstall explicitly tool-less, including after reinstall", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const path = `/companies/${me.companyId}/mcp/${installed.body.server.id}`;
+    await me.api.json("POST", `${path}/inspect`, {});
+    const target = "mcp.a_b.lookup_invoice";
+    const agent = await me.api.json<{ agent: { id: string } }>("POST", `/companies/${me.companyId}/agents`, { kind: "research", name: "Only MCP", toolAllowlist: [target] });
+    const agentPath = `/companies/${me.companyId}/agents/${agent.body.agent.id}`;
+    for (const toolNames of [null, [target]]) {
+      await me.api.call("PATCH", agentPath, { toolAllowlist: [target] });
+      const revoked = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `${path}/grant`, { agentId: agent.body.agent.id, toolNames, granted: false });
+      expect(revoked.body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
+      expect(buildToolRegistry().list({ allow: revoked.body.agent.toolAllowlist })).toEqual([]);
+    }
+    await me.api.call("PATCH", agentPath, { toolAllowlist: ["mcp.a_b.*"] });
+    expect((await me.api.call("DELETE", path)).status).toBe(200);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
+    const after = (await services.agents.get(scope, agent.body.agent.id))!;
+    expect(after.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
+    const replacement = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a_b" }));
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${replacement.body.server.id}/inspect`, {});
+    const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
+    expect(registry.get(target)).toBeDefined();
+    expect(registry.list({ allow: after.toolAllowlist })).toEqual([]);
+    const view = (await me.read()).body.servers[0]!;
+    expect(view.tools.every((tool) => !tool.grantedTo.some((grant) => grant.agentId === after.id))).toBe(true);
+    const regrant = await me.api.json<{ agent: { toolAllowlist: string[] }; notices: string[] }>("POST", `/companies/${me.companyId}/mcp/${replacement.body.server.id}/grant`, { agentId: after.id, toolNames: [target], granted: true });
+    expect(regrant.body.agent.toolAllowlist).toEqual([target]);
+    expect(regrant.body.notices).toEqual([]);
   }, 60_000);
 
   d("edits legacy colliding installs without allowing slug changes", async () => {

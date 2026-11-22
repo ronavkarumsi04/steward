@@ -23,8 +23,9 @@ WITH entries AS (
 ), deduped AS (
   SELECT id, entry, min(position) AS position FROM resolved WHERE entry IS NOT NULL GROUP BY id, entry
 ), rewritten AS (
-  SELECT a.id, coalesce(jsonb_agg(d.entry ORDER BY d.position) FILTER (WHERE d.entry IS NOT NULL), '[]'::jsonb) AS allowlist
-  FROM agents a LEFT JOIN deduped d ON d.id = a.id GROUP BY a.id
+  SELECT a.id, coalesce(jsonb_agg(d.entry ORDER BY d.position) FILTER (WHERE d.entry IS NOT NULL),
+    CASE WHEN jsonb_array_length(a.tool_allowlist) > 0 THEN '["__steward_no_tools__"]'::jsonb ELSE '[]'::jsonb END) AS allowlist
+  FROM agents a LEFT JOIN deduped d ON d.id = a.id GROUP BY a.id, a.tool_allowlist
 )
 UPDATE agents a SET tool_allowlist = r.allowlist
 FROM rewritten r WHERE a.id = r.id AND a.tool_allowlist IS DISTINCT FROM r.allowlist;

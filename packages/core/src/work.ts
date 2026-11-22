@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
-import { canonicalizeMcpAllowlistEntry, mcpNamespace } from "@steward/tools";
+import { canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -141,10 +141,10 @@ export class AgentService {
     const servers = await this.db.select({ id: mcpServers.id, slug: mcpServers.slug }).from(mcpServers).where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }));
     const tools = await this.db.select({ serverId: mcpTools.serverId, toolName: mcpTools.toolName }).from(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }));
     const ambiguous = servers.map((server) => mcpNamespace(server.slug)).filter((namespace, index, all) => all.indexOf(namespace) !== index);
-    return [...new Set(entries.map((entry) => {
+    return explicitToolAllowlist(entries.map((entry) => {
       const server = servers.find((row) => row.slug === entry.split(".")[1]?.toLowerCase());
       return canonicalizeMcpAllowlistEntry(entry, tools.filter((tool) => tool.serverId === server?.id).map((tool) => tool.toolName), ambiguous);
-    }).filter((entry): entry is string => entry !== null))];
+    }).filter((entry): entry is string => entry !== null));
   }
 
   listSchedules(scope: TenantScope) {

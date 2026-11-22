@@ -61,8 +61,17 @@ export class ToolRegistry {
   }
 }
 
+export const EXPLICIT_NO_TOOLS = "__steward_no_tools__";
+
+/** A nonempty allowlist prevents the runtime's empty-list role-default fallback. */
+export function explicitToolAllowlist(patterns: readonly string[]): string[] {
+  const grants = [...new Set(patterns.filter((pattern) => pattern !== EXPLICIT_NO_TOOLS))];
+  return grants.length ? grants : [EXPLICIT_NO_TOOLS];
+}
+
 /** Glob-ish matching: `web.*` matches `web.search`; exact names otherwise. */
 export function matchTool(pattern: string, name: string): boolean {
+  if (pattern === EXPLICIT_NO_TOOLS) return false;
   if (pattern === "*" || pattern === name) return true;
   if (pattern.endsWith(".*")) return name.startsWith(pattern.slice(0, -1));
   return false;

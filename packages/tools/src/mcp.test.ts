@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "./registry.js";
+import { EXPLICIT_NO_TOOLS, explicitToolAllowlist, matchTool, type ToolContext } from "./registry.js";
 import {
   callMcpTool,
   describeMcpFailure,
@@ -47,6 +47,11 @@ const install = (over: Partial<McpInstall> = {}): McpInstall => ({
 const spec = (over: Partial<McpToolSpec> = {}): McpToolSpec => ({ name: "do_thing", description: "", inputSchema: { type: "object", properties: {} }, annotations: {}, ...over });
 
 describe("mcp names", () => {
+  it("never matches the explicit no-tools marker, even as an exact name", () => {
+    for (const name of ["web.search", "mcp.a_b.x", EXPLICIT_NO_TOOLS, ""]) expect(matchTool(EXPLICIT_NO_TOOLS, name)).toBe(false);
+    expect(explicitToolAllowlist([])).toEqual([EXPLICIT_NO_TOOLS]);
+    expect(explicitToolAllowlist([EXPLICIT_NO_TOOLS, "web.*"])).toEqual(["web.*"]);
+  });
   it("uses one namespace for hyphenated names and grants and repairs legacy entries", () => {
     expect(mcpToolPattern("local-protocol-check")).toBe("mcp.local_protocol_check.*");
     for (const [before, after] of [

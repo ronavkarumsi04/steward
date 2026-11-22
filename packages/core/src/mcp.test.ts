@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { createDb, mcpTools, type Db } from "@steward/db";
 import type { TenantScope } from "@steward/schema";
+import { EXPLICIT_NO_TOOLS } from "@steward/tools";
 import { AuthService } from "./auth.js";
 import { CompanyService } from "./companies.js";
 import { McpError, McpService, applyGrant, describeInstall, grantedBy, privateTargetProblem, validateMcpInstall, type McpInstallContext, type McpInstallInput } from "./mcp.js";
@@ -151,7 +152,7 @@ describe("grants", () => {
       expect(applyGrant({ ...input, allowlist: [], toolNames: [name] })).toEqual([serverTools[1]]);
       const narrowed = applyGrant({ ...input, allowlist: ["mcp.local-protocol-check.*", serverTools[1]!], toolNames: [name], granted: false });
       expect(narrowed).toEqual([serverTools[0]]);
-      expect(applyGrant({ ...input, allowlist: [...narrowed, "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer"], toolNames: null, granted: false })).toEqual([]);
+      expect(applyGrant({ ...input, allowlist: [...narrowed, "mcp.local-protocol-check.mcp.local_protocol_check.delete_customer"], toolNames: null, granted: false })).toEqual([EXPLICIT_NO_TOOLS]);
     }
     for (const granted of [true, false]) expect(() => applyGrant({ ...input, allowlist: [], toolNames: ["missing"], granted })).toThrow(McpError);
     expect(() => applyGrant({ ...input, allowlist: ["*"], toolNames: [serverTools[1]!], granted: false })).toThrow("broader grant");
@@ -163,7 +164,7 @@ describe("grants", () => {
     const input = { slug: "a-b", toolNames: [] as string[], granted: true, allowlist: ["mcp.a-b.mcp.a_b.x"] };
     expect(applyGrant({ ...input, serverTools: ["mcp.a_b.x"] })).toEqual(["mcp.a_b.x"]);
     expect(applyGrant({ ...input, serverTools: ["mcp.a_b.mcp.a_b.x"] })).toEqual(["mcp.a_b.mcp.a_b.x"]);
-    expect(applyGrant({ ...input, serverTools: ["mcp.a_b.x", "mcp.a_b.mcp.a_b.x"] })).toEqual([]);
+    expect(applyGrant({ ...input, serverTools: ["mcp.a_b.x", "mcp.a_b.mcp.a_b.x"] })).toEqual([EXPLICIT_NO_TOOLS]);
   });
 
   it("grants a whole server in one pattern and finds it with the runtime's own matcher", () => {
@@ -200,6 +201,18 @@ describe("grants", () => {
     expect(grantedBy(narrowed, "mcp.ledger.lookup_invoice")).toBe("mcp.ledger.lookup_invoice");
     // Revoking a tool that was never granted changes nothing at all.
     expect(applyGrant({ allowlist: ["web.*"], slug: "ledger", toolNames: ["mcp.ledger.reschedule"], serverTools: tools, granted: false })).toEqual(["web.*"]);
+  });
+  it("keeps an explicit no-tools allowlist after revoking the last grant", () => {
+    const tool = "mcp.ledger.lookup_invoice";
+    for (const allowlist of [[tool], ["mcp.ledger.*"]]) {
+      for (const toolNames of [null, [tool]]) {
+        const result = applyGrant({ allowlist, slug: "ledger", toolNames, serverTools: [tool], granted: false });
+        expect(result).toEqual([EXPLICIT_NO_TOOLS]);
+        expect(grantedBy(result, tool)).toBeNull();
+        expect(grantedBy(result, "web.search")).toBeNull();
+        expect(applyGrant({ allowlist: result, slug: "ledger", toolNames: [tool], serverTools: [tool], granted: true })).toEqual([tool]);
+      }
+    }
   });
 });
 
