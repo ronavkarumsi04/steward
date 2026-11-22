@@ -39,6 +39,9 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   const lock = useRef(false);
 
   const canTrigger = scheduleAccess(overview?.role).trigger;
+  useEffect(() => {
+    if (quiet && scheduleFeedback?.error) document.getElementById("schedule-error")?.focus();
+  }, [quiet, scheduleFeedback]);
   async function change(action: () => Promise<unknown>, allowed = isAdmin) {
     if (quiet && (lock.current || !allowed)) return;
     lock.current = true; setBusy(true); setError(null); setScheduleFeedback(null);
@@ -182,7 +185,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
           <button className="btn btn-primary">{t("agents.add")}</button>
           <input name="instruction" className="input md:col-span-5" placeholder={t("agents.instructionPlaceholder")} aria-label={t("agents.instruction")} />
         </form></fieldset>
-        {quiet && scheduleFeedback?.id === null && <p role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
+        {quiet && scheduleFeedback?.id === null && <p id="schedule-error" tabIndex={-1} role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (
           <ul className="divide-y divide-line text-sm">
             {schedules.map((s) => (
@@ -196,7 +199,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
                   <button className="btn" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
                   <button className="btn btn-danger" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
                 </div>
-                {quiet && scheduleFeedback?.id === s.id && <p role={scheduleFeedback.error ? "alert" : "status"} className={`w-full text-sm ${scheduleFeedback.error ? "text-danger" : "text-muted"}`}>{scheduleFeedback.message}{!scheduleFeedback.error && <> <Link className="q-link" href={`/app/c/${companyId}/runs?view=all`}>{c.followRun}</Link></>}</p>}
+                {quiet && scheduleFeedback?.id === s.id && <p id={scheduleFeedback.error ? "schedule-error" : undefined} tabIndex={-1} role={scheduleFeedback.error ? "alert" : "status"} className={`w-full text-sm ${scheduleFeedback.error ? "text-danger" : "text-muted"}`}>{scheduleFeedback.message}{!scheduleFeedback.error && <> <Link className="q-link" href={`/app/c/${companyId}/runs?view=all`}>{c.followRun}</Link></>}</p>}
               </li>
             ))}
           </ul>
