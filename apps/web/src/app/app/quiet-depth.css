@@ -59,6 +59,7 @@
 .q-schedule-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 14px; }
 .q-schedule-wide { grid-column: 1 / -1; }
 .q-schedule-submit { justify-self: start; }
+.q-schedule-actions { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .q-depth .q-graph-summary { font-size: 14px; line-height: 1.5; }
 .q-depth-loading > div { min-height: 100px; margin-top: 24px; border-radius: 10px; background: var(--bg-tint); border: 1px solid var(--line); }
 @media (max-width: 767px) {

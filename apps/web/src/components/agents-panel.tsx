@@ -199,7 +199,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
                   <span className="font-medium">{s.name}</span> <span className="mono text-xs text-muted">{s.cron} {s.timezone}</span>
                   <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · {quiet && !s.temporalScheduleId ? <span className="pill text-warn">{c.registrationUnconfirmed}</span> : <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} />}</div>
                 </div>
-                <div className="flex gap-1">
+                <div className={quiet ? "q-schedule-actions" : "flex gap-1"}>
                   <button className="btn" disabled={quiet && (!canTrigger || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "trigger"), canTrigger) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
                   <button className="btn" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
                   <button className="btn btn-danger" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
