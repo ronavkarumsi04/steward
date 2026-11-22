@@ -97,8 +97,9 @@ export function QuietRunDetail({ companyId, initial, task: initialTask = null, o
   const budget = recordedUsd(agent?.budgetUsdPerRun, locale) ?? c.unavailable;
   const latest = lastRecordedAt(detail);
   const current = [...detail.steps].reverse().find((step) => !step.finishedAt);
-  const title = run.intent.split(/\r?\n/)[0] || c.runDetails;
-  const instructions = run.intent.slice(title.length).trim();
+  const [firstLine = "", ...contextLines] = run.intent.split(/\r?\n/);
+  const title = firstLine.trim() || c.runDetails;
+  const instructions = contextLines.join("\n").trim();
   const goal = task?.goalId ? overview?.goals?.find((item) => item.id === task.goalId)?.title ?? c.unavailable : task ? c.noGoal : c.unavailable;
   const cancellation = run.status === "cancelled" ? c.cancelConfirmed : cancelState !== "idle" && !active ? `${statusLabel(locale, run.status)}. ${c.partial}` : cancelState === "requested" ? c.cancelRequested : cancelState === "uncertain" ? c.cancelUnknown : null;
   const time = (value: string | null) => value ? <time dateTime={value}>{date(value)}</time> : c.unavailable;

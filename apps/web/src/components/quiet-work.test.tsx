@@ -70,6 +70,11 @@ describe("Quiet work surfaces", () => {
     expect(html).toContain("No automatic retry");
     expect(html).not.toContain('data-persistent="true"');
   });
+  it("preserves a short recorded constraint after a leading newline", () => {
+    const html = renderToStaticMarkup(createElement(QuietRunDetail, { companyId: "company", initial: { ...detail, run: { ...detail.run, intent: "\nDo not send." } }, overview, observedAt: Date.parse(at), back: "/app/c/company/runs" }));
+    expect(html).toContain("<h1>Run details</h1>");
+    expect(html).toContain("Do not send.");
+  });
   it("keeps the timeline outside the existence of a result and exposes partial artifacts safely", () => {
     const html = renderToStaticMarkup(createElement(QuietRunRecord, { detail: { ...detail, artifacts: [{ id: "artifact", runId: "run", taskId: null, projectId: null, kind: "draft", title: "Partial source notes", url: "javascript:alert(1)", content: '{"summary":"Usable partial notes","apiKey":"must-not-render","reasoning":"private-reasoning"}', mimeType: "application/json", metadata: {}, createdAt: at }] }, companyId: "company", locale: "en", observedAt: Date.parse(at), timeZone: "UTC" }));
     expect(html).toContain("Run timeline");
