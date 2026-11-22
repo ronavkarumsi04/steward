@@ -152,7 +152,8 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
         <div className="quiet-context-name">{company.name} <span aria-hidden="true">/</span> {t(PRIMARY.find((p) => p[0] === group)?.[2] ?? "nav.settings")}</div>
         <CompanyCommandPalette key={company.id} companyId={company.id} quiet destinations={workspaceDestinations(me, company.organizationId)} />
       </div>
-      {group === "work" ? <QuietWorkNavigation base={base} current={current} /> : subroutes.length > 1 && <div className="quiet-subnav">
+      {/* Knowledge owns one collection nav, including Connections, inside its pages. */}
+      {group === "work" ? <QuietWorkNavigation base={base} current={current} /> : group !== "knowledge" && subroutes.length > 1 && <div className="quiet-subnav">
         {([undefined, "automation", "business"] as const).map((section) => {
           const routes = subroutes.filter((route) => route.section === section);
           if (!routes.length) return null;

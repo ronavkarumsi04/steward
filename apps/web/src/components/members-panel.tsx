@@ -1,17 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { Card, Empty, Ago } from "./ui";
+import { useLocale } from "./locale-provider";
+import { depthCopy } from "@/lib/depth-copy";
+import { Icon } from "./icons";
 
 export interface Member { userId: string; role: string; email: string; name: string; joinedAt: string }
 export interface Invitation { id: string; email: string; role: string; expiresAt: string; createdAt: string }
 
 const ROLES = ["owner", "admin", "member", "viewer"];
 
-export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgId: string; members: Member[]; invitations: Invitation[]; me: string; myRole: string | undefined }) {
+export function MembersPanel({ orgId, members, invitations, me, myRole, quiet = false }: { orgId: string; members: Member[]; invitations: Invitation[]; me: string; myRole: string | undefined; quiet?: boolean }) {
   const router = useRouter();
+  const locale = useLocale();
+  const c = depthCopy(locale);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<{ acceptUrl: string; emailed: boolean; email: string } | null>(null);
   const isAdmin = myRole === "owner" || myRole === "admin";
@@ -20,6 +27,8 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
 
   async function invite(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (quiet && (lock.current || !isAdmin)) return;
+    lock.current = true; setBusy(true);
     const form = e.currentTarget;
     const fd = new FormData(form);
     setError(null);
@@ -31,42 +40,45 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Invite failed");
-    }
+    } finally { lock.current = false; setBusy(false); }
   }
   async function act(fn: () => Promise<unknown>) {
+    if (quiet && lock.current) return;
+    lock.current = true; setBusy(true);
     setError(null);
     try {
       await fn();
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Request failed");
-    }
+    } finally { lock.current = false; setBusy(false); }
   }
 
   return (
-    <div className="space-y-5">
+    <div className={quiet ? "q-depth-panel q-members-panel space-y-5" : "space-y-5"}>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Card title="Members" className="nb-left-blue">
-        <ul className="divide-y divide-line text-sm">
+      <Card title={quiet ? c.members : "Members"} className={quiet ? undefined : "nb-left-blue"}>
+        <ul className={quiet ? "q-member-list divide-y divide-line text-sm" : "divide-y divide-line text-sm"}>
           {members.map((m) => (
             <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <div><span className="font-medium">{m.name || m.email}</span> <span className="text-muted">{m.email}</span>{m.userId === me && <span className="pill ml-2 text-muted">you</span>}<div className="text-xs text-muted">joined <Ago iso={m.joinedAt} /></div></div>
+              <div className={quiet ? "q-member-identity" : undefined}>{quiet && <span className="q-agent-avatar"><Icon.Members size={20} /></span>}<div><div className={quiet ? "q-member-name" : "contents"}><span className="font-medium">{m.name || m.email}</span>{quiet && m.userId === me && <span className="pill text-muted">you</span>}</div> <span className={quiet ? "q-member-email text-muted" : "text-muted"}>{m.email}</span>{!quiet && m.userId === me && <span className="pill ml-2 text-muted">you</span>}<div className="text-xs text-muted">joined <Ago iso={m.joinedAt} locale={locale} /></div></div></div>
               <div className="flex items-center gap-1">
-                <select className="input w-auto py-0.5 text-xs" value={m.role} disabled={!isOwner || m.userId === me} aria-label="Role" onChange={(e) => act(() => browserApi.patch(`${base}/members/${m.userId}`, { role: e.target.value }))}>
+                <select className="input w-auto py-0.5 text-xs" value={m.role} disabled={!isOwner || m.userId === me || (quiet && busy)} aria-label={quiet ? `Role: ${m.email}` : "Role"} onChange={(e) => { const role = e.target.value; void act(() => browserApi.patch(`${base}/members/${m.userId}`, { role })); }}>
                   {ROLES.map((r) => <option key={r}>{r}</option>)}
                 </select>
-                {(isOwner || m.userId === me) && <button className="btn btn-danger px-2 py-0.5 text-xs" onClick={() => confirm(m.userId === me ? "Leave this organization?" : `Remove ${m.email}?`) && act(() => browserApi.del(`${base}/members/${m.userId}`))}>{m.userId === me ? "Leave" : "Remove"}</button>}
+                {(isOwner || m.userId === me) && <button disabled={quiet && busy} className="btn btn-danger px-2 py-0.5 text-xs" onClick={() => confirm(m.userId === me ? "Leave this organization?" : `Remove ${m.email}?`) && act(() => browserApi.del(`${base}/members/${m.userId}`))}>{m.userId === me ? "Leave" : "Remove"}</button>}
               </div>
             </li>
           ))}
         </ul>
       </Card>
 
-      <Card title="Invitations" className="nb-left-purple">
+      <Card title={quiet ? c.invitations : "Invitations"} className={quiet ? undefined : "nb-left-purple"}>
+        {quiet && <p className="q-caption q-members-help">{c.inviteHint}</p>}
         <form onSubmit={invite} className="mb-3 grid gap-2 md:grid-cols-[2fr_1fr_auto]">
-          <input name="email" type="email" className="input" placeholder="colleague@example.com" required disabled={!isAdmin} />
-          <select name="role" aria-label="Invitation role" className="input" defaultValue="member" disabled={!isAdmin}>{ROLES.filter((r) => r !== "owner").map((r) => <option key={r}>{r}</option>)}</select>
-          <button className="btn btn-primary" disabled={!isAdmin}>Invite</button>
+          <input name="email" type="email" className="input" aria-label={quiet ? "Invitation email" : undefined} placeholder="colleague@example.com" required disabled={!isAdmin || (quiet && busy)} />
+          <select name="role" aria-label="Invitation role" className="input" defaultValue="member" disabled={!isAdmin || (quiet && busy)}>{ROLES.filter((r) => r !== "owner").map((r) => <option key={r}>{r}</option>)}</select>
+          <button className="btn btn-primary" disabled={!isAdmin || (quiet && busy)}>Invite</button>
         </form>
         {invited && (
           <p role="status" className="nb-panel-flat nb-left-green mb-3 p-2 text-xs">
@@ -79,7 +91,7 @@ export function MembersPanel({ orgId, members, invitations, me, myRole }: { orgI
             {invitations.map((i) => (
               <li key={i.id} className="flex items-center justify-between gap-2 py-2">
                 <div>{i.email} <span className="pill text-muted">{i.role}</span><div className="text-xs text-muted">expires <Ago iso={i.expiresAt} /></div></div>
-                <button className="btn px-2 py-0.5 text-xs" disabled={!isAdmin} onClick={() => act(() => browserApi.del(`${base}/invitations/${i.id}`))}>Revoke</button>
+                <button className="btn px-2 py-0.5 text-xs" disabled={!isAdmin || (quiet && busy)} onClick={() => act(() => browserApi.del(`${base}/invitations/${i.id}`))}>Revoke</button>
               </li>
             ))}
           </ul>
