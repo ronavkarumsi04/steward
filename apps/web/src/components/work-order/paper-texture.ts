@@ -5,32 +5,34 @@ const INK = "#202d79";
 const STOCK = { work: "#fbfaf5", approval: "#f3e48f", record: "#f2c4cc" };
 
 /** Owned, local artwork. No images, remote fonts, exports or model-service calls. */
-export function paperTexture(kind: PaperKind, fonts: { editorial: string; mono: string }) {
+export function paperTexture(kind: PaperKind, fonts: { editorial: string; mono: string }, palette?: { stock: string; ink: string }) {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
   canvas.height = 1440;
   const c = canvas.getContext("2d");
   if (!c) throw new Error("Paper texture requires a 2D canvas");
-  c.fillStyle = STOCK[kind];
+  c.fillStyle = palette?.stock ?? STOCK[kind];
   c.fillRect(0, 0, 1024, 1440);
 
   // Deterministic stock flecks: the paper never flickers on resize or reverse scroll.
   let seed = 27;
-  c.fillStyle = "rgba(43, 57, 144, .045)";
+  c.fillStyle = palette?.ink ?? "rgba(43, 57, 144, .045)";
+  c.globalAlpha = palette ? .045 : 1;
   for (let i = 0; i < 4200; i++) {
     seed = (seed * 16807) % 2147483647;
     const x = seed % 1024;
     seed = (seed * 16807) % 2147483647;
     c.fillRect(x, seed % 1440, 1, 2);
   }
+  c.globalAlpha = 1;
   const text = (value: string, x: number, y: number, size: number, family = fonts.mono) => {
-    c.fillStyle = INK;
+    c.fillStyle = palette?.ink ?? INK;
     c.font = `500 ${size}px ${family}`;
     c.fillText(value, x, y);
   };
   const rule = (y: number, dashed = false) => {
     c.beginPath();
-    c.strokeStyle = INK;
+    c.strokeStyle = palette?.ink ?? INK;
     c.lineWidth = 2;
     c.setLineDash(dashed ? [7, 8] : []);
     c.moveTo(66, y);

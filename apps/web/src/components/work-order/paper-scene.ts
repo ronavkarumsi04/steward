@@ -66,12 +66,14 @@ export function createPaperScene(canvas: HTMLCanvasElement): PaperScene {
     scene.add(backdrop);
 
     const style = getComputedStyle(canvas);
+    const quiet = document.documentElement.dataset.publicDesign === "quiet";
+    const token = (name: string) => style.getPropertyValue(name).trim();
     const fonts = {
       editorial: style.getPropertyValue("--font-editorial").trim() || "Georgia, serif",
       mono: style.getPropertyValue("--font-mono").trim() || "monospace",
     };
-    const blue = own(new MeshStandardMaterial({ color: 0x2b3990, roughness: .8 }));
-    const hole = own(new MeshBasicMaterial({ color: 0xebe7dc }));
+    const blue = own(new MeshStandardMaterial({ color: quiet ? token("--accent") : 0x2b3990, roughness: .8 }));
+    const hole = own(new MeshBasicMaterial({ color: quiet ? token("--bg") : 0xebe7dc }));
     const barGeometry = own(new BoxGeometry(2.06, .13, .028));
     const holeGeometry = own(new CircleGeometry(.018, 12));
     const kinds: PaperKind[] = ["work", "approval", "record"];
@@ -80,8 +82,8 @@ export function createPaperScene(canvas: HTMLCanvasElement): PaperScene {
       assembly.add(group);
       const geometry = own(new BoxGeometry(2.06, 2.9, .016, 12, 18, 1));
       const original = Float32Array.from(geometry.attributes.position!.array);
-      const stockColor = kind === "work" ? 0xfbfaf5 : kind === "approval" ? 0xf3e48f : 0xf2c4cc;
-      const texture = own(paperTexture(kind, fonts));
+      const stockColor = quiet ? token(kind === "work" ? "--panel" : kind === "approval" ? "--accent-soft" : "--panel-3") : kind === "work" ? 0xfbfaf5 : kind === "approval" ? 0xf3e48f : 0xf2c4cc;
+      const texture = own(paperTexture(kind, fonts, quiet ? { stock: String(stockColor), ink: token("--fg") } : undefined));
       const front = own(new MeshStandardMaterial({ map: texture, roughness: .96, metalness: 0 }));
       const stock = own(new MeshStandardMaterial({ color: stockColor, roughness: .96 }));
       const body = new Mesh(geometry, [stock, stock, stock, stock, front, stock]);

@@ -10,7 +10,8 @@ export default async function LegalLayout({ children }: { children: ReactNode })
   const business = docs.filter((d) => d.audience === "business-customers");
 
   return (
-    <div className="paper min-h-screen">
+    <div className="paper min-h-screen public-family public-legal">
+      <a className="quiet-skip" href="#legal-main">Skip to content</a>
       <header className="sticky top-0 z-[var(--z-nav)] border-b border-line bg-bg shadow-e1">
         <div className="mx-auto flex h-13 max-w-[1360px] items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2 font-black tracking-tight">
@@ -56,7 +57,7 @@ export default async function LegalLayout({ children }: { children: ReactNode })
           </p>
         </nav>
 
-        <main className="min-w-0">{children}</main>
+        <main id="legal-main" className="min-w-0">{children}</main>
       </div>
 
       <footer className="hairline mx-auto max-w-[1200px] border-x-0 border-b-0 px-4 py-8 text-xs text-muted sm:px-6">

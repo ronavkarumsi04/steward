@@ -11,6 +11,8 @@ import { Pad } from "@/components/work-order/pad";
 import { EntryForm } from "@/components/work-order/entry-form";
 import { LandingStory } from "@/components/work-order/landing-story";
 import { landingStoryEnabled } from "@/lib/landing-story";
+import { quietPublicEnabled } from "@/lib/public-design";
+import { QuietHome } from "@/components/quiet-home";
 import s from "@/components/work-order/work-order.module.css";
 
 export const metadata: Metadata = {
@@ -95,6 +97,8 @@ export default async function Landing({ searchParams }: { searchParams?: Promise
       ? "Hosted access is by invitation. Invited? Your link creates your account."
       : "We couldn't check hosted access right now. Sign in still works.";
   const story = landingStoryEnabled((await searchParams)?.experience, process.env);
+
+  if (quietPublicEnabled(process.env)) return <QuietHome entry={entry} label={entryLabel} note={entryNote} story={story} />;
 
   return (
     <Pad className={`paper ${s.home}`}>

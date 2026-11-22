@@ -53,8 +53,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           <p className="mt-1 text-sm text-muted">You&apos;ll join as <span className="font-medium text-fg">{invitation.role}</span>.</p>
         </div>
         <dl className="nb-panel-flat nb-left-blue mt-6 space-y-2 p-4 text-sm">
-          <div className="flex justify-between gap-4"><dt className="text-muted">Invited</dt><dd className="truncate font-medium">{invitation.email}</dd></div>
-          <div className="flex justify-between gap-4"><dt className="text-muted">Signed in as</dt><dd className="truncate font-medium">{me.user.email}</dd></div>
+          <div className="flex flex-wrap justify-between gap-4"><dt className="text-muted">Invited</dt><dd className="min-w-0 break-all font-medium">{invitation.email}</dd></div>
+          <div className="flex flex-wrap justify-between gap-4"><dt className="text-muted">Signed in as</dt><dd className="min-w-0 break-all font-medium">{me.user.email}</dd></div>
         </dl>
         {mismatch ? (
           <p role="alert" className="nb-panel-flat nb-left-red mt-4 px-3 py-2 text-sm text-danger">
