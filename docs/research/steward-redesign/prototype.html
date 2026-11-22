@@ -118,6 +118,7 @@ main:focus{outline:none}.mobile-study-note{display:none;font-size:12px;opacity:.
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
 
 /* Readability and control outlines are contracts, not breakpoint tradeoffs. */
+.rail{overflow-y:auto;overscroll-behavior:contain}
 .prose,.hero p,.story p,.guide p,.guide li,.pilot-copy>p,.waitlist-story>p,.waitlist-card p{font-size:14px}
 .btn,.company,.artifact{border-color:var(--control-border)}
 .btn.primary{border-color:var(--brand)}
@@ -127,6 +128,8 @@ main:focus{outline:none}.mobile-study-note{display:none;font-size:12px;opacity:.
 @media(max-width:700px){
   .study nav{flex-wrap:wrap;justify-content:flex-start}
   .study nav button{padding-inline:8px}
+  .public-nav{flex-wrap:wrap;gap:12px}
+  .public-links{max-width:100%;flex-wrap:wrap;gap:8px}
   .topbar{height:auto;min-height:56px;padding-block:10px;flex-wrap:wrap;gap:10px}
   .crumb{min-width:0;flex-wrap:wrap;overflow-wrap:anywhere}
   .topbar>span{flex-wrap:wrap}
