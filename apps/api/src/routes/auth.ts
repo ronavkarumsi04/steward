@@ -182,17 +182,20 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const deps = c.get("deps");
     const { organization, invitation, token } = await new OrganizationService(deps.core.db).provisionFounderOrganization({ ...body, operatorUserId: operator.id });
     const acceptUrl = `${deps.core.config.appUrl.replace(/\/$/, "")}/invite/${token}`;
-    let emailed = true;
+    let emailed = false;
     try {
-      await deps.mailer.send({
-        to: invitation.email,
-        subject: `Your founder organization: ${organization.name}`,
-        ...renderEmail({ title: `Own ${organization.name}`, intro: "An instance operator provisioned your organization. Accept within 7 days to become its owner.", actionLabel: "Accept ownership", actionUrl: acceptUrl, footer: "If you weren't expecting this invitation, you can ignore this email." }),
-      });
-    } catch (err) {
-      emailed = false;
-      deps.core.log.error({ err, invitationId: invitation.id }, "failed to send founder invitation email");
+      if (deps.mailer.provider !== "console") {
+        await deps.mailer.send({
+          to: invitation.email,
+          subject: `Your founder organization: ${organization.name}`,
+          ...renderEmail({ title: `Own ${organization.name}`, intro: "An instance operator provisioned your organization. Accept within 7 days to become its owner.", actionLabel: "Accept ownership", actionUrl: acceptUrl, footer: "If you weren't expecting this invitation, you can ignore this email." }),
+        });
+        emailed = true;
+      }
+    } catch {
+      deps.core.log.error({ invitationId: invitation.id }, "failed to send founder invitation email");
     }
+    c.header("cache-control", "no-store");
     return c.json({ organization, invitation, acceptUrl, emailed }, 201);
   });
 

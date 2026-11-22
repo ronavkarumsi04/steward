@@ -299,7 +299,8 @@ describe("founder organization provisioning", () => {
     expect((await client().json("POST", "/admin/organizations", body)).status).toBe(401);
     expect((await operator.api.json("POST", "/admin/organizations", body)).status).toBe(403);
     await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
-    const result = await operator.api.json<{ organization: { id: string }; invitation: { role: string }; acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", body);
+    const deliveryApp = createApp({ core, auth: new AuthService(core.db), mailer: { ...mailer, provider: "resend" }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+    const result = await client(operator.api.token, "", () => deliveryApp).json<{ organization: { id: string }; invitation: { role: string }; acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", body);
     expect(result.status).toBe(201);
     expect(result.body.invitation.role).toBe("owner");
     expect(result.body.emailed).toBe(true);
@@ -334,7 +335,8 @@ describe("founder organization provisioning", () => {
     const existing = await register();
     const service = new OrganizationService(core.db);
     const name = `CLI ${uniq()}`;
-    const acceptUrl = await provisionFounder(["--org", name, "--owner-email", existing.email.toUpperCase()], "https://app.test/", service);
+    const acceptUrl = await provisionFounder(["--org", name, "--owner-email", existing.email.toUpperCase()], "  https://app.test/ \n", service);
+    expect(acceptUrl).toMatch(/^https:\/\/app.test\/invite\/inv_/);
     const preview = await client().json<{ invitation: { email: string; role: string } }>("GET", `/invitations/${acceptUrl.split("/").pop()}`);
     expect(preview.body.invitation).toMatchObject({ email: existing.email, role: "owner" });
     const accepted = await existing.api.json<{ organizationId: string }>("POST", "/invitations/accept", { token: acceptUrl.split("/").pop() });
@@ -351,18 +353,46 @@ describe("founder organization provisioning", () => {
     expect((await core.pool.query("select id from organizations where name=$1", [invalidName])).rows).toEqual([]);
   });
 
+  d("CLI rejects non-origin APP_URL values before provisioning", async () => {
+    const service = new OrganizationService(core.db);
+    const provision = vi.spyOn(service, "provisionFounderOrganization");
+    const args = ["--org", `Invalid origin ${uniq()}`, "--owner-email", "founder@example.com"];
+    for (const appUrl of ["", "not-a-url", "ftp://app.test", "https://user:pass@app.test", "https://app.test/path", "https://app.test?query=yes", "https://app.test#fragment", "https://app.test?", "https://app.test#"]) {
+      await expect(provisionFounder(args, appUrl, service)).rejects.toThrow();
+    }
+    expect(provision).not.toHaveBeenCalled();
+    provision.mockRestore();
+  });
+
+  d("console provisioning skips mail and returns a non-cacheable handoff link", async () => {
+    const operator = await register();
+    await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
+    const send = vi.fn();
+    const consoleApp = createApp({ core, auth: new AuthService(core.db), mailer: { provider: "console", send }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+    const res = await client(operator.api.token, "", () => consoleApp).call("POST", "/admin/organizations", { name: `Console ${uniq()}`, ownerEmail: `console-${uniq()}@example.com` });
+    expect(res.status).toBe(201);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toMatchObject({ emailed: false, acceptUrl: expect.stringMatching(/^http:\/\/app.test\/invite\/inv_/) });
+    expect(send).not.toHaveBeenCalled();
+  });
+
   d("provisioning returns a handoff link when email delivery fails and validates input", async () => {
     const operator = await register();
     await core.pool.query("update users set is_superadmin=true where id=$1", [operator.userId]);
     expect((await operator.api.json("POST", "/admin/organizations", { name: "", ownerEmail: "invalid" })).status).toBe(422);
-    const send = vi.spyOn(mailer, "send").mockRejectedValueOnce(new Error("offline"));
+    const send = vi.spyOn(mailer, "send").mockImplementationOnce(async (message) => { throw new Error(message.text); });
+    const log = vi.spyOn(core.log, "error");
     try {
-      const result = await operator.api.json<{ acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", { name: `No mail ${uniq()}`, ownerEmail: `offline-${uniq()}@example.com` });
+      const deliveryApp = createApp({ core, auth: new AuthService(core.db), mailer: { ...mailer, provider: "resend" }, services, workflows: fakeTemporal(), env: ENV }, null).app;
+      const result = await client(operator.api.token, "", () => deliveryApp).json<{ acceptUrl: string; emailed: boolean }>("POST", "/admin/organizations", { name: `No mail ${uniq()}`, ownerEmail: `offline-${uniq()}@example.com` });
       expect(result.status).toBe(201);
       expect(result.body.emailed).toBe(false);
       expect(result.body.acceptUrl).toMatch(/^http:\/\/app.test\/invite\/inv_/);
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.stringify(log.mock.calls)).not.toContain(result.body.acceptUrl.split("/").pop());
     } finally {
       send.mockRestore();
+      log.mockRestore();
     }
   });
 });
