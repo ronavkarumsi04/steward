@@ -5,7 +5,7 @@ import { agreements, emailVerifications, memberships, oauthIdentities, organizat
 import type { Role } from "@steward/schema";
 
 export class AuthError extends Error {
-  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "owner_invite_requires_provisioning" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch" | "signup_closed", message?: string) {
+  constructor(public readonly code: "invalid_credentials" | "email_taken" | "not_found" | "expired" | "weak_password" | "forbidden" | "owner_invite_requires_provisioning" | "last_owner" | "invalid_invitation" | "invitation_email_mismatch" | "signup_closed" | "signup_capped" | "invalid_waitlist_token" | "waitlist_email_mismatch", message?: string) {
     super(message ?? code);
     this.name = "AuthError";
   }
@@ -40,6 +40,7 @@ export interface RegisterInput {
   ip?: string | null;
   userAgent?: string | null;
   emailVerified?: boolean;
+  signupSource?: "self_serve" | "invite" | "bootstrap" | "waitlist";
 }
 
 type Organization = typeof organizations.$inferSelect;
@@ -84,7 +85,7 @@ export class AuthService {
     return this.db.transaction(async (tx) => {
       const existing = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
       if (existing.length) throw new AuthError("email_taken", "An account with this email already exists");
-      const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim(), emailVerifiedAt: input.emailVerified ? new Date() : null }).returning();
+      const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim(), emailVerifiedAt: input.emailVerified ? new Date() : null, signupSource: input.signupSource ?? "legacy", createdAt: sql`statement_timestamp()` }).returning();
       // Legal acceptance is evidence: it is written with the account, in the same transaction, so an
       // account can never exist without a record of what the person agreed to.
       if (input.agreements?.length) {

@@ -62,6 +62,8 @@ export function getMeOptional(): Promise<Me> {
 export interface AuthConfig {
   signupOpen: boolean;
   inviteOnly: boolean;
+  signupState: "open" | "closed" | "capped";
+  waitlistEnabled: boolean;
 }
 
 /** Unknown policy must not be presented as permission to register. */

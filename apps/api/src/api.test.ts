@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AuthService, OrganizationService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -23,6 +23,287 @@ import { startStubProvider, type StubProvider } from "./test/stub-provider.js";
 import { startFakeGitHub } from "@steward/core/test/fake-github";
 import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
 import { provisionFounder } from "./cli/provision-founder.js";
+import { waitlist } from "./cli/waitlist.js";
+describe("capped signup and waitlist", () => {
+  const credentials = (email = `cap-${uniq()}@example.com`) => ({ email, name: "Founder", password: "correct-horse-battery", accepted: CLICKWRAP });
+  function instance(overrides: NodeJS.ProcessEnv = {}, delivery: Mailer = mailer) {
+    const env = { ...ENV, ALLOW_SIGNUP: "true", ...overrides };
+    const target = createApp({ core: { ...core, config: loadConfig(env) }, auth: new AuthService(core.db), mailer: delivery, services, workflows: null, env }, null).app;
+    return (token = "") => client(token, "", () => target);
+  }
+  async function counts() {
+    const result = await core.pool.query("select count(*)::int as total, count(*) filter (where created_at >= (date_trunc('day', now() at time zone 'UTC') at time zone 'UTC') and created_at < ((date_trunc('day', now() at time zone 'UTC') + interval '1 day') at time zone 'UTC'))::int as daily from users where signup_source='self_serve'");
+    return result.rows[0] as { total: number; daily: number };
+  }
+  async function operator() {
+    const owner = await register();
+    await core.pool.query("update users set is_superadmin=true where id=$1", [owner.userId]);
+    return owner;
+  }
+  async function entry(email: string) {
+    return (await core.pool.query("select * from waitlist_entries where email=$1", [email])).rows[0];
+  }
+  const admissionToken = (url: string) => new URL(url).searchParams.get("waitlist")!;
+
+  d("deletes waitlist personal data by account linkage and normalized email only", async () => {
+    const owner = await register();
+    await core.pool.query("update users set email_verified_at=now() where id=$1", [owner.userId]);
+    const linkedEmail = `previous-${uniq()}@example.com`;
+    const unrelatedEmail = `unrelated-${uniq()}@example.com`;
+    const signup = new SignupService(core.db);
+    await signup.join({ email: owner.email.toUpperCase(), note: "Pending application" }, "closed");
+    await signup.join({ email: linkedEmail, note: "Previous address" }, "closed");
+    await signup.join({ email: unrelatedEmail }, "closed");
+    await core.pool.query("update waitlist_entries set user_id=$1, registered_at=now() where email=$2", [owner.userId, linkedEmail]);
+    const privacy = new PrivacyService(core.db);
+    await privacy.deleteAccount(owner.userId);
+    expect(await entry(owner.email)).toBeUndefined();
+    expect(await entry(linkedEmail)).toBeUndefined();
+    expect(await entry(unrelatedEmail)).toMatchObject({ email: unrelatedEmail });
+    await expect(privacy.deleteAccount(owner.userId)).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  d("exports only the account's waitlist personal data without admission credentials", async () => {
+    const owner = await register();
+    await core.pool.query("update users set email_verified_at=now() where id=$1", [owner.userId]);
+    const signup = new SignupService(core.db);
+    const privacy = new PrivacyService(core.db);
+    expect((await privacy.exportUser(owner.userId)).data.waitlist_entries).toEqual([]);
+    const linkedEmail = `old-export-${uniq()}@example.com`;
+    const unrelatedEmail = `other-export-${uniq()}@example.com`;
+    await signup.join({ email: owner.email.toUpperCase(), name: "Founder", note: "Research studio" }, "closed");
+    await signup.join({ email: linkedEmail }, "capped");
+    await signup.join({ email: unrelatedEmail }, "closed");
+    const linked = await entry(linkedEmail);
+    const admitted = await signup.admit({ id: linked.id }, null);
+    await signup.claim(admitted.token, linkedEmail);
+    await signup.complete(linked.id, owner.userId);
+    const exported = await privacy.exportUser(owner.userId);
+    expect(exported.data.waitlist_entries).toHaveLength(2);
+    expect(exported.data.waitlist_entries).toEqual(expect.arrayContaining([
+      { email: owner.email, name: "Founder", note: "Research studio", reason: "closed", createdAt: expect.any(Date), admittedAt: null, registeredAt: null },
+      { email: linkedEmail, name: null, note: null, reason: "capped", createdAt: expect.any(Date), admittedAt: expect.any(Date), registeredAt: expect.any(Date) },
+    ]));
+    expect(exported.manifest.included.waitlist_entries).toBe(2);
+    expect(exported.manifest.counts.tables).toBe(Object.keys(exported.data).length);
+    expect(exported.manifest.counts.rows).toBe(Object.values(exported.data).reduce((sum, rows) => sum + rows.length, 0));
+    expect((await privacy.exportUser(`missing-${uniq()}`)).data.waitlist_entries).toEqual([]);
+  });
+
+  d("requires verified email ownership for unlinked waitlist exports and deletion", async () => {
+    const signup = new SignupService(core.db);
+    const privacy = new PrivacyService(core.db);
+    for (const verified of [false, true]) {
+      const email = `waitlist-ownership-${uniq()}@example.com`;
+      await signup.join({ email, note: "Private application" }, "closed");
+      const { user } = await new AuthService(core.db).register({ email, name: "Registrant", password: "correct-horse-battery", emailVerified: verified });
+      const linkedEmail = `linked-ownership-${uniq()}@example.com`;
+      await signup.join({ email: linkedEmail }, "closed");
+      await core.pool.query("update waitlist_entries set user_id=$1 where email=$2", [user.id, linkedEmail]);
+      const exported = (await privacy.exportUser(user.id)).data.waitlist_entries;
+      expect(exported.map((row) => row.email).sort()).toEqual((verified ? [email, linkedEmail] : [linkedEmail]).sort());
+      await privacy.deleteAccount(user.id);
+      expect(await entry(linkedEmail)).toBeUndefined();
+      if (verified) expect(await entry(email)).toBeUndefined();
+      else expect(await entry(email)).toMatchObject({ email, note: "Private application", user_id: null });
+    }
+  });
+
+  it("parses optional non-negative caps and rejects malformed startup configuration", () => {
+    expect(loadConfig(ENV)).toMatchObject({ signupTotalCap: undefined, signupDailyCap: undefined });
+    expect(loadConfig({ ...ENV, SIGNUP_TOTAL_CAP: " ", SIGNUP_DAILY_CAP: "0" })).toMatchObject({ signupTotalCap: undefined, signupDailyCap: 0 });
+    expect(loadConfig({ ...ENV, SIGNUP_TOTAL_CAP: " 12 " }).signupTotalCap).toBe(12);
+    expect(loadConfig({ ...ENV, NODE_ENV: "production" }).allowSignup).toBe(false);
+    for (const key of ["SIGNUP_TOTAL_CAP", "SIGNUP_DAILY_CAP"]) {
+      for (const value of ["-1", "1.5", "NaN", "Infinity", "1e2", "9007199254740992"]) {
+        expect(() => loadConfig({ ...ENV, [key]: value })).toThrow(key);
+      }
+    }
+  });
+
+  d("keeps closed as the master switch and allows uncapped public signup", async () => {
+    await register();
+    const closed = instance({ NODE_ENV: "production", ALLOW_SIGNUP: "", SIGNUP_TOTAL_CAP: "0" });
+    expect(await closed().json("GET", "/auth/config")).toMatchObject({ body: { signupState: "closed", signupOpen: false } });
+    expect(await closed().json("POST", "/auth/register", credentials())).toMatchObject({ status: 403, body: { error: { code: "signup_closed" } } });
+    const open = instance();
+    expect(await open().json("GET", "/auth/config")).toMatchObject({ body: { signupState: "open", waitlistEnabled: true } });
+    expect((await open().json("POST", "/auth/register", credentials())).status).toBe(201);
+  });
+
+  d("counts pending-verification self-serve accounts toward the total cap", async () => {
+    await register();
+    const before = await counts();
+    const api = instance({ SIGNUP_TOTAL_CAP: String(before.total + 1), REQUIRE_EMAIL_VERIFICATION: "true" });
+    const body = credentials();
+    expect(await api().json("POST", "/auth/register", body)).toMatchObject({ status: 202, body: { verificationRequired: true } });
+    expect((await core.pool.query("select signup_source, email_verified_at from users where email=$1", [body.email])).rows[0]).toEqual({ signup_source: "self_serve", email_verified_at: null });
+    expect(await api().json("POST", "/auth/register", credentials())).toMatchObject({ status: 403, body: { error: { code: "signup_capped" } } });
+    expect(await api().json("GET", "/auth/config")).toMatchObject({ body: { signupState: "capped", signupOpen: false } });
+  });
+
+  d("uses UTC calendar days rather than a rolling 24-hour quota", async () => {
+    const previous = await register();
+    await core.pool.query("update users set signup_source='self_serve', created_at=(date_trunc('day', now() at time zone 'UTC') at time zone 'UTC') - interval '1 millisecond' where id=$1", [previous.userId]);
+    const before = await counts();
+    const api = instance({ SIGNUP_DAILY_CAP: String(before.daily + 1) });
+    expect((await api().json("POST", "/auth/register", credentials())).status).toBe(201);
+    expect(await api().json("POST", "/auth/register", credentials())).toMatchObject({ status: 403, body: { error: { code: "signup_capped" } } });
+    expect((await counts()).daily).toBe(before.daily + 1);
+  });
+
+  d("serializes concurrent registrations at cap minus one", async () => {
+    await register();
+    const before = await counts();
+    const api = instance({ SIGNUP_TOTAL_CAP: String(before.total + 1) });
+    const responses = await Promise.all([api().json("POST", "/auth/register", credentials()), api().json("POST", "/auth/register", credentials())]);
+    expect(responses.map((r) => r.status).sort()).toEqual([201, 403]);
+    expect(responses.find((r) => r.status === 403)?.body).toMatchObject({ error: { code: "signup_capped" } });
+    expect((await counts()).total).toBe(before.total + 1);
+  });
+
+  d("exempts bootstrap, invitation and waitlist accounts without consuming capacity", async () => {
+    const owner = await operator();
+    const before = await counts();
+    const api = instance({ ALLOW_SIGNUP: "false", SIGNUP_TOTAL_CAP: "0", SIGNUP_DAILY_CAP: "0", REQUIRE_EMAIL_VERIFICATION: "true" });
+    const bootstrap = vi.spyOn(AuthService.prototype, "hasAnyUsers").mockResolvedValueOnce(false);
+    const bootstrapBody = credentials();
+    try {
+      expect(await api().json("POST", "/auth/register", bootstrapBody)).toMatchObject({ status: 201, body: { user: { emailVerified: true } } });
+    } finally { bootstrap.mockRestore(); }
+    const invited = credentials();
+    const invite = await owner.api.json<{ acceptUrl: string }>("POST", `/orgs/${owner.orgId}/invitations`, { email: invited.email, role: "member" });
+    expect((await api().json("POST", "/auth/register", { ...invited, inviteToken: invite.body.acceptUrl.split("/").pop() })).status).toBe(201);
+    const admitted = credentials();
+    await api().json("POST", "/waitlist", { email: admitted.email });
+    const admission = await api(owner.api.token).json<{ acceptUrl: string }>("POST", `/admin/waitlist/${(await entry(admitted.email)).id}/admit`);
+    expect(await api().json("POST", "/auth/register", { ...admitted, waitlistToken: admissionToken(admission.body.acceptUrl) })).toMatchObject({ status: 201, body: { user: { emailVerified: true } } });
+    const rows = await core.pool.query("select email, signup_source from users where email=any($1)", [[bootstrapBody.email, invited.email, admitted.email]]);
+    expect(Object.fromEntries(rows.rows.map((r) => [r.email, r.signup_source]))).toEqual({ [bootstrapBody.email]: "bootstrap", [invited.email]: "invite", [admitted.email]: "waitlist" });
+    expect(await counts()).toEqual(before);
+    expect(await api().json("POST", "/auth/register", credentials())).toMatchObject({ status: 403 });
+  });
+
+  d("joins uniformly and idempotently even when open; validates inputs and never emails", async () => {
+    const api = instance();
+    const email = `wait-${uniq()}@example.com`;
+    const mailCount = outbox.length;
+    const first = await api().json("POST", "/waitlist", { email: email.toUpperCase(), name: "Founder", note: "Please admit me" });
+    expect(first).toEqual({ status: 202, body: { ok: true } });
+    expect(await api().json("POST", "/waitlist", { email, name: "Changed" })).toEqual(first);
+    expect(await api().json("POST", "/waitlist", { email: `other-${uniq()}@example.com` })).toEqual(first);
+    expect((await core.pool.query("select * from waitlist_entries where email=$1", [email])).rows).toHaveLength(1);
+    expect((await entry(email)).name).toBe("Founder");
+    expect(outbox).toHaveLength(mailCount);
+    for (const body of [{}, { email: "bad" }, { email, name: "n".repeat(121) }, { email, note: "n".repeat(501) }]) {
+      expect((await api().json("POST", "/waitlist", body)).status).toBe(422);
+    }
+    const capped = instance({ SIGNUP_TOTAL_CAP: "0" });
+    const cappedEmail = `capped-${uniq()}@example.com`;
+    await capped().json("POST", "/waitlist", { email: cappedEmail });
+    expect((await entry(cappedEmail)).reason).toBe("capped");
+  });
+
+  d("gives waitlist its own five-per-five-minute IP bucket", async () => {
+    const api = instance({ RATE_LIMIT_DISABLED: "false", TRUST_PROXY: "true" });
+    const email = `limited-${uniq()}@example.com`;
+    const ip = { "x-forwarded-for": "192.0.2.71" };
+    for (let i = 0; i < 5; i++) expect((await api().json("POST", "/waitlist", { email }, ip)).status).toBe(202);
+    expect((await api().json("POST", "/waitlist", { email }, ip)).status).toBe(429);
+    expect((await api().json("POST", "/waitlist", { email }, { "x-forwarded-for": "192.0.2.72" })).status).toBe(202);
+    expect((await api().json("POST", "/auth/password/forgot", { email }, ip)).status).toBe(202);
+  });
+
+  d("restricts admin routes and lists pending/admitted/registered without token hashes", async () => {
+    const ordinary = await register();
+    const op = await operator();
+    const api = instance({ ALLOW_SIGNUP: "false" });
+    const email = `admin-wait-${uniq()}@example.com`;
+    await api().json("POST", "/waitlist", { email });
+    const id = (await entry(email)).id;
+    for (const [method, path] of [["GET", "/admin/waitlist"], ["POST", `/admin/waitlist/${id}/admit`]] as const) {
+      expect((await api().json(method, path)).status).toBe(401);
+      expect((await api(ordinary.api.token).json(method, path)).status).toBe(403);
+    }
+    const listed = await api(op.api.token).json<{ entries: Array<{ id: string; status: string }> }>("GET", "/admin/waitlist");
+    expect(listed.body.entries.find((e) => e.id === id)?.status).toBe("pending");
+    expect(JSON.stringify(listed.body)).not.toMatch(/tokenHash|token_hash/);
+    expect((await api(op.api.token).json("POST", "/admin/waitlist/missing/admit")).status).toBe(404);
+    const admission = await api(op.api.token).json<{ acceptUrl: string; emailed: boolean }>("POST", `/admin/waitlist/${id}/admit`);
+    expect(admission.body.emailed).toBe(false);
+    expect((await entry(email)).reason).toBe("closed");
+    expect((await entry(email)).admitted_by).toBe(op.userId);
+    expect(new Date((await entry(email)).admission_expires_at).getTime() - Date.now()).toBeGreaterThan(13 * 86400000);
+    const listedAdmitted = await api(op.api.token).json<{ entries: Array<{ id: string; status: string }> }>("GET", "/admin/waitlist");
+    expect(listedAdmitted.body.entries.find((e) => e.id === id)?.status).toBe("admitted");
+    await api().json("POST", "/auth/register", { ...credentials(email), waitlistToken: admissionToken(admission.body.acceptUrl) });
+    const listedRegistered = await api(op.api.token).json<{ entries: Array<{ id: string; status: string }> }>("GET", "/admin/waitlist");
+    expect(listedRegistered.body.entries.find((e) => e.id === id)?.status).toBe("registered");
+    expect((await api(op.api.token).json("POST", `/admin/waitlist/${id}/admit`)).status).toBe(404);
+    expect((await core.pool.query("select * from audit_log where action='waitlist.admitted' and target=$1", [id])).rows).toHaveLength(1);
+  });
+
+  d("validates email, expires and rotates admissions, and rejects replay atomically", async () => {
+    const op = await operator();
+    const api = instance({ SIGNUP_TOTAL_CAP: "0" });
+    const body = credentials();
+    await api().json("POST", "/waitlist", { email: body.email });
+    const id = (await entry(body.email)).id;
+    const admit = () => api(op.api.token).json<{ acceptUrl: string }>("POST", `/admin/waitlist/${id}/admit`);
+    const first = admissionToken((await admit()).body.acceptUrl);
+    expect((await entry(body.email)).token_hash).not.toBe(first);
+    expect(await api().json("POST", "/auth/register", { ...credentials(), waitlistToken: first })).toMatchObject({ status: 400, body: { error: { code: "waitlist_email_mismatch" } } });
+    expect((await entry(body.email)).registered_at).toBeNull();
+    await core.pool.query("update waitlist_entries set admission_expires_at=now()-interval '1 second' where id=$1", [id]);
+    expect(await api().json("POST", "/auth/register", { ...body, waitlistToken: first })).toMatchObject({ status: 400, body: { error: { code: "invalid_waitlist_token" } } });
+    const second = admissionToken((await admit()).body.acceptUrl);
+    expect((await api().json("POST", "/auth/register", { ...body, waitlistToken: first })).status).toBe(400);
+    const results = await Promise.all([api().json("POST", "/auth/register", { ...body, waitlistToken: second }), api().json("POST", "/auth/register", { ...body, waitlistToken: second })]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 400]);
+    expect(await api().json("POST", "/auth/register", { ...body, waitlistToken: second })).toMatchObject({ status: 400, body: { error: { code: "invalid_waitlist_token" } } });
+    expect((await entry(body.email)).user_id).toBeTruthy();
+  });
+
+  d("rolls back admission consumption if account creation fails", async () => {
+    const existing = await register();
+    const api = instance();
+    await api().json("POST", "/waitlist", { email: existing.email });
+    const { token } = await new SignupService(core.db).admit({ email: existing.email }, null);
+    expect((await api().json("POST", "/auth/register", { ...credentials(existing.email), waitlistToken: token })).status).toBe(409);
+    expect((await entry(existing.email)).registered_at).toBeNull();
+  });
+
+  d("reports successful email delivery and preserves links on provider failure", async () => {
+    const op = await operator();
+    const email = `mail-wait-${uniq()}@example.com`;
+    const api = instance({}, { ...mailer, provider: "resend" });
+    await api().json("POST", "/waitlist", { email });
+    const id = (await entry(email)).id;
+    const sent = await api(op.api.token).json<{ acceptUrl: string; emailed: boolean }>("POST", `/admin/waitlist/${id}/admit`);
+    expect(sent.body.emailed).toBe(true);
+    expect(lastMailTo(email)?.text).toContain(sent.body.acceptUrl);
+    const failing = instance({}, { provider: "resend", send: async () => { throw new Error("unavailable"); } });
+    expect(await failing(op.api.token).json("POST", `/admin/waitlist/${id}/admit`)).toMatchObject({ status: 200, body: { emailed: false, acceptUrl: expect.stringContaining("/register?waitlist=") } });
+  });
+
+  d("CLI lists and admits by email without emailing or granting operator access", async () => {
+    const service = new SignupService(core.db);
+    const api = instance({ ALLOW_SIGNUP: "false" });
+    const email = `cli-wait-${uniq()}@example.com`;
+    await api().json("POST", "/waitlist", { email });
+    const mailCount = outbox.length;
+    const listed = JSON.parse(await waitlist(["list"], undefined, service)) as Array<{ email: string; status: string }>;
+    expect(listed.find((e) => e.email === email)?.status).toBe("pending");
+    const url = await waitlist(["admit", "--email", email.toUpperCase()], "https://app.test", service);
+    expect(url).toMatch(/^https:\/\/app.test\/register\?waitlist=/);
+    expect(outbox).toHaveLength(mailCount);
+    expect((await entry(email)).admitted_by).toBeNull();
+    expect(await api().json("POST", "/auth/register", { ...credentials(email), waitlistToken: admissionToken(url) })).toMatchObject({ status: 201, body: { user: { isSuperadmin: false } } });
+    await expect(waitlist(["admit"], "https://app.test", service)).rejects.toThrow("Usage");
+    await expect(waitlist(["admit", "--email", email], "https://app.test/path", service)).rejects.toThrow("APP_URL");
+    await expect(waitlist(["admit", "--email", "missing@example.com"], "https://app.test", service)).rejects.toThrow("Pending waitlist");
+  });
+});
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://steward:steward@localhost:5432/steward";
 const ENV: NodeJS.ProcessEnv = {
@@ -526,8 +807,8 @@ describe("sign-up policy (ALLOW_SIGNUP=false)", () => {
 
   d("advertises closed sign-up and rejects public registration once a user exists", async () => {
     await register(); // guarantees bootstrap is over
-    expect((await closed().json("GET", "/auth/config")).body).toEqual({ signupOpen: false, inviteOnly: true });
-    expect((await client().json("GET", "/auth/config")).body).toEqual({ signupOpen: true, inviteOnly: false });
+    expect((await closed().json("GET", "/auth/config")).body).toEqual({ signupOpen: false, inviteOnly: true, signupState: "closed", waitlistEnabled: true });
+    expect((await client().json("GET", "/auth/config")).body).toEqual({ signupOpen: true, inviteOnly: false, signupState: "open", waitlistEnabled: true });
     const res = await closed().json<{ error: { code: string } }>("POST", "/auth/register", { email: `late-${uniq()}@example.com`, password: "correct-horse-battery", name: "Late", accepted: CLICKWRAP });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("signup_closed");

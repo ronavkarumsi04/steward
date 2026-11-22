@@ -1,5 +1,6 @@
 export * from "./context.js";
 export * from "./auth.js";
+export * from "./signup.js";
 export * from "./organizations.js";
 export * from "./companies.js";
 export * from "./providers.js";

@@ -412,6 +412,52 @@ Password-reset requests always return `202` whether or not the address exists, s
 
 Recommended: leave it `false`, register yourself, invite your team.
 
+### Capped self-serve signup and waitlist
+
+`ALLOW_SIGNUP` remains the master switch (production default: `false`). Set it to `true`
+to enable public self-serve accounts, optionally limited by:
+
+| Variable | Meaning |
+| --- | --- |
+| `SIGNUP_TOTAL_CAP` | Maximum total public self-serve accounts. |
+| `SIGNUP_DAILY_CAP` | Maximum public self-serve accounts created in a UTC calendar day (resets at 00:00 UTC, not a rolling 24 hours). |
+
+Both accept non-negative safe integers; unset/blank means unlimited and `0` means no slots.
+Invalid values fail startup. Both caps must have capacity. Pending-email-verification accounts
+count immediately. Only users with `signup_source=self_serve` count: existing accounts are
+backfilled as `legacy`, and `bootstrap`, `invite`, and `waitlist` accounts are exempt. Counts
+are of existing accounts, not a permanent ledger of deleted users. Registration checks and
+inserts are serialized transactionally in Postgres. This limits public account creation, not
+how many organizations an authenticated user can create.
+
+`GET /v1/auth/config` includes `signupState` (`open`, `closed`, or `capped`), `signupOpen`
+(false when closed/capped), and `waitlistEnabled: true`. Registration returns `403 signup_closed`
+when the master switch is off, or `403 signup_capped` when a cap is reached. First-user bootstrap
+remains available even when signup is closed or capped.
+
+Anyone can `POST /v1/waitlist` with `{ "email": "founder@example.com", "name": "Founder", "note": "Optional context" }`.
+Name (120 characters) and note (500 characters) are optional. The endpoint accepts joins even
+while signup is open, normalizes email, preserves the first submission on duplicates, and
+always returns the same `202 { "ok": true }` for valid submissions without sending mail.
+Its independent per-IP bucket allows five requests with refill over five minutes. The stored
+reason is `capped` when currently capped, otherwise `closed` (including proactive joins while open).
+
+Authenticated superadmins can `GET /v1/admin/waitlist` for entries with `pending`, `admitted`,
+or `registered` status, and `POST /v1/admin/waitlist/:id/admit` to issue or replace an admission.
+Admission returns `acceptUrl` and `emailed`. Non-console providers attempt delivery; console
+or delivery failure returns `emailed: false`, so share the returned link securely. Reissuing
+invalidates the earlier link. Admitted status records issuance, not whether a link has expired.
+
+The link is `${APP_URL}/register?waitlist=<token>` and expires after 14 days. The backend accepts
+it as `waitlistToken` on `POST /v1/auth/register`: matching email is required; it bypasses closure
+and caps, verifies the address, creates a personal organization, and consumes admission in the
+same transaction as account creation. Invalid, expired, or used tokens return `400 invalid_waitlist_token`;
+wrong email returns `400 waitlist_email_mismatch`. An invitation and waitlist token cannot be combined.
+Only hashes are stored. Admissions are audited as `waitlist.admitted` under the `instance` audit scope.
+The web registration page recognizes this query parameter and asks the founder to enter the
+admitted email address. Closed/full registration pages offer a waitlist form instead of public
+signup. Superadmins can manage admissions at `/app/admin/waitlist` (the Waitlist navigation link).
+
 ### Provisioning a founder's own organization
 
 Ordinary member invitations cannot grant the owner role. An instance operator provisions a
@@ -444,6 +490,30 @@ requires `PLATFORM_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified
 `PLATFORM_EMAIL_FROM`; otherwise hand over the returned link. The operator is not added as
 a member. **Superadmins retain read access to all organizations**, and instance-wide operator
 privileges still allow administrative access even without membership.
+
+### Waitlist operator CLI
+
+With `DATABASE_URL` exported on the API server (and `APP_URL` for admission):
+
+```sh
+pnpm --filter @steward/api waitlist list
+pnpm --filter @steward/api waitlist admit --email founder@example.com
+# Compiled production app:
+node apps/api/dist/cli/waitlist.js list
+node apps/api/dist/cli/waitlist.js admit --email founder@example.com
+```
+
+Listing prints JSON without admission hashes. Admission prints the accept URL, sends no email,
+and requires no superadmin session because the operator already has direct database access.
+It cannot re-admit a registered entry or grant superadmin privileges.
+
+The opt-in browser regression runs against an already-running **closed-signup** stack, with an
+existing superadmin login. The normal boot harness runs open signup, so this spec is skipped there:
+
+```sh
+E2E_WAITLIST=1 E2E_OPERATOR_EMAIL=operator@example.com E2E_OPERATOR_PASSWORD="$OPERATOR_PASSWORD" \
+  pnpm --filter @steward/web exec playwright test e2e/waitlist.spec.ts
+```
 
 ---
 

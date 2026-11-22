@@ -54,6 +54,7 @@ const SUITE_FILES = [
   "session.ts",
   "site-studio.spec.ts",
   "showcase.spec.ts",
+  "waitlist.spec.ts",
   "workflows.spec.ts",
 ];
 

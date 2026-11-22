@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { AuthError, AuthService, OrganizationService, PrivacyService, renderEmail } from "@steward/core";
+import { AuthError, AuthService, OrganizationService, PrivacyService, SignupService, renderEmail } from "@steward/core";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS, acceptanceStatement, pendingAgreements } from "@steward/legal";
 import { Role } from "@steward/schema";
 import { HttpError, orgScope, requireUser, type ApiDeps, type AppEnv, param } from "../context.js";
@@ -48,14 +48,6 @@ function buildAgreements(accepted: Array<{ document: (typeof REQUIRED_AGREEMENTS
   });
 }
 
-/**
- * Public sign-up is open when ALLOW_SIGNUP is true, or when no user exists yet (first-owner bootstrap).
- * Invited emails can always register: the invitation is accepted atomically with the account.
- */
-async function signupOpen(deps: ApiDeps) {
-  return deps.core.config.allowSignup || !(await deps.auth.hasAnyUsers());
-}
-
 export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   for (const route of ["register", "login", "password/reset", "verify-email"]) {
     app.use(`/auth/${route}`, rateLimit({ capacity: 10, refillPerSec: 10 / 60, key: (c) => clientIp(c) }));
@@ -74,7 +66,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "get", path: "/auth/config", tag: "auth", summary: "Public auth configuration (sign-up policy)", auth: "public" }, async (c) => {
     const deps = c.get("deps");
     c.header("cache-control", "no-store");
-    return c.json({ signupOpen: await signupOpen(deps), inviteOnly: !deps.core.config.allowSignup });
+    const signupState = await new SignupService(deps.core.db).state(deps.core.config);
+    return c.json({ signupOpen: signupState === "open", signupState, inviteOnly: !deps.core.config.allowSignup, waitlistEnabled: true });
   });
 
   defineRoute(
@@ -90,29 +83,36 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
         name: z.string().min(1).max(120),
         orgName: z.string().max(120).optional(),
         inviteToken: z.string().min(10).max(200).optional(),
+        waitlistToken: z.string().min(10).max(200).optional(),
         accepted: AcceptanceInput,
       }),
     },
     async (c, { body }) => {
       const deps = c.get("deps");
       const { auth } = deps;
-      const orgs = new OrganizationService(deps.core.db);
       // Checked before the account is created: registering without accepting is not an option.
       const agreements = buildAgreements(body.accepted);
-      const invitation = body.inviteToken ? await orgs.peekInvitation(body.inviteToken) : null;
-      if (body.inviteToken && !invitation) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
-      if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
-      if (!invitation && !(await signupOpen(deps))) throw new AuthError("signup_closed", "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.");
-      const bootstrap = !(await auth.hasAnyUsers());
-      const verificationRequired = deps.core.config.requireEmailVerification && !invitation && !bootstrap;
-      if (verificationRequired) requireEmailDelivery(deps);
-
-      // Account, legal acceptance, membership and invite consumption commit together. The public
-      // preview above is advisory; acceptance rechecks expiration/consumption inside this transaction.
-      const { user, organization, joined } = await deps.core.db.transaction(async (tx) => {
-        const account = await new AuthService(tx).register({ ...body, emailVerified: Boolean(invitation) || bootstrap, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
+      const { user, organization, joined, verificationRequired } = await deps.core.db.transaction(async (tx) => {
+        const signup = new SignupService(tx);
+        await signup.lock();
+        if (body.inviteToken && body.waitlistToken) throw new AuthError("forbidden", "Use only one admission token");
+        const invitation = body.inviteToken ? await new OrganizationService(tx).peekInvitation(body.inviteToken) : null;
+        if (body.inviteToken && !invitation) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
+        if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
+        const entry = body.waitlistToken ? await signup.claim(body.waitlistToken, body.email) : null;
+        const bootstrap = !(await new AuthService(tx).hasAnyUsers());
+        if (!invitation && !entry && !bootstrap) {
+          const state = await signup.state(deps.core.config);
+          if (state === "closed") throw new AuthError("signup_closed", "Sign-ups are closed. Ask an admin for an invitation or join the waitlist.");
+          if (state === "capped") throw new AuthError("signup_capped", "Public signup capacity has been reached. Join the waitlist.");
+        }
+        const signupSource = invitation ? "invite" : entry ? "waitlist" : bootstrap ? "bootstrap" : "self_serve";
+        const verificationRequired = deps.core.config.requireEmailVerification && signupSource === "self_serve";
+        if (verificationRequired) requireEmailDelivery(deps);
+        const account = await new AuthService(tx).register({ ...body, signupSource, emailVerified: signupSource !== "self_serve", personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
         const joined = body.inviteToken ? await new OrganizationService(tx).acceptInvitation(account.user.id, body.inviteToken) : null;
-        return { ...account, joined };
+        if (entry) await signup.complete(entry.id, account.user.id);
+        return { ...account, joined, verificationRequired };
       });
       if (verificationRequired) {
         await sendVerification(deps, user);

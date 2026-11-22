@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   id: id(),
   email: text("email").notNull(),
   emailVerifiedAt: ts("email_verified_at"),
+  signupSource: text("signup_source").notNull().default("legacy"),
   passwordHash: text("password_hash"),
   name: text("name").notNull().default(""),
   avatarUrl: text("avatar_url"),
@@ -38,7 +39,22 @@ export const users = pgTable("users", {
   marketingOptOutAt: ts("marketing_opt_out_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (t) => [uniqueIndex("users_email_idx").on(sql`lower(${t.email})`)]);
+}, (t) => [uniqueIndex("users_email_idx").on(sql`lower(${t.email})`), index("users_self_serve_created_idx").on(t.createdAt).where(sql`${t.signupSource} = 'self_serve'`)]);
+
+export const waitlistEntries = pgTable("waitlist_entries", {
+  id: id(),
+  email: text("email").notNull(),
+  name: text("name"),
+  note: text("note"),
+  reason: text("reason").notNull(),
+  createdAt: createdAt(),
+  admittedAt: ts("admitted_at"),
+  admittedBy: text("admitted_by").references(() => users.id, { onDelete: "set null" }),
+  tokenHash: text("token_hash"),
+  admissionExpiresAt: ts("admission_expires_at"),
+  registeredAt: ts("registered_at"),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+}, (t) => [uniqueIndex("waitlist_email_idx").on(t.email), uniqueIndex("waitlist_token_idx").on(t.tokenHash)]);
 
 export const sessions = pgTable("sessions", {
   id: id(),
