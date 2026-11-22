@@ -181,11 +181,11 @@ describe("the brief", () => {
     expect(brief.effect.approve).toContain("no workflow to resume");
   });
 
-  it("flags a lapsed request that is still pending, and the fact that it can still be decided", () => {
+  it("flags a lapsed request that is still pending but cannot be decided", () => {
     const brief = reviewApproval(approval({ id: "a6", expiresAt: iso(-4 * 60 * 60 * 1000) }), { now: NOW });
     expect(brief.expiry.lapsed).toBe(true);
     expect(brief.expiry.label).toBe("4h 0m past");
-    expect(brief.cautions.some((c) => c.includes("still pending"))).toBe(true);
+    expect(brief.cautions.some((c) => c.includes("will not accept a decision"))).toBe(true);
   });
 
   it("admits when it could not load the run rather than implying the run is fine", () => {
@@ -198,7 +198,7 @@ describe("the brief", () => {
     const byLabel = Object.fromEntries(brief.blast.map((b) => [b.label, b]));
     expect(byLabel["System that changes"]).toEqual({ label: "System that changes", value: "vercel", source: "the request" });
     expect(byLabel["Kind of change"]!.value).toContain("production deployment");
-    expect(byLabel["Money at stake"]!.value).toBe("up to $12.50 — the estimate recorded when this was requested");
+    expect(byLabel["Money at stake"]!.value).toBe("$12.50 estimated USD — not a cap or a recorded charge");
     expect(byLabel["Reversible"]).toMatchObject({ source: "not recorded" });
     expect(byLabel["Alternatives the agent offered"]!.value).toBe("Deploy a preview first");
   });

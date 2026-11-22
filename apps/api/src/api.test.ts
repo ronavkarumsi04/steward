@@ -881,6 +881,12 @@ describe("tenancy + RBAC", () => {
     expect((await viewer.api.json("POST", "/invitations/accept", { token: inv.body.acceptUrl.split("/").pop() })).status).toBe(200);
     expect((await viewer.api.json("GET", `/companies/${co.body.company.id}`)).status).toBe(200);
     expect((await viewer.api.json("POST", `/companies/${co.body.company.id}/goals`, { title: "Nope" })).status).toBe(403);
+    const approvalScope: TenantScope = { organizationId: owner.orgId, companyId: co.body.company.id, actor: { type: "system", component: "test" } };
+    const approval = await services.forScope(approvalScope).approvals.request(approvalScope, { action: "email.send", reason: "Read-only review", payload: { to: "review@example.com" }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60 });
+    expect((await viewer.api.json("GET", `/companies/${co.body.company.id}/approvals/${approval.id}`)).status).toBe(200);
+    expect((await viewer.api.json("POST", `/companies/${co.body.company.id}/approvals/${approval.id}/decide`, { status: "approved", expectedPayload: approval.payload })).status).toBe(403);
+    const outsider = await register("Outside organization");
+    expect((await outsider.api.json("GET", `/companies/${co.body.company.id}/approvals/${approval.id}`)).status).toBe(403);
     const members = await owner.api.json<{ members: Array<{ userId: string }> }>("GET", `/orgs/${owner.orgId}/members`);
     expect(members.body.members.some((x) => x.userId === viewer.userId)).toBe(true);
     expect((await owner.api.json("PATCH", `/orgs/${owner.orgId}/members/${viewer.userId}`, { role: "member" })).status).toBe(200);
@@ -1115,6 +1121,9 @@ describe("durable run pipeline (stub provider, in-process runtime)", () => {
     expect(inbox.body.approvals.find((a) => a.id === approval.id)?.companyId).toBe(companyId);
     const growth = await api.json<{ outbox: Array<{ id: string; action: string }> }>("GET", `/companies/${companyId}/growth`);
     expect(growth.body.outbox.map((a) => a.id)).toContain(approval.id);
+    const stale = await api.json("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "approved", expectedPayload: { to: "different@example.com" } });
+    expect(stale.status).toBe(409);
+    expect((await api.json<{ approval: { status: string } }>("GET", `/companies/${companyId}/approvals/${approval.id}`)).body.approval.status).toBe("pending");
     const decided = await api.json<{ approval: { status: string } }>("POST", `/companies/${companyId}/approvals/${approval.id}/decide`, { status: "denied", note: "Not yet" });
     expect(decided.status).toBe(200);
     expect(decided.body.approval.status).toBe("denied");

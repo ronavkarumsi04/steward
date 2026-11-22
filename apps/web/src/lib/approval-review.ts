@@ -228,7 +228,7 @@ export function reviewApproval(
   const expiryMs = expiresAtMs === null ? 0 : expiresAtMs - now;
   const lapsed = expiresAtMs !== null && expiryMs <= 0;
   const cost = approval.estimatedCostUsd === null ? null : Number(approval.estimatedCostUsd);
-  const hasCost = cost !== null && Number.isFinite(cost) && cost > 0;
+  const hasCost = cost !== null && Number.isFinite(cost) && cost >= 0;
   const reversibleFact = decoded.facts.find((f) => f.label === "Reversible" || f.label === "Dry run" || f.label === "Force");
   const payloadMoney = decoded.facts.find((f) => f.label === "Money");
   const dimensionNote = DIMENSION_NOTE[approval.dimension] ?? null;
@@ -239,7 +239,7 @@ export function reviewApproval(
     {
       label: "Money at stake",
       value: hasCost
-        ? `up to ${money(cost)} — the estimate recorded when this was requested`
+        ? `${money(cost)} estimated USD — not a cap or a recorded charge`
         : payloadMoney
           ? `the payload itself names ${payloadMoney.value}; no cost estimate was recorded with the request`
           : "No cost estimate was recorded on this request",
@@ -271,7 +271,7 @@ export function reviewApproval(
     // string rendered on the server and recomputed in the browser. The header carries the countdown instead,
     // inside a `<time>` that is allowed to differ across hydration.
     cautions.push(
-      'This lapsed before you looked at it and is still pending. Your decision is recorded — the sweeper turns it into "expired" on its next pass, after which it cannot be decided at all.',
+      'This request has expired even though its row still says pending. The server will not accept a decision after its deadline; the sweeper updates its status separately.',
     );
   }
   if (run && (run.status === "succeeded" || run.status === "failed" || run.status === "cancelled")) {

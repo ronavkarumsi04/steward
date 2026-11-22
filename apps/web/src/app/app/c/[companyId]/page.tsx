@@ -16,6 +16,8 @@ import { QuickStart } from "@/components/quick-start";
 import { LaunchKit, LaunchKitStart } from "@/components/launch-kit";
 import { FounderStudio, type StudioSchedule } from "@/components/founder-studio";
 import { Card, Empty, Pill, Stat, StatusPill, ago, usd } from "@/components/ui";
+import { QuietOverview } from "@/components/quiet-overview";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 /**
  * The page's arrival: seven sections, in the order a founder wants them, from one house schedule. Computed
@@ -40,6 +42,9 @@ export default async function CompanyOverviewPage({ params }: { params: Promise<
   const api = await serverApi();
   const overview = await tryApi(() => api.get<CompanyOverview>(`/companies/${companyId}`));
   if (!overview) notFound();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <QuietOverview overview={overview} api={api} locale={locale} />;
+  }
   const [events, runs, approvals, usage, schedules, artifacts, documents, integrations, attentionRuns, attentionTasks, launchRuns] = await Promise.all([
     api.get<{ events: StewardEvent[] }>(`/companies/${companyId}/events?limit=12`),
     api.get<{ runs: Run[] }>(`/companies/${companyId}/runs?limit=20`),

@@ -137,6 +137,21 @@ describe("core services (postgres)", () => {
     // Double-resolve is a no-op.
     expect(await approvals.resolve(scope, approval.id, { status: "denied" })).toBeNull();
 
+    // A stale review cannot authorize a changed payload; JSON object key order is not a change.
+    const guarded = await approvals.request(scope, { action: "email.send", reason: "Review exact recipient", payload: { to: "review@example.com", content: { subject: "Review", text: "Draft" } }, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60, workflowId: "wf-guarded" });
+    expect(await approvals.resolve(scope, guarded.id, { status: "approved", expectedPayload: { to: "stale@example.com" } })).toBeNull();
+    expect((await approvals.get(scope, guarded.id))?.status).toBe("pending");
+    expect(signals).toHaveLength(1);
+    const expectedPayload = { content: { text: "Draft", subject: "Review" }, to: "review@example.com" };
+    const concurrent = await Promise.all([
+      approvals.resolve(scope, guarded.id, { status: "approved", expectedPayload }),
+      approvals.resolve(scope, guarded.id, { status: "denied", expectedPayload }),
+    ]);
+    expect(concurrent.filter(Boolean)).toHaveLength(1);
+    expect(signals).toHaveLength(2);
+    const expired = await approvals.request(scope, { action: "email.send", reason: "Expired", payload: {}, risk: "HIGH", dimension: "email_send", affectedSystem: "email", alternatives: [], expiresInSeconds: 60, expiresInMs: -100 });
+    expect(await approvals.resolve(scope, expired.id, { status: "approved", expectedPayload: {} })).toBeNull();
+
     // A decision is durable before it is delivered: an unreachable workflow must not turn a recorded
     // decision into a thrown error, because the row has already changed and a retry would be refused.
     const unreachable = new ApprovalService(db, { notify: async () => { throw new Error("temporal unavailable"); } });

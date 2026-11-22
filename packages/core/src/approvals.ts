@@ -97,14 +97,15 @@ export class ApprovalService {
    * "nothing happened" — the row has already changed, and a second attempt would be refused as not pending.
    * An undelivered decision is written to the event stream so the run's stalled state is not silent.
    */
-  async resolve(scope: TenantScope, id: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown> }): Promise<ResolvedApproval | null> {
+  async resolve(scope: TenantScope, id: string, decision: { status: "approved" | "denied"; note?: string; editedPayload?: Record<string, unknown>; expectedPayload?: Record<string, unknown> }): Promise<ResolvedApproval | null> {
     if (scope.actor.type !== "user") throw new Error("Only users can resolve approvals");
     const resolvedBy = scope.actor.userId;
     const a = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(approvals)
         .set({ status: decision.status, resolvedBy, resolvedAt: new Date(), resolution: { note: decision.note ?? "", editedPayload: decision.editedPayload ?? null } })
-        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending"), gt(approvals.expiresAt, new Date())))
+        // Optional for older callers. JSONB equality makes reviewed payload + pending + expiry one atomic guard.
+        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending"), gt(approvals.expiresAt, new Date()), decision.expectedPayload ? eq(approvals.payload, decision.expectedPayload) : undefined))
         .returning();
       if (!row) return null;
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "approval.resolved", actor: scope.actor, payload: { approvalId: id, status: decision.status, action: row.action }, correlation: { runId: row.runId ?? "" } });
