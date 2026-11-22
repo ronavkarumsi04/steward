@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ApiDeps, AppEnv } from "./context.js";
-import { clientIp } from "./middleware.js";
+import { clientIp, rateLimit } from "./middleware.js";
 
 async function ip(env: NodeJS.ProcessEnv, headers: Record<string, string> = {}, address?: string) {
   const app = new Hono<AppEnv>();
@@ -43,5 +43,31 @@ describe("clientIp", () => {
       expect(await ip({ TRUST_PROXY: "true", TRUST_PROXY_HOPS: hops }, { "x-forwarded-for": "spoof" }, "192.0.2.10")).toBe("192.0.2.10");
     }
     expect(await ip({ TRUST_PROXY: "true" })).toBe("local");
+  });
+});
+
+describe("rateLimit cleanup", () => {
+  it("does not evict an idle bucket before its full refill period", async () => {
+    vi.useFakeTimers();
+    try {
+      const app = new Hono<AppEnv>();
+      app.use("*", async (c, next) => {
+        c.set("deps", { env: {} } as ApiDeps);
+        await next();
+      });
+      app.use("*", rateLimit({ capacity: 1, refillPerSec: 1 / 900 }));
+      app.onError((err, c) => c.json({ error: err.message }, 429));
+      app.get("/", (c) => c.text("ok"));
+      expect((await app.request("http://test/")).status).toBe(200);
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+      expect((await app.request("http://test/")).status).toBe(429);
+      await vi.advanceTimersByTimeAsync(4 * 60_000);
+      expect((await app.request("http://test/")).status).toBe(200);
+      await vi.advanceTimersByTimeAsync(16 * 60_000);
+      expect((await app.request("http://test/")).status).toBe(200);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 });

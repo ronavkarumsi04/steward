@@ -100,8 +100,9 @@ interface Bucket {
 export function rateLimit(opts: { capacity: number; refillPerSec: number; key?: (c: Ctx) => string }): MiddlewareHandler<AppEnv> {
   const buckets = new Map<string, Bucket>();
   const keyFn = opts.key ?? ((c: Ctx) => c.get("user")?.id ?? clientIp(c));
+  const idleTtlMs = Math.max(10 * 60_000, (opts.capacity / opts.refillPerSec) * 1000);
   setInterval(() => {
-    const cutoff = Date.now() - 10 * 60_000;
+    const cutoff = Date.now() - idleTtlMs;
     for (const [k, b] of buckets) if (b.updated < cutoff) buckets.delete(k);
   }, 60_000).unref();
   return async (c, next) => {
