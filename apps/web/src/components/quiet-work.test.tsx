@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { CompanyOverview, RunDetail } from "@/lib/types";
+import type { CompanyOverview, RunDetail, Task } from "@/lib/types";
 import { QuietWork } from "./quiet-work";
 import { QuietRunDetail } from "./quiet-run-detail";
 import { QuietRunRecord } from "./quiet-run-record";
@@ -45,6 +45,20 @@ describe("Quiet work surfaces", () => {
     expect(html).not.toContain("$0.00");
     expect(html).toContain('data-persistent="true"');
     expect(html).toContain("Cancel run");
+  });
+  it("separates a recorded title from its constraints and shows the linked goal without inventing usage", () => {
+    const html = renderToStaticMarkup(createElement(QuietRunDetail, {
+      companyId: "company", initial: { ...detail, run: { ...detail.run, taskId: "task", intent: "Draft a brief\n\nRead notes only.", costUsd: "0.000000" } },
+      task: { id: "task", title: "Draft a brief", goalId: "goal" } as Task,
+      overview: { ...overview, goals: [{ id: "goal", title: "Prepare the weekly brief" }] } as CompanyOverview,
+      observedAt: Date.parse(at), back: "/app/c/company/runs",
+    }));
+    expect(html).toContain("<h1>Draft a brief</h1>");
+    expect(html).toContain("Read notes only.");
+    expect(html).toContain("Prepare the weekly brief");
+    expect(html).toContain("Run details");
+    expect(html).not.toContain("$0.00");
+    expect(html.match(/Requests a stop to future work/g)).toHaveLength(1);
   });
   it("hides mutation controls for viewers, missing membership and terminal records", () => {
     for (const context of [null, { ...overview, role: "viewer" as const }]) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evidenceView, safeArtifactHref, workHref, workStatuses, lastRecordedAt, cancellable, normalizeWorkFilters, queryValue } from "./work-loop";
+import { evidenceView, safeArtifactHref, workHref, workStatuses, lastRecordedAt, cancellable, normalizeWorkFilters, queryValue, runCostValue } from "./work-loop";
 import type { RunDetail } from "./types";
 
 describe("Quiet work loop contracts", () => {
@@ -22,6 +22,12 @@ describe("Quiet work loop contracts", () => {
     expect(filters.q?.toLocaleLowerCase()).toBe("review");
     expect(queryValue(["/app/c/c/runs?view=all", "//other.test"])).toBe("/app/c/c/runs?view=all");
     expect(queryValue([])).toBeUndefined();
+  });
+  it("distinguishes an untouched default cost from a ledger-recorded zero", () => {
+    expect(runCostValue({ costUsd: "0.000000" })).toBeNull();
+    expect(runCostValue({ costUsd: "0" }, [{ status: "error", costEstimated: true, costUsd: "0" }])).toBeNull();
+    expect(runCostValue({ costUsd: "0" }, [{ status: "ok", costEstimated: false, costUsd: "0" }])).toBe("0");
+    expect(runCostValue({ costUsd: "0.025" })).toBe("0.025");
   });
   it("removes credentials and private reasoning recursively, including JSON-encoded outputs", () => {
     const result = JSON.stringify(evidenceView({ title: "Visible evidence", nested: { api_key: "secret-one", chainOfThought: "private-thought", text: '{"authorization":"secret-two","summary":"Done"}' } }));

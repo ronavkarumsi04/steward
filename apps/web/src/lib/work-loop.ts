@@ -1,4 +1,11 @@
-import type { RunDetail } from "./types";
+import type { AICall, Run, RunDetail } from "./types";
+
+/** Run rows begin at zero before any ledger entry exists. Zero needs explicit cost evidence. */
+export function runCostValue(run: Pick<Run, "costUsd">, calls: Pick<AICall, "status" | "costEstimated" | "costUsd">[] = []): string | null {
+  if (run.costUsd === "" || run.costUsd == null || !Number.isFinite(Number(run.costUsd)) || Number(run.costUsd) < 0) return null;
+  if (Number(run.costUsd) === 0 && !calls.some((call) => call.status === "ok" && !call.costEstimated && call.costUsd !== "" && Number(call.costUsd) === 0)) return null;
+  return run.costUsd;
+}
 
 export type WorkKind = "tasks" | "runs";
 export type WorkView = "active" | "completed" | "all";

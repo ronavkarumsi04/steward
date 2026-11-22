@@ -29,6 +29,8 @@
 .q-task-move { display: grid; gap: 6px; max-width: 100%; }
 .q-task-controls .input { width: auto; min-height: 44px; }
 .q-run-back { margin-bottom: 24px; }
+.q-run-context { margin-top: 20px; }
+.q-run-context > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .q-run-heading-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 20px; font-size: 12px; color: var(--muted); }
 .q-run-page .q-page-heading { margin-bottom: 24px; }
 .q-snapshot { margin-block: 20px 28px; font-size: 12px; color: var(--muted); }
@@ -49,7 +51,7 @@
 .q-run-aside p { color: var(--muted); }
 .q-run-aside .q-run-cost { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .q-tool-list { list-style: disc; padding-inline-start: 20px; font-size: 14px; }
-.q-run-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.q-run-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 32px; }
 .q-run-actions > div { min-width: 0; }
 .q-run-actions .btn { flex-shrink: 0; max-width: 100%; }
 @media (max-width: 767px) {
@@ -58,7 +60,7 @@
   .q-work-page .q-work-row .q-row-end { padding-inline-start: 0; }
 }
 @media (max-width: 1023px) {
-  .q-run-actions[data-persistent="true"] { flex-wrap: wrap; gap: 10px; }
+  .q-run-actions[data-persistent="true"] { flex-wrap: wrap; gap: 10px; margin-top: 0; }
   .q-run-actions .btn { width: 100%; }
   .q-run-actions p { font-size: 12px; line-height: 1.5; }
   .q-run-actions .q-task-meta { display: none; }
