@@ -23,8 +23,9 @@ Metadata, pills, shortcut hints and mobile labels have a **12px minimum**; ordin
 `--line` is only a low-emphasis divider. Interactive outlines use `--control-border` (`#7d8a81` light,
 `#6c8474` dark), tested at **3:1 or better** against canvas/rail/panel and pending surfaces. Primary and danger
 actions retain semantic outlines; controls inside tinted panels use the stronger action-colored outline
-(the standard dark control border is below 3:1 on sage). Light/dark values follow the supplied tokens, not the prototype's
-divergent dark palette; controls and metadata floors above are the approved accessibility additions.
+(the standard dark control border is below 3:1 on sage). Light/dark values match the canonical
+`docs/research/steward-redesign/tokens.json`; `workspace-token-sync.test.ts` checks every semantic
+alias and both dark branches. Shadows are disabled; the canonical themed scrim separates modals.
 The prototype is not normative for links, current-page semantics, focus or modal behavior.
 
 Set the **web process** environment variable `STEWARD_WORKSPACE_SHELL=legacy` and restart/redeploy that
