@@ -369,11 +369,11 @@ describe("email verification and auth limits", () => {
     const target = instance({ RATE_LIMIT_DISABLED: "false", TRUST_PROXY: "true", REQUIRE_EMAIL_VERIFICATION: "false" });
     const anon = client("", "", () => target);
     for (let i = 0; i < 10; i++) {
-      expect((await anon.json("POST", "/auth/login", { email: `missing-${uniq()}@example.com`, password: "wrong-password" }, { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(401);
+      expect((await anon.json("POST", "/auth/login", { email: `missing-${uniq()}@example.com`, password: "wrong-password" }, { "x-forwarded-for": "192.0.2.1" })).status).toBe(401);
     }
-    expect((await anon.json("POST", "/auth/login", credentials(), { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(429);
-    expect((await anon.json("POST", "/auth/login", credentials(), { "x-vercel-forwarded-for": "192.0.2.2" })).status).toBe(401);
-    expect((await anon.json("POST", "/auth/register", credentials(), { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(201);
+    expect((await anon.json("POST", "/auth/login", credentials(), { "x-forwarded-for": "192.0.2.1" })).status).toBe(429);
+    expect((await anon.json("POST", "/auth/login", credentials(), { "x-forwarded-for": "192.0.2.2" })).status).toBe(401);
+    expect((await anon.json("POST", "/auth/register", credentials(), { "x-forwarded-for": "192.0.2.1" })).status).toBe(201);
   });
 
   d("enabled normalized-email login limiter triggers across client IPs", async () => {
@@ -381,8 +381,23 @@ describe("email verification and auth limits", () => {
     const anon = client("", "", () => target);
     const email = `missing-${uniq()}@example.com`;
     for (let i = 0; i < 11; i++) {
-      const result = await anon.json("POST", "/auth/login", { email: i % 2 ? email.toUpperCase() : email, password: "wrong-password" }, { "x-vercel-forwarded-for": `192.0.2.${i + 1}` });
+      const result = await anon.json("POST", "/auth/login", { email: i % 2 ? email.toUpperCase() : email, password: "wrong-password" }, { "x-forwarded-for": `192.0.2.${i + 1}` });
       expect(result.status).toBe(i < 10 ? 401 : 429);
+    }
+  });
+
+  d("external API works without a proxy secret and ignores spoofed handoff headers", async () => {
+    for (const trust of ["true", "false"]) {
+      const target = instance({ STEWARD_PROXY_SECRET: "", VERCEL: "", TRUST_PROXY: trust, REQUIRE_EMAIL_VERIFICATION: "false", RATE_LIMIT_DISABLED: "false" });
+      const anon = client("", "", () => target);
+      const body = credentials();
+      const spoof = { "x-steward-client-ip": "spoof", "x-steward-proxy-secret": "spoof", "x-vercel-forwarded-for": "spoof", "x-forwarded-for": "192.0.2.1" };
+      expect((await anon.json("POST", "/auth/register", body, spoof)).status).toBe(201);
+      const login = await anon.json<{ token: string }>("POST", "/auth/login", body, spoof);
+      expect(login.status).toBe(200);
+      const stored = await core.pool.query("SELECT ip FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = $1)", [body.email]);
+      expect(stored.rows).toHaveLength(2);
+      expect(stored.rows.every((row: { ip: string }) => row.ip === (trust === "true" ? "192.0.2.1" : "local"))).toBe(true);
     }
   });
 });

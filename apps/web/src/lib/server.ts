@@ -6,6 +6,7 @@ import { ApiError, createClient, type ApiClient } from "./api";
 import type { Me } from "./types";
 import { resolveLocale, type Locale } from "./i18n";
 import { serverTransport } from "./server-transport";
+import { proxyClientHeaders } from "./proxy-client-ip";
 
 const transport = serverTransport();
 export const API_URL = transport.baseUrl;
@@ -19,7 +20,7 @@ export async function serverApi(): Promise<ApiClient> {
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
   const incoming = await headers();
-  const clientHeaders: Record<string, string> = {};
+  const clientHeaders: Record<string, string> = proxyClientHeaders(incoming, process.env);
   for (const name of ["x-vercel-forwarded-for", "x-forwarded-for", "x-real-ip"]) {
     const value = incoming.get(name);
     if (value) clientHeaders[name] = value;

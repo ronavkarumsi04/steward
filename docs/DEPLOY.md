@@ -54,12 +54,22 @@ Edit `.env`. Values that **must** change from the example:
 | `API_URL` | `https://api.example.com` |
 | `API_DOMAIN` | `api.example.com` — Caddy requests a Let's Encrypt certificate for this name. |
 | `ACME_EMAIL` | your email, for certificate expiry notices (optional but recommended) |
-| `TRUST_PROXY` | Set `true` only behind a trusted proxy. Vercel's `x-vercel-forwarded-for` takes precedence, then `X-Forwarded-For`, then `x-real-ip`. Without trust all forwarded headers are ignored and the socket address is used (or `local` for embedded requests without connection info). |
-| `TRUST_PROXY_HOPS` | Defaults to `1`: select this entry from the **right** of `X-Forwarded-For`. Use `1` for single-hop Caddy. For Vercel → external-Caddy rewrites, the count may need to be `2` unless `x-vercel-forwarded-for` is passed through (that header takes precedence). Confirm the actual forwarded-header chain and hop count for each deployment. Restrict direct API access and ensure the outer proxy sanitizes forwarded headers. |
-| `REQUIRE_EMAIL_VERIFICATION` | Defaults to `true` in production, `false` otherwise. Public self-serve signup sends a 24-hour verification link and creates no session until verified. Bootstrap owners are exempt; invitation signup proves the address. Configure Resend before enabling public signup. |
+| `TRUST_PROXY` | Set `true` only behind a trusted proxy. Authenticated `STEWARD_PROXY_SECRET` handoffs take precedence. Otherwise Vercel's `x-vercel-forwarded-for` is honored **only when the API itself runs on Vercel** (`VERCEL` set), followed by `X-Forwarded-For`, then `x-real-ip`. Without proxy trust, unauthenticated forwarded headers are ignored and the socket address is used (or `local` for embedded requests without connection info). |
+| `TRUST_PROXY_HOPS` | Defaults to `1`: select this entry from the **right** of `X-Forwarded-For`. Use `1` for direct callers through single-hop Caddy. Unsigned Vercel → external-Caddy rewrites may need `2`; confirm the actual chain per deployment. Passing `x-vercel-forwarded-for` alone does not authenticate requests to an external API. Prefer the shared-secret handoff below. |
+| `STEWARD_PROXY_SECRET` | Optional, no default. Set the same long random secret on the **Vercel web project and API host**. The web strips caller-supplied handoff headers and sends its edge-derived client IP plus this secret; the API verifies the secret with a timing-safe comparison. Keep it server-only, never `NEXT_PUBLIC_*`. On Vercel the web uses `x-vercel-forwarded-for` or the first edge-set XFF entry; outside Vercel it signs only a request IP when available, never arbitrary XFF. |
+| `REQUIRE_EMAIL_VERIFICATION` | Opt-in; defaults to `false` in **all environments**. Enable on the API only after a Resend sender domain is verified and `PLATFORM_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and `PLATFORM_EMAIL_FROM` are configured there. Public self-serve signup then sends a 24-hour link and creates no session until verified. Bootstrap owners are exempt; invitation signup proves the address. |
 | `ALLOW_SIGNUP` | `false` (also the production default). The first owner can bootstrap; later accounts require an invitation. Set `true` only when public registration is intended. |
 | `PLATFORM_EMAIL_PROVIDER` / `PLATFORM_EMAIL_FROM` / `RESEND_API_KEY` | see §3 |
 | `SANDBOX_PROVIDER` | `none` unless you have a dedicated Docker host for agent code execution (see §5) |
+
+The current production topology is a Vercel web app with `EMBEDDED_API=false`, rewriting `/api/v1/*`
+to `https://193-122-211-233.sslip.io`, an external API behind `infra/caddy/Caddyfile`. That Caddy has
+no `trusted_proxies` configuration and the API origin is directly reachable from the internet.
+Recommended configuration: the same `STEWARD_PROXY_SECRET` on Vercel and the API; `TRUST_PROXY=true`
+and `TRUST_PROXY_HOPS=1` on the API for direct-to-Caddy callers. Do not set `VERCEL` on that external
+API host. Until the secret is configured, requests still work using the normal proxy/socket fallback,
+but web-proxied users may share a proxy bucket. Production has no verified Resend sender yet: leave
+`REQUIRE_EMAIL_VERIFICATION` off until the sender and API mail configuration above are ready.
 
 `CORS_ORIGINS` is only needed if you serve the web app from more than one origin (e.g. a Vercel preview domain): comma-separated list of extra origins.
 

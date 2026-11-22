@@ -10,6 +10,14 @@ beforeEach(() => { clearRuntime(); vi.resetModules(); factory.mockReset(); });
 afterEach(() => { clearRuntime(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("server API transport", () => {
+  it("authenticates SSR client IP handoff when the web shared secret is configured", async () => {
+    vi.stubEnv("EMBEDDED_API", "true");
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("STEWARD_PROXY_SECRET", "test-secret");
+    factory.mockResolvedValue({ app: { fetch: (r: Request) => Response.json({ ip: r.headers.get("x-steward-client-ip"), authenticated: r.headers.get("x-steward-proxy-secret") === "test-secret" }) } });
+    const { serverApi } = await import("./server");
+    expect(await (await serverApi()).get("/auth/config")).toEqual({ ip: "192.0.2.1", authenticated: true });
+  });
   it("forwards the incoming client IP header from SSR to the embedded API", async () => {
     vi.stubEnv("EMBEDDED_API", "true");
     factory.mockResolvedValue({ app: { fetch: (r: Request) => Response.json({ ip: r.headers.get("x-vercel-forwarded-for") }) } });

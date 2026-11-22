@@ -103,7 +103,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     env: nodeEnv as CoreConfig["env"],
     logLevel: env.LOG_LEVEL,
     allowSignup: parseBoolean(env.ALLOW_SIGNUP, nodeEnv !== "production"),
-    requireEmailVerification: parseBoolean(env.REQUIRE_EMAIL_VERIFICATION, nodeEnv === "production"),
+    requireEmailVerification: parseBoolean(env.REQUIRE_EMAIL_VERIFICATION, false),
   };
 }
 

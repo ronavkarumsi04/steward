@@ -19,7 +19,17 @@ describe("clientIp", () => {
     expect(await ip({ TRUST_PROXY: "false" }, { "x-real-ip": "spoof" })).toBe("local");
   });
   it("prefers Vercel's header when trusted", async () => {
-    expect(await ip({ TRUST_PROXY: "true" }, { "x-vercel-forwarded-for": "192.0.2.1", "x-forwarded-for": "spoof, 192.0.2.2", "x-real-ip": "192.0.2.3" })).toBe("192.0.2.1");
+    expect(await ip({ TRUST_PROXY: "true", VERCEL: "1" }, { "x-vercel-forwarded-for": "192.0.2.1", "x-forwarded-for": "spoof, 192.0.2.2", "x-real-ip": "192.0.2.3" })).toBe("192.0.2.1");
+  });
+  it("ignores spoofed Vercel headers on an external API", async () => {
+    expect(await ip({ TRUST_PROXY: "true" }, { "x-vercel-forwarded-for": "spoof", "x-forwarded-for": "192.0.2.2" })).toBe("192.0.2.2");
+  });
+  it("uses authenticated client IP handoffs before proxy headers", async () => {
+    expect(await ip({ STEWARD_PROXY_SECRET: "test-shared-secret" }, { "x-steward-proxy-secret": "test-shared-secret", "x-steward-client-ip": "192.0.2.1", "x-forwarded-for": "spoof" }, "192.0.2.10")).toBe("192.0.2.1");
+    for (const secret of [undefined, "wrong", "same-length-wrong!"]) {
+      expect(await ip({ STEWARD_PROXY_SECRET: "test-shared-secret" }, { ...(secret ? { "x-steward-proxy-secret": secret } : {}), "x-steward-client-ip": "spoof" }, "192.0.2.10")).toBe("192.0.2.10");
+    }
+    expect(await ip({}, { "x-steward-proxy-secret": "anything", "x-steward-client-ip": "spoof" }, "192.0.2.10")).toBe("192.0.2.10");
   });
   it("selects from the right and ignores a spoofed leftmost entry", async () => {
     const headers = { "x-forwarded-for": "spoof, 192.0.2.1, 192.0.2.2" };

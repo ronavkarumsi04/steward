@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import type { MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
@@ -124,9 +124,17 @@ export function rateLimit(opts: { capacity: number; refillPerSec: number; key?: 
 
 export function clientIp(c: Ctx): string {
   const env = c.get("deps").env;
+  const secret = env.STEWARD_PROXY_SECRET;
+  const provided = c.req.header("x-steward-proxy-secret");
+  const forwarded = c.req.header("x-steward-client-ip")?.trim();
+  if (secret && provided && forwarded) {
+    const expectedBytes = Buffer.from(secret);
+    const providedBytes = Buffer.from(provided);
+    if (expectedBytes.length === providedBytes.length && timingSafeEqual(expectedBytes, providedBytes)) return forwarded;
+  }
   if (env.TRUST_PROXY === "true") {
     const vercel = c.req.header("x-vercel-forwarded-for")?.trim();
-    if (vercel) return vercel;
+    if (env.VERCEL && vercel) return vercel;
     const xff = c.req.header("x-forwarded-for");
     const hops = Number(env.TRUST_PROXY_HOPS ?? "1");
     if (xff && Number.isSafeInteger(hops) && hops > 0) {
