@@ -62,7 +62,7 @@
      test reads this file and fails if the two disagree, so a duration typed at a call site is a broken test
      rather than a style choice. `--settle-factor` is the share of the remaining distance a settling value
      covers per frame. */
-  --dur-micro: 150ms; /* hover, press, focus — 120–200 ms */
+  --dur-micro: 140ms; /* hover, press, focus — 120–200 ms */
   --dur-entrance: 420ms; /* one element arriving — 300–800 ms */
   --dur-ambient: 18000ms; /* one decorative layer drifting — 15–30 s */
   --ease-house: cubic-bezier(.22,1,.36,1);

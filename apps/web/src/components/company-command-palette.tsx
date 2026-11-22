@@ -9,6 +9,8 @@ import { buildPalette, kindBadge, loadSummary, paletteFor, rankPalette, stateLin
 import type { Agent, Approval, Run, Task } from "@/lib/types";
 import { useToast } from "./feedback";
 import { Pill, type Tone } from "./ui";
+import { WORKSPACE_ROUTES } from "@/lib/workspace-navigation";
+import type { MessageKey } from "@/lib/i18n";
 
 const KIND_TONE: Record<PaletteKind, Tone> = {
   decide: "warn",
@@ -44,7 +46,7 @@ function shortId(id: string): string {
  *     the real effect — including the cases where approving resumes nothing. If the rows cannot be loaded the
  *     palette says so and offers pages only, rather than an empty list that looks like "nothing to do".
  */
-export function CompanyCommandPalette({ companyId }: { companyId: string }) {
+export function CompanyCommandPalette({ companyId, quiet = false, destinations = [] }: { companyId: string; quiet?: boolean; destinations?: readonly { href: string; label: MessageKey; scope?: string }[] }) {
   const t = useT();
   const tf = useTf();
   const locale = useLocale();
@@ -63,6 +65,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const modalRef = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
@@ -84,8 +87,15 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
     }
   }, [companyId]);
 
-  const navOnly = useMemo(() => buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale]);
-  const actions = useMemo(() => (data ? paletteFor(data, query, picking ? { picking, locale } : { locale }) : navOnly), [data, locale, navOnly, picking, query]);
+  const navOnly = useMemo(() => quiet ? [
+    ...WORKSPACE_ROUTES.map((route): PaletteAction => ({ id: `nav:${route.suffix}`, kind: "navigate", label: t(route.label), detail: t("shell.companyMenu"), keywords: route.keywords, target: { kind: "navigate", href: `/app/c/${companyId}${route.suffix}` } })),
+    ...destinations.map((d): PaletteAction => ({ id: `nav:${d.href}`, kind: "navigate", label: t(d.label), detail: d.scope ? `${t("quiet.organization")} · ${d.scope}` : t("quiet.workspace"), keywords: `${d.href} ${d.scope ?? ""}`, target: { kind: "navigate", href: d.href } })),
+  ] : buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale, quiet, destinations, t]);
+  const actions = useMemo(() => {
+    if (!data) return navOnly;
+    const built = paletteFor(data, query, picking ? { picking, locale } : { locale });
+    return quiet && !picking ? [...built.filter((a) => a.kind !== "navigate"), ...navOnly] : built;
+  }, [data, locale, navOnly, picking, query, quiet]);
   const { matches, total } = useMemo(() => rankPalette(actions, query), [actions, query]);
 
   useEffect(() => {
@@ -200,6 +210,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
 
   useEffect(() => {
     if (!open) return;
+    modalRef.current?.showModal();
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       window.clearTimeout(id);
@@ -325,14 +336,15 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
         <kbd className="kbd mono shrink-0 border border-line px-1.5 py-0.5 text-[10px]">⌘K / Ctrl K</kbd>
       </button>
       {open && (
-        <div
-          className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] flex items-start justify-center bg-black/60 px-3 pt-[10vh]"
+        <dialog
+          ref={modalRef}
+          aria-labelledby="command-palette-title"
+          onCancel={(e) => { e.preventDefault(); backOut(); }}
+          className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] m-0 flex h-full max-h-none w-full max-w-none items-start justify-center border-0 bg-black/60 px-3 pt-[10vh] text-fg"
           onMouseDown={(e) => e.currentTarget === e.target && close()}
         >
           <section
             ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
             aria-labelledby="command-palette-title"
             onKeyDown={onDialogKeyDown}
             className="nb-dialog w-full max-w-xl overflow-hidden border border-line"
@@ -432,7 +444,7 @@ export function CompanyCommandPalette({ companyId }: { companyId: string }) {
               <span>{t("shell.paletteShortcuts")}</span>
             </footer>
           </section>
-        </div>
+        </dialog>
       )}
     </>
   );

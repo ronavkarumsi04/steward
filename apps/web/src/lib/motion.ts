@@ -36,7 +36,7 @@ export const BANDS: Record<Band, readonly [number, number]> = {
 /** The chosen value inside each band. Durations are quoted from here, never typed at a call site. */
 export const MOTION_MS = {
   /** Hover, press, focus. */
-  micro: 150,
+  micro: 140,
   /** One element arriving. Also `.enter` and `.rise-in` in the stylesheet. */
   entrance: 420,
   /** One decorative layer drifting. Also `--dur-ambient`. */

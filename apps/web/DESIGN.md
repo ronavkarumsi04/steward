@@ -1,5 +1,28 @@
 # Design
 
+## Quiet momentum workspace (redesign slice A)
+
+The authenticated `/app` family now uses Quiet momentum by default: Manrope with system/script fallbacks,
+white canvas, fog rail, pine ink, forest actions and sage selection. Light/dark semantic colors and the
+compatibility adapters for current components live in `src/app/app/quiet-workspace.css`; the navigation
+inventory lives in `src/lib/workspace-navigation.ts`. Preserve status words/icons as well as color.
+
+The 224px company rail has Overview, Approvals, Work, Team, Knowledge and Tools. Settings stays in the
+footer. Work/Knowledge/Tools expose contextual links at their existing URLs; command search includes
+every company destination and explicitly scoped workspace/organization links. Below 1024px, labeled
+Overview/Approvals/Work/Team/More navigation replaces the rail. More includes tools, knowledge, settings,
+company switching and account/organization destinations. Native modal dialogs provide focus containment,
+Escape dismissal and background inertness. Authority and backend actions are unchanged.
+
+Set the **web process** environment variable `STEWARD_WORKSPACE_SHELL=legacy` and restart/redeploy that
+process to restore the incumbent shell, colors and typography. Unset it (or use `quiet`) to return to the
+new shell. This is server-resolved per authenticated request, not a client-controlled auth/policy flag.
+No production environment is changed by this PR; any production configuration change needs owner approval.
+
+This is an intentional staged transition: current screen components get compatibility tokens/controls,
+not fictional prototype data. Decision/work/public/depth redesigns follow separately. The public/access
+family and the legacy opt-out continue to use the incumbent identity documented below until their slices.
+
 <!-- impeccable:design-schema 1 -->
 
 ## World

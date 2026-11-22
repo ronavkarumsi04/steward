@@ -99,6 +99,11 @@ export const NAV: ReadonlyArray<{ suffix: string; labelKey: MessageKey; label: s
   { suffix: "/knowledge", labelKey: "nav.knowledge", label: "Knowledge", keywords: "documents playbooks memory" },
   { suffix: "/graph", labelKey: "nav.graph", label: "Graph", keywords: "knowledge graph entities relations what we know" },
   { suffix: "/integrations", labelKey: "nav.integrations", label: "Integrations", keywords: "connections oauth api webhooks" },
+  { suffix: "/workflows", labelKey: "nav.workflows", label: "Workflows", keywords: "builder schedules triggers" },
+  { suffix: "/mcp", labelKey: "nav.marketplace", label: "Marketplace", keywords: "tools servers mcp" },
+  { suffix: "/browser", labelKey: "nav.browser", label: "Browser", keywords: "watch sessions" },
+  { suffix: "/code", labelKey: "nav.code", label: "Code", keywords: "repository changes" },
+  { suffix: "/site", labelKey: "nav.website", label: "Website", keywords: "site studio business" },
   { suffix: "/settings", labelKey: "nav.settings", label: "Settings", keywords: "autonomy policy provider models" },
 ];
 

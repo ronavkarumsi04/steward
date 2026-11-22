@@ -8,6 +8,7 @@ import type { Me } from "@/lib/types";
 import { Icon } from "./icons";
 import { ThemeToggle } from "./feedback";
 import { useT } from "./locale-provider";
+import { QuietTopNav } from "./workspace-shell";
 
 const ORG_LINKS = [
   ["providers", "top.providers", Icon.Providers],
@@ -16,7 +17,11 @@ const ORG_LINKS = [
   ["privacy", "top.privacy", Icon.Lock],
 ] as const;
 
-export function TopNav({ me, orgId }: { me: Me; orgId?: string }) {
+export function TopNav({ me, orgId, quiet = false }: { me: Me; orgId?: string; quiet?: boolean }) {
+  return quiet ? <QuietTopNav me={me} orgId={orgId} /> : <LegacyTopNav me={me} orgId={orgId} />;
+}
+
+function LegacyTopNav({ me, orgId }: { me: Me; orgId?: string }) {
   const t = useT();
   const router = useRouter();
   const path = usePathname();

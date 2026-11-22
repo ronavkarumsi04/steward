@@ -29,16 +29,6 @@ const TONES: Tone[] = ["neutral", "accent", "ok", "warn", "danger"];
 /** The statuses this product records, in the order they happen to a run. */
 const STATUSES = ["queued", "running", "succeeded", "failed", "cancelled", "needs_review", "waiting_approval", "waiting_budget"];
 
-/** An edge colour is a claim, not a decoration: this is what each one means, everywhere it appears. */
-const EDGES: Array<{ className: string; meaning: string }> = [
-  { className: "nb-left-red", meaning: "blocked, failed, or destructive" },
-  { className: "nb-left-yellow", meaning: "waiting on a person" },
-  { className: "nb-left-orange", meaning: "a risk worth knowing before it bites" },
-  { className: "nb-left-green", meaning: "verified working" },
-  { className: "nb-left-blue", meaning: "state, running work, the thing to read" },
-  { className: "nb-left-purple", meaning: "the system acting on its own" },
-];
-
 const SWATCHES: Array<[string, string]> = [
   ["bg", "the page"],
   ["panel", "a card"],
@@ -87,12 +77,12 @@ export default async function DesignPage() {
     <main className="mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-5 md:py-10">
       <header className="nb-hero rise-in">
         <p className="nb-section-label mb-2">DESIGN SYSTEM</p>
-        <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl">One house, on purpose.</h1>
+        <h1 className="desk-title">Workspace design system</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed">
           Every sample on this page is the real component, drawn by the real stylesheet. The durations, the
           ease, the bands and the frame-loop constant are imported from <span className="mono text-[13px]">lib/motion.ts</span>{" "}
           — the same numbers the app animates with, and the same numbers the tests read out of{" "}
-          <span className="mono text-[13px]">globals.css</span>.
+          <span className="mono text-[13px]">globals.css</span>. Use the header theme control to inspect the actual components in light, dark and system modes.
         </p>
       </header>
 
@@ -147,19 +137,11 @@ export default async function DesignPage() {
             <p className="text-sm font-semibold">.card-inset</p>
             <p className="mt-1 text-xs text-muted">A well inside a card: supporting evidence.</p>
           </div>
-          <div className="nb-panel-flat nb-left-purple p-3">
-            <p className="text-sm font-semibold">.nb-panel-flat + edge</p>
-            <p className="mt-1 text-xs text-muted">A section, with the claim it makes on its edge.</p>
+          <div className="nb-panel-flat p-3">
+            <p className="text-sm font-semibold">.nb-panel-flat</p>
+            <p className="mt-1 text-xs text-muted">An opaque, bordered supporting surface.</p>
           </div>
         </div>
-        <ul className="mt-4 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
-          {EDGES.map((edge) => (
-            <li key={edge.className} className={`nb-panel-flat ${edge.className} px-3 py-2`}>
-              <span className="mono font-semibold">{edge.className}</span>
-              <span className="text-muted"> — {edge.meaning}</span>
-            </li>
-          ))}
-        </ul>
       </Card>
 
       <Card title="Colour and text">
@@ -179,7 +161,7 @@ export default async function DesignPage() {
           ))}
         </ul>
         <div className="mt-4 space-y-2">
-          <p className="text-3xl font-black tracking-tight">Heading: the page's own claim</p>
+          <p className="desk-title">Heading: the work in context</p>
           <p className="text-base font-semibold">Section: what this part of the page is</p>
           <p className="text-sm">Body: what happened, and what you can do about it.</p>
           <p className="text-xs text-muted">Support: the number, the model, the timestamp behind it.</p>
@@ -220,6 +202,18 @@ export default async function DesignPage() {
             <div className="skeleton mt-2 h-8" />
           </div>
           <Empty icon={<Spinner label="Busy" />}>Empty states say what would fill them.</Empty>
+        </div>
+      </Card>
+
+      <Card title="Focus, errors and density" description="Tab through controls to inspect focus. These are component samples, not company records.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="design-error">Example outcome</label>
+            <input id="design-error" className="input w-full" aria-invalid="true" aria-describedby="design-error-note" defaultValue="" />
+            <p id="design-error-note" className="mt-2 text-sm text-danger">Enter an outcome before continuing.</p>
+            <button type="button" className="btn btn-primary mt-3">Review a deliberately long action label that wraps at narrow widths</button>
+          </div>
+          <div className="table-wrap"><table className="table"><caption className="p-3 text-left text-sm font-semibold">Density and long content samples</caption><thead><tr><th>State</th><th>Value</th></tr></thead><tbody><tr><td><StatusPill status="waiting_approval" /></td><td className="break-all">long-address-for-layout-review@example.com</td></tr><tr><td><StatusPill status="failed" /></td><td>USD 1,234,567.89</td></tr></tbody></table></div>
         </div>
       </Card>
 
