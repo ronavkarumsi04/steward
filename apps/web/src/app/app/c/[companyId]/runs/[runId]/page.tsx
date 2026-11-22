@@ -18,7 +18,7 @@ export default async function RunPage({ params, searchParams }: { params: Promis
       api.get<CompanyOverview>(`/companies/${companyId}`).catch(() => null),
     ]);
     if (!detail) notFound();
-    const task = detail.run.taskId ? await tryApi(() => api.get<{ task: Task }>(`/companies/${companyId}/tasks/${detail.run.taskId}`)) : null;
+    const task = detail.run.taskId ? await api.get<{ task: Task }>(`/companies/${companyId}/tasks/${detail.run.taskId}`).catch(() => null) : null;
     // Only same-company run filters survive into Back. No arbitrary return URL is trusted.
     const from = queryValue((await searchParams).from);
     const base = `/app/c/${companyId}/runs`;
