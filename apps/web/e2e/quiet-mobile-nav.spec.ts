@@ -28,18 +28,26 @@ async function assertNavigationFits(page: Page, rows: "one" | "multiple") {
       }),
       noOverlap: boxes.every((a, index) => boxes.slice(index + 1).every((b) =>
         a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)),
+      badgeClear: controls.every((control) => {
+        const badge = control.querySelector(".quiet-mobile-count")?.getBoundingClientRect();
+        const label = control.lastElementChild!.getBoundingClientRect();
+        const box = control.getBoundingClientRect();
+        return !badge || (badge.bottom <= label.top && badge.left >= box.left && badge.right <= box.right);
+      }),
       noOverflow: document.documentElement.scrollWidth <= window.innerWidth,
     };
   });
   expect(layout.labels).toEqual(["Overview", "Approvals", "Work", "Team", "More"]);
   expect(layout.wholeLabels).toBe(true);
   expect(layout.noOverlap).toBe(true);
+  expect(layout.badgeClear).toBe(true);
   expect(layout.noOverflow).toBe(true);
   if (rows === "one") expect(layout.rows).toBe(1);
   else expect(layout.rows).toBeGreaterThan(1);
 }
 
 test("Quiet mobile navigation reflows whole labels and reserves its changing height", async ({ page }) => {
+  test.skip(process.env.STEWARD_WORKSPACE_SHELL !== "quiet", "Requires an explicitly opted-in Quiet web process; legacy stays the default.");
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page);
@@ -61,11 +69,27 @@ test("Quiet mobile navigation reflows whole labels and reserves its changing hei
   const compactHeight = await nav.evaluate((element) => element.getBoundingClientRect().height);
   expect(compactHeight).toBeLessThan(90);
 
+  // Presentation-only fixture: exercise the real badge class without creating
+  // an approval (or a run). Native browser acceptance uses the same explicit fixture.
+  await nav.locator(":scope > a").nth(1).locator(".quiet-nav-icon").evaluate((element) => {
+    const badge = document.createElement("span");
+    badge.className = "quiet-mobile-count";
+    badge.textContent = "3";
+    element.append(badge);
+  });
+
   // Deterministic font-only stress for Chromium CI, not a substitute for native
   // Firefox 200% text-only zoom in the recorded browser acceptance check.
   await nav.locator(":scope > a, :scope > button").evaluateAll((controls) => {
     const sizes = controls.map((control) => parseFloat(getComputedStyle(control).fontSize));
     controls.forEach((control, index) => { (control as HTMLElement).style.fontSize = `${sizes[index]! * 2}px`; });
+  });
+  await nav.locator(".quiet-mobile-count").evaluate((element) => {
+    const style = getComputedStyle(element);
+    const size = parseFloat(style.fontSize) * 2;
+    const leading = parseFloat(style.lineHeight) * 2;
+    (element as HTMLElement).style.fontSize = `${size}px`;
+    (element as HTMLElement).style.lineHeight = `${leading}px`;
   });
   await assertNavigationFits(page, "multiple");
   expect(await nav.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(compactHeight);
@@ -78,6 +102,7 @@ test("Quiet mobile navigation reflows whole labels and reserves its changing hei
   await nav.locator(":scope > a, :scope > button").evaluateAll((controls) => {
     controls.forEach((control) => { (control as HTMLElement).style.removeProperty("font-size"); });
   });
+  await nav.locator(".quiet-mobile-count").evaluate((element) => { element.remove(); });
   await page.setViewportSize({ width: 390, height: 844 });
   await assertNavigationFits(page, "one");
   await expect.poll(() => nav.evaluate((element) => element.getBoundingClientRect().height)).toBe(compactHeight);
