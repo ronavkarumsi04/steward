@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import {
@@ -568,13 +570,13 @@ export function SiteStudio({ companyId, initial }: { companyId: string; initial:
                             The agent that puts these files on the internet
                           </label>
                           <div className="flex flex-wrap items-center gap-2">
-                            <select id={`ship-agent-${version.id}`} className="input w-auto" value={shipAgent} onChange={(event) => setShipAgent(event.target.value)}>
+                            <QuietSelect id={`ship-agent-${version.id}`} className="input w-auto" value={shipAgent} onChange={(event) => setShipAgent(event.target.value)}>
                               {initial.agents.map((agent) => (
                                 <option key={agent.id} value={agent.id}>
                                   {agent.name}
                                 </option>
                               ))}
-                            </select>
+                            </QuietSelect>
                             <button className="btn btn-sm btn-primary" disabled={busy !== null || !shipAgent} onClick={() => void ship(version.id, version.number)}>
                               {busy === `ship-${version.id}` ? <span className="spinner" aria-hidden="true" /> : null}
                               Start shipping
@@ -641,37 +643,37 @@ function ThemeControls({ model, disabled, onChange }: { model: SiteModelShape; d
           <label className="label" htmlFor="theme-accent">
             Accent
           </label>
-          <select id="theme-accent" className="input" value={model.theme.accent} disabled={disabled} onChange={(event) => set({ accent: event.target.value })}>
+          <QuietSelect id="theme-accent" className="input" value={model.theme.accent} disabled={disabled} onChange={(event) => set({ accent: event.target.value })}>
             {["indigo", "violet", "emerald", "amber", "rose", "slate", "cyan"].map((accent) => (
               <option key={accent} value={accent}>
                 {accent}
               </option>
             ))}
-          </select>
+          </QuietSelect>
         </div>
         <div>
           <label className="label" htmlFor="theme-font">
             Type
           </label>
-          <select id="theme-font" className="input" value={model.theme.font} disabled={disabled} onChange={(event) => set({ font: event.target.value })}>
+          <QuietSelect id="theme-font" className="input" value={model.theme.font} disabled={disabled} onChange={(event) => set({ font: event.target.value })}>
             {["sans", "serif", "mono"].map((font) => (
               <option key={font} value={font}>
                 {font}
               </option>
             ))}
-          </select>
+          </QuietSelect>
         </div>
         <div>
           <label className="label" htmlFor="theme-radius">
             Corners
           </label>
-          <select id="theme-radius" className="input" value={model.theme.radius} disabled={disabled} onChange={(event) => set({ radius: event.target.value })}>
+          <QuietSelect id="theme-radius" className="input" value={model.theme.radius} disabled={disabled} onChange={(event) => set({ radius: event.target.value })}>
             {["sharp", "soft", "round"].map((radius) => (
               <option key={radius} value={radius}>
                 {radius}
               </option>
             ))}
-          </select>
+          </QuietSelect>
         </div>
         <div className="sm:col-span-3">
           <label className="label" htmlFor="theme-dark">

@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import type { RoutingPolicy } from "@steward/schema";
@@ -59,11 +61,11 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin, quiet
           return (
             <form key={purpose} onSubmit={(e) => save(purpose, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[8rem_1fr_8rem_auto_auto]" data-purpose={purpose}>
               <div className="font-medium">{purpose}</div>
-              <SettingsField quiet={quiet} label={tf("routing.modelFor", { purpose })}><select name="explicit" className="input mono" defaultValue={current} aria-label={tf("routing.modelFor", { purpose })}>
+              <SettingsField quiet={quiet} label={tf("routing.modelFor", { purpose })}><QuietSelect name="explicit" className="input mono" defaultValue={current} aria-label={tf("routing.modelFor", { purpose })}>
                 <option value="">{t("routing.auto")}</option>
                 {models.filter((m) => purpose !== "embedding" || m.model.capabilities.embeddingDimensions !== undefined).map((m) => <option key={`${m.provider}::${m.model.id}`} value={`${m.provider}::${m.model.id}`}>{m.provider} / {m.model.id}</option>)}
-              </select></SettingsField>
-              <SettingsField quiet={quiet} label={t("routing.preference")}><select name="preference" className="input" defaultValue={pol?.requirements.preference ?? "balanced"} aria-label={t("routing.preference")}>{["balanced", "quality", "cost", "latency"].map((p) => <option key={p} value={p}>{t(`routing.pref.${p}` as MessageKey)}</option>)}</select></SettingsField>
+              </QuietSelect></SettingsField>
+              <SettingsField quiet={quiet} label={t("routing.preference")}><QuietSelect name="preference" className="input" defaultValue={pol?.requirements.preference ?? "balanced"} aria-label={t("routing.preference")}>{["balanced", "quality", "cost", "latency"].map((p) => <option key={p} value={p}>{t(`routing.pref.${p}` as MessageKey)}</option>)}</QuietSelect></SettingsField>
               <label className={`flex items-center gap-1 text-muted ${quiet ? "q-settings-check-label" : "text-xs"}`}><input type="checkbox" name="localOnly" defaultChecked={pol?.requirements.localOnly ?? false} /> {t("routing.localOnly")}</label>
               <button className="btn" disabled={!isAdmin}>{t("routing.save")}</button>
             </form>

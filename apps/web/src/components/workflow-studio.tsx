@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, browserApi } from "@/lib/api";
@@ -456,12 +458,12 @@ function NodeCard({
           </fieldset>
           <label className="block">
             <span className="label">Only one project</span>
-            <select className="input" disabled={!canManage} value={node.projectId ?? ""} onChange={(event) => onPatch({ projectId: event.target.value || null })}>
+            <QuietSelect className="input" disabled={!canManage} value={node.projectId ?? ""} onChange={(event) => onPatch({ projectId: event.target.value || null })}>
               <option value="">The whole company</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
-            </select>
+            </QuietSelect>
           </label>
         </div>
       )}
@@ -470,12 +472,12 @@ function NodeCard({
         <div className="space-y-3">
           <label className="block">
             <span className="label">Agent</span>
-            <select className="input" disabled={!canManage} value={node.agentId} onChange={(event) => onPatch({ agentId: event.target.value })} aria-label="Agent">
+            <QuietSelect className="input" disabled={!canManage} value={node.agentId} onChange={(event) => onPatch({ agentId: event.target.value })} aria-label="Agent">
               <option value="">Choose an agent</option>
               {agents.map((agent) => (
                 <option key={agent.id} value={agent.id} disabled={!agent.enabled}>{agent.name}{agent.enabled ? "" : " (disabled)"}</option>
               ))}
-            </select>
+            </QuietSelect>
           </label>
           <label className="block">
             <span className="label">What it should do</span>
@@ -529,7 +531,7 @@ function TriggerFields({
     <div className="space-y-3">
       <label className="block">
         <span className="label">Starts when</span>
-        <select
+        <QuietSelect
           className="input"
           disabled={!canManage}
           value={node.source}
@@ -545,7 +547,7 @@ function TriggerFields({
           <option value="signal">A business signal is recorded</option>
           <option value="event">A recorded event happens</option>
           <option value="schedule" disabled={!engine}>A time of day comes round (needs the workflow engine)</option>
-        </select>
+        </QuietSelect>
       </label>
 
       {node.source === "schedule" ? (

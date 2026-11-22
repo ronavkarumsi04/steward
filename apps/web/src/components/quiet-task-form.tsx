@@ -1,4 +1,6 @@
 "use client";
+
+import { QuietSelect } from "./quiet-select";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Agent, CompanyOverview, Goal, Task } from "@/lib/types";
@@ -33,9 +35,9 @@ export function QuietTaskForm({ companyId, agents, goals, overview, locale }: { 
   return <details id="delegate-work" className="q-delegate"><summary>{c.delegate}</summary><form onSubmit={create} className="q-task-form">
     <label>{c.desired}<input name="title" className="input" required maxLength={300} /></label>
     <label>{c.context}<textarea name="description" className="input" rows={4} maxLength={20000} /></label>
-    <div className="q-form-columns"><label>{c.assignment}<select className="input" name="agentId" value={agentId} onChange={(e) => setAgentId(e.target.value)}><option value="">{c.unassigned}</option>{agents.filter((a) => a.enabled).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-      <label>{c.goal}<select name="goalId" className="input"><option value="">{c.noGoal}</option>{goals.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}</select></label>
-      <label>{c.priority}<select name="priority" className="input" defaultValue="medium">{["low", "medium", "high", "urgent"].map((p) => <option key={p} value={p}>{t(locale, `priority.${p}` as MessageKey)}</option>)}</select></label></div>
+    <div className="q-form-columns"><label>{c.assignment}<QuietSelect className="input" name="agentId" value={agentId} onChange={(e) => setAgentId(e.target.value)}><option value="">{c.unassigned}</option>{agents.filter((a) => a.enabled).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</QuietSelect></label>
+      <label>{c.goal}<QuietSelect name="goalId" className="input"><option value="">{c.noGoal}</option>{goals.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}</QuietSelect></label>
+      <label>{c.priority}<QuietSelect name="priority" className="input" defaultValue="medium">{["low", "medium", "high", "urgent"].map((p) => <option key={p} value={p}>{t(locale, `priority.${p}` as MessageKey)}</option>)}</QuietSelect></label></div>
     <p>{c.autonomy}: L{overview.company.autonomyLevel}. {c.budget}: {recordedUsd(agent?.budgetUsdPerRun, locale) ?? c.unavailable}.</p><p>{c.createHint}</p>
     {message && <p role={uncertain ? "alert" : "status"}>{message}</p>}
     <div className="q-row"><button className="btn btn-primary" disabled={busy || uncertain}>{busy ? c.creating : c.create}</button>{uncertain && <a className="q-link" href="">{c.refresh}</a>}</div>

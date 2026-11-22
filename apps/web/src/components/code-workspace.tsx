@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
@@ -387,14 +389,14 @@ export function CodeWorkspace({
             <label className="label" htmlFor="code-branch">
               Branch
             </label>
-            <select id="code-branch" className="input" value={ref} onChange={(event) => void pickBranch(event.target.value)} disabled={!branches || busy !== null}>
+            <QuietSelect id="code-branch" className="input" value={ref} onChange={(event) => void pickBranch(event.target.value)} disabled={!branches || busy !== null}>
               {branches?.branches.map((branch) => (
                 <option key={branch.name} value={branch.name}>
                   {branch.name}
                   {branch.protected ? " (protected)" : ""}
                 </option>
               )) ?? <option value={ref}>{ref}</option>}
-            </select>
+            </QuietSelect>
 
             <input
               className="input mt-2"
@@ -642,14 +644,14 @@ export function CodeWorkspace({
                     Apply with
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
-                    <select id="code-apply-agent" className="input w-auto min-w-48" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+                    <QuietSelect id="code-apply-agent" className="input w-auto min-w-48" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
                       {initial.agents.length === 0 && <option value="">No enabled agent</option>}
                       {initial.agents.map((agent) => (
                         <option key={agent.id} value={agent.id}>
                           {agent.name}
                         </option>
                       ))}
-                    </select>
+                    </QuietSelect>
                     <button type="button" className="btn btn-primary" onClick={() => void applySession()} disabled={busy !== null || !agentId || detail.changes.length === 0}>
                       {busy === "apply" ? "Starting the run…" : "Apply session"}
                     </button>

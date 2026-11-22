@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useLocale, useT, useTf } from "./locale-provider";
 import type { MessageKey } from "@/lib/i18n";
@@ -85,9 +87,9 @@ export function ActivityCenter({ companyId, initial, projects, agents = [] }: { 
           <label className="sr-only" htmlFor="activity-search">{t("activity.search")}</label>
           <input id="activity-search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("activity.searchPlaceholder")} />
           <label className="sr-only" htmlFor="activity-actor">{t("activity.actor")}</label>
-          <select id="activity-actor" className="input" value={actor} onChange={(e) => setActor(e.target.value)}><option value="all">{t("activity.allActors")}</option>{actors.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+          <QuietSelect id="activity-actor" className="input" value={actor} onChange={(e) => setActor(e.target.value)}><option value="all">{t("activity.allActors")}</option>{actors.map((value) => <option key={value} value={value}>{value}</option>)}</QuietSelect>
           <label className="sr-only" htmlFor="activity-project">{t("activity.project")}</label>
-          <select id="activity-project" className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}><option value="all">{t("activity.allProjects")}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
+          <QuietSelect id="activity-project" className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}><option value="all">{t("activity.allProjects")}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</QuietSelect>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("activity.category")}>
           {VIEWS.map(([value, label]) => <button key={value} className={`btn btn-sm ${view === value ? "btn-primary" : ""}`} onClick={() => setView(value)}>{t(label)}{value === "attention" && attention.length ? ` · ${attention.length}` : ""}</button>)}

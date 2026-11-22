@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { LOCALE_NAMES, LOCALES, resolveLocale, t, type Locale } from "@/lib/i18n";
@@ -28,11 +30,11 @@ export function LanguageSelect({ current }: { current: string | null | undefined
   return (
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
       <label htmlFor="interface-language" className="text-sm font-medium">{t(locale, "account.language")}</label>
-      <select id="interface-language" className="input sm:w-56" value={value} disabled={state === "saving"} onChange={(e) => void save(e.target.value as Locale)}>
+      <QuietSelect id="interface-language" className="input sm:w-56" value={value} disabled={state === "saving"} onChange={(e) => void save(e.target.value as Locale)}>
         {LOCALES.map((l) => (
           <option key={l} value={l}>{LOCALE_NAMES[l]}</option>
         ))}
-      </select>
+      </QuietSelect>
       {state === "saved" ? <span className="text-xs text-muted">{t(locale, "account.languageSaved")}</span> : null}
       {error ? <span role="alert" className="text-xs text-danger">{error}</span> : null}
     </div>

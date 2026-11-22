@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
@@ -108,9 +110,9 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="block"><span className="label">Provider</span>
-            <select className="input" value={type} onChange={(e) => setType(e.target.value)} name="type">
+            <QuietSelect className="input" value={type} onChange={(e) => setType(e.target.value)} name="type">
               {types.map((t) => <option key={t.type} value={t.type}>{t.displayName}{t.local ? " (local)" : ""}</option>)}
-            </select></label>
+            </QuietSelect></label>
             {info?.docsUrl && <a className="mt-1 block text-xs text-accent hover:underline" href={info.docsUrl} target="_blank" rel="noreferrer">Provider docs ↗</a>}
             {info?.subscriptionNote && <p className="mt-1 text-xs text-warn">{info.subscriptionNote}</p>}
           </div>
@@ -127,9 +129,9 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
               {!devicesAvailable ? <p className="text-sm text-warn">Companions are not available. Reload before adding this provider.</p> : devices.length === 0 ? (
                 <p className="text-sm text-warn">No paired companion yet. Pair one in the Local Companions section below first; no secret is stored on the server.</p>
               ) : (
-                <select name="deviceId" className="input" required>
+                <QuietSelect name="deviceId" className="input" required>
                   {devices.map((d) => <option key={d.id} value={d.id}>{d.name}{d.online ? " (online)" : " (offline)"}</option>)}
-                </select>
+                </QuietSelect>
               )}
             </div>
           ) : (

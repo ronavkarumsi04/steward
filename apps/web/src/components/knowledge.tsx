@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useLocale, useT, useTf } from "./locale-provider";
 import type { MessageKey } from "@/lib/i18n";
@@ -270,7 +272,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
             <form key={`${open.id}:${open.version}:playbook`} onSubmit={saveDoc} className="mb-4 space-y-3 card-inset nb-left-purple">
               <input name="title" className="input" placeholder={t("knowledge.playbookTitlePlaceholder")} defaultValue={open.title} required disabled={!canManagePlaybooks} />
               <div className="grid gap-3 md:grid-cols-2">
-                <label className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.scope")}</span><select name="projectId" className="input" defaultValue={open.projectId ?? ""} disabled={!canManagePlaybooks}><option value="">{t("knowledge.companyWide")}</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.status}</option>)}</select></label>
+                <label className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.scope")}</span><QuietSelect name="projectId" className="input" defaultValue={open.projectId ?? ""} disabled={!canManagePlaybooks}><option value="">{t("knowledge.companyWide")}</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.status}</option>)}</QuietSelect></label>
                 <div className="text-sm"><span className="mb-1 block text-muted">{t("knowledge.agentRoles")} <span className="text-faint">{t("knowledge.noneAllRoles")}</span></span><div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-line bg-panel p-2">{AGENT_ROLES.map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="checkbox" name="agentKinds" value={value} defaultChecked={open.agentKinds.includes(value)} disabled={!canManagePlaybooks} /> <span>{t(label)}</span></label>)}</div></div>
               </div>
               <textarea name="content" className="input mono min-h-72" defaultValue={open.content ?? ""} placeholder={t("knowledge.playbookContentPlaceholder")} required disabled={!canManagePlaybooks} />
@@ -335,10 +337,10 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
         <Card title={t("knowledge.longTermMemory")} className="nb-left-pink">
           <p className="mb-4 text-sm leading-6 text-muted">{t("knowledge.memoryHelp")}</p>
           <form onSubmit={addMemory} className="mb-4 grid gap-2 md:grid-cols-[9rem_1fr_2fr_9rem_auto]">
-            <select name="kind" className="input" defaultValue="knowledge" aria-label={t("knowledge.kind")}>{MEMORY_KIND_CHOICES.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
+            <QuietSelect name="kind" className="input" defaultValue="knowledge" aria-label={t("knowledge.kind")}>{MEMORY_KIND_CHOICES.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</QuietSelect>
             <input name="title" className="input" placeholder={t("knowledge.memoryTitlePlaceholder")} required />
             <input name="content" className="input" placeholder={t("knowledge.memoryContentPlaceholder")} required />
-            <select name="importance" className="input" defaultValue="6" aria-label={t("knowledge.importance")}>{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <QuietSelect name="importance" className="input" defaultValue="6" aria-label={t("knowledge.importance")}>{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</QuietSelect>
             <button className="btn btn-primary">{t("knowledge.remember")}</button>
           </form>
           {selected.length === 2 && (
@@ -369,7 +371,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
                       <input name="title" className="input" defaultValue={m.title} placeholder={t("knowledge.titlePlaceholder")} />
                       <textarea name="content" className="input min-h-24" defaultValue={m.content} required />
                       <div className="flex flex-wrap items-center gap-2">
-                        <select name="importance" className="input w-40" defaultValue={String(m.importance)} aria-label={t("knowledge.importance")}>{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+                        <QuietSelect name="importance" className="input w-40" defaultValue={String(m.importance)} aria-label={t("knowledge.importance")}>{IMPORTANCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</QuietSelect>
                         <button type="button" className="btn" disabled={busy !== null} onClick={() => loadRevisions(m.id)}>{busy === `history:${m.id}` ? t("knowledge.loading") : t("knowledge.history")}</button>
                         <span className="flex-1" />
                         <button type="button" className="btn" onClick={() => { setCorrecting(null); setRevisions(null); setRevisionsFor(null); }}>{t("knowledge.cancel")}</button>

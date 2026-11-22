@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useLocale, useT, useTf } from "./locale-provider";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -182,7 +184,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
       {schedulesAvailable && <Card title={t("agents.schedules")} className={quiet ? undefined : "nb-left-orange"}>
         <p className="mb-3 text-sm text-muted">{t("agents.schedulesHelp")}</p>
         <fieldset disabled={quiet && (!isAdmin || !hydrated || busy)}><form onSubmit={(e) => { if (!quiet) return addSchedule(e); e.preventDefault(); void change(() => addSchedule(e)); }} className={quiet ? "q-schedule-form" : "mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]"}>
-          <ScheduleField quiet={quiet} label={t("agents.agent")}><select name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></ScheduleField>
+          <ScheduleField quiet={quiet} label={t("agents.agent")}><QuietSelect name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</QuietSelect></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.scheduleName")}><input name="name" className="input" placeholder={t("agents.scheduleNamePlaceholder")} required aria-label={t("agents.scheduleName")} /></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.cron")}><input name="cron" className="input mono" placeholder="0 9 * * MON" required aria-label={t("agents.cron")} /></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.timezone")}><input name="timezone" className="input" placeholder="UTC" aria-label={t("agents.timezone")} aria-invalid={quiet && scheduleFeedback?.field === "timezone" || undefined} aria-describedby={quiet && scheduleFeedback?.field === "timezone" ? "schedule-error" : undefined} /></ScheduleField>

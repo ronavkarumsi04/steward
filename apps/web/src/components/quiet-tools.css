@@ -21,6 +21,7 @@
    Eight pixels also clears the shell's 2px outline plus 3px offset at any text size. */
 .quiet-tools form label { display: block; }
 .quiet-tools form label > :is(input, select, textarea) { margin-block-start: 8px; }
+.quiet-tools form label > .q-reflow-select { margin-block-start: 8px; }
 .quiet-tools form label.label { margin-block-end: 8px; }
 .quiet-tools form :is(input, select, textarea) + :is(p, span, .help) { margin-block-start: 8px; }
 .quiet-tools :is(.flex, .grid) > * { min-width: 0; }
