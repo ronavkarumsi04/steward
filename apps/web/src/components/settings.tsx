@@ -7,6 +7,7 @@ import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
 import { OverclockToggle } from "./overclock";
 import { BrandKitSettings } from "./brand-kit-settings";
+import { SettingsField } from "./settings-field";
 import { Card, Empty, StatusPill, usd } from "./ui";
 import { useLocale, useT, useTf } from "./locale-provider";
 import { statusLabel, type MessageKey } from "@/lib/i18n";
@@ -207,11 +208,11 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             return (
               <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
                 <div><div className="font-medium">{t(`dimension.${d.id}` as MessageKey)}</div><div className="mono text-xs text-muted">{d.id}</div></div>
-                <select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select>
-                <select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select>
-                <input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} />
-                <input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} />
-                <input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} />
+                <SettingsField quiet={quiet} label={t("settings.mode")}><select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.maxRisk")}><select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perActionLabel")}><input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} /></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perDayLabel")}><input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} /></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.perDayCountLabel")}><input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} /></SettingsField>
                 <button className="btn" disabled={!isAdmin}>{t("settings.save")}</button>
               </form>
             );
@@ -221,7 +222,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
 
       <Card title={t("settings.budgets")} id="budgets" className={quiet ? "settings-anchor" : "nb-left-orange settings-anchor"}>
         {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
-          <div className="table-wrap mb-4"><table className="table text-sm">
+          <div className={quiet ? "q-settings-budget-table table-wrap mb-4" : "table-wrap mb-4"}><table className="table text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
             <tbody>
               {budgets.map((b) => (
@@ -232,12 +233,23 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             </tbody>
           </table></div>
         )}
+        {quiet && budgets.length > 0 && <ul className="q-settings-budget-list">{budgets.map((b) => <li key={`${b.category}-${b.period}`} className={`nb-panel-flat ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
+          <h3 className="font-semibold">{t(`budgetCategory.${b.category}` as MessageKey)}</h3>
+          <dl>{[
+            [t("settings.period"), t(`settings.${b.period}` as MessageKey)],
+            [t("settings.limit"), amount(b.limitUsd)],
+            [t("settings.spent"), amount(b.spentUsd)],
+            [t("settings.reserved"), amount(b.reservedUsd)],
+            [t("settings.remaining"), amount(b.remainingUsd, true)],
+            [t("settings.hardStop"), b.hardStop ? t("settings.yes") : t("settings.soft")],
+          ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        </li>)}</ul>}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
-          <select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select>
-          <select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select>
-          <input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} />
-          <input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={t("settings.softThreshold")} />
-          <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
+          <SettingsField quiet={quiet} label={t("settings.category")}><select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.period")}><select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.limitUsd")}><input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} /></SettingsField>
+          <SettingsField quiet={quiet} label={`${t("settings.softThreshold")} (%)`}><input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={quiet ? `${t("settings.softThreshold")} (%)` : t("settings.softThreshold")} /></SettingsField>
+          <label className={`flex items-center gap-1 text-muted ${quiet ? "q-settings-check-label" : "text-xs"}`}><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
           <button className="btn btn-primary" disabled={!isAdmin}>{t("settings.set")}</button>
         </form>
       </Card>
@@ -255,11 +267,11 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           ))}
         </ul>
         <form onSubmit={addGoal} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
-          <input name="title" className="input" placeholder={t("settings.goalPlaceholder")} required aria-label={t("settings.goalTitle")} />
-          <input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} />
-          <input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} />
-          <input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} />
-          <select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select>
+          <SettingsField quiet={quiet} label={t("settings.goalTitle")}><input name="title" className="input" placeholder={t("settings.goalPlaceholder")} required aria-label={t("settings.goalTitle")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.metric")}><input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.target")}><input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.horizonLabel")}><input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} /></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.priority")}><select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select></SettingsField>
           <button className="btn btn-primary">{t("settings.add")}</button>
         </form>
       </Card>

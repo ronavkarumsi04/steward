@@ -34,7 +34,13 @@
 .quiet-workspace .q-depth .btn { min-height: 44px; height: auto; }
 .quiet-workspace .q-depth .nb-panel-flat { background: var(--panel-2); border: 1px solid var(--line); }
 .quiet-workspace .q-depth .nb-panel-flat:has(> input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.quiet-workspace .q-depth form[data-dimension], .quiet-workspace .q-depth form[data-purpose] { padding: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.quiet-workspace .q-depth form[data-dimension], .quiet-workspace .q-depth form[data-purpose] { padding: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.q-settings-field { display: grid; gap: 6px; min-width: 0; }
+.quiet-workspace .q-depth .q-settings-field > .label { margin: 0; }
+.quiet-workspace .q-depth .q-settings-check-label { font-size: max(14px, .875rem); }
+.q-settings-budget-list { display: none; }
+.q-depth #budgets > form, .q-depth #goals > form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; }
+.quiet-workspace .q-depth #brand-kit label:has(input[type="radio"]) { border-radius: 8px; }
 .q-depth form[data-dimension] > :first-child, .q-depth form[data-purpose] > :first-child { grid-column: 1 / -1; }
 .q-depth form[data-dimension] > button, .q-depth form[data-purpose] > button { justify-self: end; }
 .q-depth-notice { padding: 16px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--panel-2); color: var(--fg-2); font-size: max(14px, .875rem); }
@@ -87,7 +93,7 @@
 .q-gallery .q-depth-content > section { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
 .q-gallery section > h2 { margin-bottom: 16px; }
 .q-gallery section > p { margin-bottom: 20px; color: var(--muted); }
-@media (min-width: 1440px) { .quiet-workspace .q-depth form[data-dimension] { grid-template-columns: minmax(120px, 1.5fr) repeat(5, minmax(0, 1fr)) auto; }.q-depth form[data-dimension] > :first-child { grid-column: auto; } }
+@media (min-width: 1440px) { .quiet-workspace .q-depth form[data-dimension] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 767px) {
   .quiet-workspace .q-depth { padding-top: 24px; padding-bottom: 40px; }
   .quiet-workspace .q-depth-heading { flex-direction: column; gap: 16px; padding-bottom: 24px; margin-bottom: 24px; }
@@ -101,6 +107,14 @@
   .q-depth-content { gap: 24px; margin-top: 24px; }
   .q-depth-content :is(section, form, [id]) { scroll-margin-top: calc(var(--depth-nav-height, 96px) + 16px); }
   .q-depth form[data-dimension], .q-depth form[data-purpose] { grid-template-columns: minmax(0, 1fr) !important; }
+  .q-depth #budgets > form, .q-depth #goals > form { grid-template-columns: minmax(0, 1fr); }
+  .q-settings-budget-table { display: none; }
+  .q-settings-budget-list { display: grid; gap: 12px; margin-bottom: 24px; }
+  .q-settings-budget-list > li { padding: 16px; font-size: max(14px, .875rem); }
+  .q-settings-budget-list dl { margin-top: 12px; display: grid; gap: 8px; }
+  .q-settings-budget-list dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+  .q-settings-budget-list dt { color: var(--muted); overflow-wrap: normal; }
+  .q-settings-budget-list dd { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .q-depth form[data-dimension] > button, .q-depth form[data-purpose] > button { justify-self: stretch; }
   .q-depth-new ol[aria-label="Progress"] { gap: 12px; }
   .q-depth-new ol[aria-label="Progress"] li > span:last-child { flex-wrap: wrap; align-items: start; }
