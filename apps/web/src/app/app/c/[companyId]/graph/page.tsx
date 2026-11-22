@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getLocale, serverApi, tryApi } from "@/lib/server";
 import type { GraphRead } from "@/lib/types";
@@ -6,6 +7,7 @@ import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { PageHeader } from "@/components/ui";
 import { QuietKnowledge } from "@/components/quiet-knowledge";
 import { workspaceShell } from "@/lib/workspace-theme";
+import { DepthLoading } from "@/components/quiet-depth";
 
 export const metadata: Metadata = { title: "Graph" };
 
@@ -23,7 +25,8 @@ export default async function GraphPage({ params }: { params: Promise<{ companyI
   const { companyId } = await params;
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <QuietKnowledge companyId={companyId} api={api} locale={await getLocale()} tab="connections" />;
+    const locale = await getLocale();
+    return <Suspense fallback={<DepthLoading locale={locale} />}><QuietKnowledge companyId={companyId} api={api} locale={locale} tab="connections" /></Suspense>;
   }
   const graph = await tryApi(() => api.get<GraphRead>(`/companies/${companyId}/graph`));
   if (!graph) notFound();
