@@ -804,8 +804,8 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
     return unique([...next, ...requested!.filter((tool) => !allowlistPermits(next, tool))]);
   }
 
-  const revokeAll = () => {
-    const remaining = allowlist.filter((pattern) => !inNamespace(pattern));
+  const revokeAll = (patterns: readonly string[] = allowlist) => {
+    const remaining = patterns.filter((pattern) => pattern.startsWith("!") || !inNamespace(pattern));
     return unique([...remaining, ...(serverTools.some((tool) => allowlistPermits(remaining, tool)) || allowlistPermits(remaining, wildcard) ? [`!${wildcard}`] : [])]);
   };
   if (toolNames === null) return revokeAll();
@@ -813,5 +813,5 @@ export function applyGrant(input: { allowlist: readonly string[]; slug: string; 
   const revoked = new Set(requested!);
   const remaining = allowlist.filter((pattern) => !revoked.has(pattern));
   const next = unique([...remaining, ...requested!.filter((tool) => allowlistPermits(remaining, tool)).map((tool) => `!${tool}`)]);
-  return requested!.length && !serverTools.some((tool) => allowlistPermits(next, tool)) ? revokeAll() : next;
+  return requested!.length && !serverTools.some((tool) => allowlistPermits(next, tool)) ? revokeAll(next) : next;
 }

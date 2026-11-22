@@ -2812,7 +2812,7 @@ describe("mcp marketplace", () => {
       for (const tool of tools) expect((await me.api.call("POST", `${path}/grant`, { agentId, toolNames: [tool], granted: false })).status).toBe(200);
       const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, actor: { type: "system", component: "exhausted-grant-test" } };
       const stored = (await services.agents.get(scope, agentId))!.toolAllowlist;
-      expect(stored).toEqual([...other, ...(broad ? ["!mcp.a_b.*"] : [])]);
+      expect(stored).toEqual([...other, ...tools.map((tool) => `!${tool}`), ...(broad ? ["!mcp.a_b.*"] : [])]);
       agents.push({ id: agentId, allowlist: stored });
     }
     expect((await me.api.call("POST", `${path}/inspect`, {})).status).toBe(200);
@@ -2826,6 +2826,48 @@ describe("mcp marketplace", () => {
       expect(permitted.some((tool) => tool.startsWith("mcp.a_b."))).toBe(false);
       expect(permitted).toContain("web.search");
       expect(refreshed.tools.every((tool) => !tool.grantedTo.some((grant) => grant.agentId === agent.id))).toBe(true);
+    }
+  }, 60_000);
+
+  d("keeps a disappeared tool denied through collapse, grant-one and refresh", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const path = `/companies/${me.companyId}/mcp/${installed.body.server.id}`;
+    await me.api.json("POST", `${path}/inspect`, {});
+    const x = "mcp.a_b.lookup_invoice";
+    const y = "mcp.a_b.reschedule";
+    const agents = [];
+    for (const broad of ["mcp.*", "*"]) {
+      const created = await me.api.json<{ agent: { id: string } }>("POST", `/companies/${me.companyId}/agents`, { kind: "research", name: `Historical ${broad}`, toolAllowlist: [broad] });
+      const agentId = created.body.agent.id;
+      expect((await me.api.call("POST", `${path}/grant`, { agentId, toolNames: [x], granted: false })).status).toBe(200);
+      agents.push({ id: agentId });
+    }
+    await core.pool.query("DELETE FROM mcp_tools WHERE server_id=$1 AND tool_name=$2", [installed.body.server.id, x]);
+    const remaining = (await me.read()).body.servers[0]!.tools.map((tool) => tool.toolName);
+    expect(remaining).toHaveLength(5);
+    expect(remaining).not.toContain(x);
+    for (const agent of agents) {
+      for (const tool of remaining) expect((await me.api.call("POST", `${path}/grant`, { agentId: agent.id, toolNames: [tool], granted: false })).status).toBe(200);
+      const granted = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `${path}/grant`, { agentId: agent.id, toolNames: [y], granted: true });
+      expect(granted.status).toBe(200);
+      expect(granted.body.agent.toolAllowlist).toContain(`!${x}`);
+      expect(granted.body.agent.toolAllowlist).not.toContain(`!${y}`);
+    }
+    expect((await me.api.call("POST", `${path}/inspect`, {})).status).toBe(200);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, actor: { type: "system", component: "historical-deny-test" } };
+    const scoped = services.forScope(scope);
+    const registry = await registryWithMcpTools(buildToolRegistry(), scoped);
+    expect(registry.get(x)).toBeDefined();
+    const refreshed = (await me.read()).body.servers[0]!;
+    expect(refreshed.tools).toHaveLength(6);
+    for (const agent of agents) {
+      const run = await services.runs.create(scope, { agentId: agent.id, trigger: { kind: "user", instruction: "Check refreshed tools." } });
+      const context = await new AgentRuntime(scoped, registry).buildContext(run.id);
+      expect(context.toolNames).not.toContain(x);
+      expect(context.toolNames).toContain(y);
+      expect(refreshed.tools.find((tool) => tool.toolName === x)!.grantedTo.some((grant) => grant.agentId === agent.id)).toBe(false);
+      expect(refreshed.tools.find((tool) => tool.toolName === y)!.grantedTo.some((grant) => grant.agentId === agent.id)).toBe(true);
     }
   }, 60_000);
 
