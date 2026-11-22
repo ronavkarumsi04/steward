@@ -43,5 +43,5 @@ export function QuietDepthLayout({ quiet, navigation, children }: { quiet: boole
 }
 
 export function QuietDepthLoading({ label }: { label: string }) {
-  return <div className="q-depth q-depth-page" role="status" aria-label={label}><div className="q-depth-heading"><div className="skeleton h-8 w-48" /></div><div className="q-depth-layout"><div className="skeleton h-48" /><div className="space-y-6"><div className="skeleton h-64" /><div className="skeleton h-48" /></div></div><span className="sr-only">{label}</span></div>;
+  return <div className="q-depth q-depth-page" role="status" aria-label={label}><div className="q-depth-heading"><div className="skeleton h-8 w-48 max-w-full" /></div><div className="q-depth-layout"><div className="skeleton h-48" /><div className="space-y-6"><div className="skeleton h-64" /><div className="skeleton h-48" /></div></div><span className="sr-only">{label}</span></div>;
 }
