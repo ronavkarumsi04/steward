@@ -175,6 +175,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const deps = c.get("deps");
     const run = await deps.services.runs.get(scope, param(c, "id"));
     if (!run) throw new HttpError(404, "not_found");
+    if (!["succeeded", "failed", "needs_review"].includes(run.status)) await deps.services.approvals.cancelForRun(scope, run.id);
     const signalled = deps.workflows ? await deps.workflows.cancelRun(run.id, body.reason) : false;
     // With no workflow to signal, a run in a cancellable state is stopped here and now. The two outcomes are
     // not the same thing to the person who pressed the button, so the response says which one happened and
@@ -254,7 +255,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/approvals/:id/decide", tag: "approvals", summary: "Approve or deny; resumes the paused workflow", body: z.object({ status: z.enum(["approved", "denied"]), note: z.string().max(2000).optional(), editedPayload: z.record(z.string(), z.unknown()).optional(), expectedPayload: z.record(z.string(), z.unknown()).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
     const a = await c.get("deps").services.approvals.resolve(scope, param(c, "id"), body);
-    if (!a) throw new HttpError(409, "not_pending", "Approval is no longer pending or the reviewed payload changed");
+    if (!a) throw new HttpError(409, "not_pending", "Approval is closed, its run has finished, or the reviewed payload changed");
     return c.json({ approval: a });
   });
 

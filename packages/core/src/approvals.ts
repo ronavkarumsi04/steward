@@ -1,6 +1,19 @@
-import { and, desc, eq, gt, lt, inArray } from "drizzle-orm";
-import { agentRuns, approvals, auditLog, emitEvent, scoped, tasks, type Db } from "@steward/db";
+import { and, desc, eq, gt, lt, inArray, sql } from "drizzle-orm";
+import { agentRuns, approvals, auditLog, emitEvent, scoped, tasks, type Db, type DbOrTx } from "@steward/db";
 import type { ApprovalRequest, ApprovalStatus, TenantScope } from "@steward/schema";
+
+const runOpen = sql`not exists (select 1 from ${agentRuns} where ${agentRuns.id} = ${approvals.runId} and ${agentRuns.status} in ('cancelled', 'failed', 'succeeded'))`;
+
+export async function cancelRunApprovals(db: DbOrTx, scope: TenantScope, runId: string) {
+  await db.select({ id: agentRuns.id }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, runId))).for("update");
+  const rows = await db.update(approvals).set({ status: "cancelled", resolvedAt: new Date(), resolution: { note: "The run was cancelled before a decision was made." } })
+    .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.runId, runId), eq(approvals.status, "pending"))).returning();
+  for (const row of rows) {
+    await emitEvent(db, { organizationId: row.organizationId, companyId: row.companyId, type: "approval.resolved", actor: scope.actor, payload: { approvalId: row.id, status: "cancelled", action: row.action, reason: "run cancelled" }, correlation: { runId } });
+    await db.insert(auditLog).values({ organizationId: row.organizationId, companyId: row.companyId, actor: scope.actor as Record<string, unknown>, action: "approval.cancelled", target: row.id, metadata: { action: row.action, risk: row.risk, runId } });
+  }
+  return rows.length;
+}
 
 /** Told, after the transaction commits, that a person is now being waited on. Best effort; never the record. */
 export interface ApprovalNotifier {
@@ -117,11 +130,13 @@ export class ApprovalService {
     if (scope.actor.type !== "user") throw new Error("Only users can resolve approvals");
     const resolvedBy = scope.actor.userId;
     const a = await this.db.transaction(async (tx) => {
+      const [pending] = await tx.select({ runId: approvals.runId }).from(approvals).where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id)));
+      if (pending?.runId) await tx.select({ id: agentRuns.id }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, pending.runId))).for("update");
       const [row] = await tx
         .update(approvals)
         .set({ status: decision.status, resolvedBy, resolvedAt: new Date(), resolution: { note: decision.note ?? "", editedPayload: decision.editedPayload ?? null } })
         // Optional for older callers. JSONB equality makes reviewed payload + pending + expiry one atomic guard.
-        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending"), gt(approvals.expiresAt, new Date()), decision.expectedPayload ? eq(approvals.payload, decision.expectedPayload) : undefined))
+        .where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.id, id), eq(approvals.status, "pending"), runOpen, gt(approvals.expiresAt, new Date()), decision.expectedPayload ? eq(approvals.payload, decision.expectedPayload) : undefined))
         .returning();
       if (!row) return null;
       await emitEvent(tx, { organizationId: scope.organizationId, companyId: scope.companyId, type: "approval.resolved", actor: scope.actor, payload: { approvalId: id, status: decision.status, action: row.action }, correlation: { runId: row.runId ?? "" } });
@@ -167,7 +182,11 @@ export class ApprovalService {
   }
 
   async pendingCount(scope: TenantScope) {
-    const rows = await this.db.select({ id: approvals.id }).from(approvals).where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.status, "pending")));
+    const rows = await this.db.select({ id: approvals.id }).from(approvals).where(scoped(scope, { organizationId: approvals.organizationId, companyId: approvals.companyId }, eq(approvals.status, "pending"), runOpen));
     return rows.length;
+  }
+
+  async cancelForRun(scope: TenantScope, runId: string) {
+    return this.db.transaction((tx) => cancelRunApprovals(tx, scope, runId));
   }
 }

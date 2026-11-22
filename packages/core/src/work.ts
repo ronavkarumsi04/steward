@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { agentRunSteps, agentRuns, agentSchedules, agents, aiCalls, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
 import { EXPLICIT_NO_TOOLS, canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
+import { cancelRunApprovals } from "./approvals.js";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export const AGENT_TOOL_ALLOWLIST_LIMIT = 200;
@@ -276,6 +277,7 @@ export class RunService {
       if (["succeeded", "failed", "cancelled", "needs_review"].includes(status)) set.finishedAt = new Date();
       const [r] = await tx.update(agentRuns).set(set).where(scoped(scope, { organizationId: agentRuns.organizationId, companyId: agentRuns.companyId }, eq(agentRuns.id, id))).returning();
       if (!r) return null;
+      if (status === "cancelled") await cancelRunApprovals(tx, scope, id);
       if (set.finishedAt) {
         const finishedAt = set.finishedAt as Date;
         const interrupted = await tx.update(agentRunSteps).set({ status: "failed", error: "Run finished before this step completed", finishedAt, durationMs: sql`greatest(0, floor(extract(epoch from (${finishedAt.toISOString()}::timestamptz - ${agentRunSteps.startedAt})) * 1000))::int` }).where(scoped(scope, { organizationId: agentRunSteps.organizationId, companyId: agentRunSteps.companyId }, eq(agentRunSteps.runId, id), eq(agentRunSteps.status, "running"))).returning();

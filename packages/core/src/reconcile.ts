@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { agentRuns, approvals, emitEvent, tasks, type Db } from "@steward/db";
 import type { RunStatus } from "@steward/schema";
-import type { ApprovalSignal } from "./approvals.js";
+import { cancelRunApprovals, type ApprovalSignal } from "./approvals.js";
 
 /** Reconciliation acts as the deployment itself, not as any one tenant's user or agent. */
 type Scope = { organizationId: string; companyId: string };
@@ -197,15 +197,19 @@ export class ReconcileService {
 
     const runIds = pending.map((a) => a.runId).filter((id): id is string => Boolean(id));
     const finished = runIds.length
-      ? new Set(
-          (await this.db.select({ id: agentRuns.id }).from(agentRuns).where(and(inArray(agentRuns.id, runIds), inArray(agentRuns.status, TERMINAL)))).map((r) => r.id),
+      ? new Map(
+          (await this.db.select({ id: agentRuns.id, status: agentRuns.status }).from(agentRuns).where(and(inArray(agentRuns.id, runIds), inArray(agentRuns.status, TERMINAL)))).map((r) => [r.id, r.status]),
         )
-      : new Set<string>();
+      : new Map<string, string>();
 
     let expired = 0;
     for (const approval of pending) {
       const orphaned = approval.runId ? finished.has(approval.runId) : false;
       if (!orphaned) continue;
+      if (finished.get(approval.runId!) === "cancelled") {
+        expired += await this.db.transaction((tx) => cancelRunApprovals(tx, { organizationId: approval.organizationId, companyId: approval.companyId, actor: RECONCILER }, approval.runId!));
+        continue;
+      }
       const outcome = await this.db.transaction(async (tx) => {
         const [row] = await tx
           .update(approvals)
