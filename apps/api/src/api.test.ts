@@ -2487,6 +2487,27 @@ describe("mcp marketplace", () => {
     expect(updated.body.agent.toolAllowlist).toEqual(["mcp.local_protocol_check.*"]);
   }, 60_000);
 
+  d("writes legacy per-tool grants only when one recorded interpretation exists", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${installed.body.server.id}/inspect`, {});
+    const legacy = "mcp.a-b.mcp.a_b.x";
+    const collapsed = "mcp.a_b.x";
+    const literal = "mcp.a_b.mcp.a_b.x";
+    await core.pool.query("UPDATE mcp_tools SET tool_name=$1 WHERE server_id=$2 AND name='lookup_invoice'", [collapsed, installed.body.server.id]);
+    const created = await me.api.json<{ agent: { id: string; toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/agents`, { kind: "custom", name: "Legacy interpretations", toolAllowlist: [legacy] });
+    expect(created.body.agent.toolAllowlist).toEqual([collapsed]);
+    const update = (toolAllowlist: string[]) => me.api.json<{ agent: { toolAllowlist: string[] } }>("PATCH", `/companies/${me.companyId}/agents/${created.body.agent.id}`, { toolAllowlist });
+    await core.pool.query("UPDATE mcp_tools SET tool_name=$1 WHERE server_id=$2 AND name='lookup_invoice'", [literal, installed.body.server.id]);
+    expect((await update([legacy])).body.agent.toolAllowlist).toEqual([literal]);
+    await core.pool.query("UPDATE mcp_tools SET tool_name=$1 WHERE server_id=$2 AND name='reschedule'", [collapsed, installed.body.server.id]);
+    expect((await update([legacy, "mcp.a-b.missing"])).body.agent.toolAllowlist).toEqual([]);
+    expect((await update(["mcp.a-b.mcp.a_b.mcp.a_b.x"])).body.agent.toolAllowlist).toEqual([literal]);
+    const alias = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
+    await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [alias.body.server.id]);
+    expect((await update(["web.*", "mcp.a-b.*", legacy])).body.agent.toolAllowlist).toEqual(["web.*"]);
+  }, 60_000);
+
   d("refuses namespace aliases and fails closed on stored collisions without losing other tools", async () => {
     const me = await marketplace();
     const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));

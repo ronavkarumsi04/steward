@@ -1,31 +1,27 @@
-WITH RECURSIVE entries AS (
-  SELECT a.id, e.ordinality AS position, e.value AS original,
+WITH entries AS (
+  SELECT a.id, a.company_id, e.ordinality AS position, e.value AS original,
     CASE WHEN e.value ~ '^mcp\.[^.]+\..+$'
       THEN 'mcp.' || regexp_replace(lower(split_part(e.value, '.', 2)), '[^a-z0-9_]', '_', 'g')
       ELSE NULL END AS namespace,
-    CASE WHEN e.value ~ '^mcp\.[^.]+\..+$'
-      THEN substring(e.value FROM '^mcp\.[^.]+\.(.+)$')
-      ELSE e.value END AS rest
+    substring(e.value FROM '^mcp\.[^.]+\.(.+)$') AS rest
   FROM agents a
   CROSS JOIN LATERAL jsonb_array_elements_text(a.tool_allowlist) WITH ORDINALITY AS e(value, ordinality)
-  WHERE NOT (e.value ~ '^mcp\.[^.]+\..+$'
-    AND split_part(e.value, '.', 2) <> regexp_replace(lower(split_part(e.value, '.', 2)), '[^a-z0-9_]', '_', 'g')
-    AND (SELECT count(*) FROM mcp_servers s WHERE s.company_id = a.company_id
-      AND regexp_replace(lower(s.slug), '[^a-z0-9_]', '_', 'g') = regexp_replace(lower(split_part(e.value, '.', 2)), '[^a-z0-9_]', '_', 'g')) > 1)
-), collapsed AS (
-  SELECT id, position, original, namespace, rest FROM entries
-  UNION ALL
-  SELECT id, position, original, namespace, substring(rest FROM length(namespace) + 2)
-  FROM collapsed
-  WHERE namespace IS NOT NULL AND namespace <> 'mcp.' || split_part(original, '.', 2)
-    AND starts_with(rest, namespace || '.')
-), canonical AS (
-  SELECT id, position, CASE WHEN namespace IS NULL THEN original ELSE namespace || '.' || rest END AS entry
-  FROM collapsed
-  WHERE namespace IS NULL OR namespace = 'mcp.' || split_part(original, '.', 2)
-    OR NOT starts_with(rest, namespace || '.')
+), resolved AS (
+  SELECT e.*, CASE
+    WHEN namespace IS NULL OR namespace = 'mcp.' || split_part(original, '.', 2) THEN original
+    WHEN (SELECT count(*) FROM mcp_servers s WHERE s.company_id = e.company_id
+      AND 'mcp.' || regexp_replace(lower(s.slug), '[^a-z0-9_]', '_', 'g') = e.namespace) > 1 THEN NULL
+    WHEN rest = '*' THEN namespace || '.*'
+    ELSE (
+      SELECT CASE WHEN count(DISTINCT t.tool_name) = 1 THEN min(t.tool_name) ELSE NULL END
+      FROM mcp_servers s JOIN mcp_tools t ON t.server_id = s.id AND t.company_id = s.company_id
+      WHERE s.company_id = e.company_id AND s.slug = lower(split_part(e.original, '.', 2))
+        AND (t.tool_name = e.namespace || '.' || e.rest
+          OR (starts_with(e.rest, e.namespace || '.') AND t.tool_name = e.rest))
+    ) END AS entry
+  FROM entries e
 ), deduped AS (
-  SELECT id, entry, min(position) AS position FROM canonical GROUP BY id, entry
+  SELECT id, entry, min(position) AS position FROM resolved WHERE entry IS NOT NULL GROUP BY id, entry
 ), rewritten AS (
   SELECT a.id, coalesce(jsonb_agg(d.entry ORDER BY d.position) FILTER (WHERE d.entry IS NOT NULL), '[]'::jsonb) AS allowlist
   FROM agents a LEFT JOIN deduped d ON d.id = a.id GROUP BY a.id

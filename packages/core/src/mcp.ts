@@ -731,7 +731,7 @@ export class McpService {
     const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([namespace]) => namespace));
     const collisions = new Set(rows.filter((tool) => ambiguous.has(tool.toolName.split(".").slice(0, 2).join("."))).map((tool) => tool.toolName));
     if (collisions.size) console.warn("MCP tools omitted because multiple servers offer the same name", [...collisions]);
-    return servers.map((server) => ({
+    return servers.filter((server) => server.enabled).map((server) => ({
       install: installOf(server),
       tools: rows
         .filter((tool) => server.enabled && !ambiguous.has(mcpNamespace(server.slug)) && tool.serverId === server.id && tool.enabled && !collisions.has(tool.toolName))
@@ -774,7 +774,7 @@ export function grantedBy(allowlist: readonly string[], toolName: string): strin
  */
 export function applyGrant(input: { allowlist: readonly string[]; slug: string; toolNames: string[] | null; serverTools: readonly string[]; granted: boolean }): string[] {
   const { slug, toolNames, serverTools, granted } = input;
-  const allowlist = [...new Set(input.allowlist.map(canonicalizeMcpAllowlistEntry))];
+  const allowlist = [...new Set(input.allowlist.map((entry) => canonicalizeMcpAllowlistEntry(entry, serverTools)).filter((entry): entry is string => entry !== null))];
   const prefix = `${mcpNamespace(slug)}.`;
   const wildcard = mcpToolPattern(slug);
   const unique = (patterns: string[]) => [...new Set(patterns)];

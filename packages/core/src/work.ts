@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
+import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
-import { canonicalizeMcpAllowlistEntry } from "@steward/tools";
+import { canonicalizeMcpAllowlistEntry, mcpNamespace } from "@steward/tools";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -123,16 +123,28 @@ export class AgentService {
     return a ?? null;
   }
   async create(scope: TenantScope, input: { kind: AgentKind; name: string; description?: string; systemPrompt?: string; toolAllowlist?: string[]; routingPolicy?: Record<string, unknown>; maxIterations?: number; budgetUsdPerRun?: number }) {
-    const [a] = await this.db.insert(agents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, kind: input.kind, name: input.name, description: input.description ?? "", systemPrompt: input.systemPrompt ?? "", toolAllowlist: [...new Set((input.toolAllowlist ?? []).map(canonicalizeMcpAllowlistEntry))], routingPolicy: input.routingPolicy ?? {}, maxIterations: input.maxIterations ?? 24, budgetUsdPerRun: input.budgetUsdPerRun?.toFixed(4) }).returning();
+    const toolAllowlist = await this.canonicalAllowlist(scope, input.toolAllowlist ?? []);
+    const [a] = await this.db.insert(agents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, kind: input.kind, name: input.name, description: input.description ?? "", systemPrompt: input.systemPrompt ?? "", toolAllowlist, routingPolicy: input.routingPolicy ?? {}, maxIterations: input.maxIterations ?? 24, budgetUsdPerRun: input.budgetUsdPerRun?.toFixed(4) }).returning();
     return a!;
   }
   async update(scope: TenantScope, id: string, patch: Partial<{ name: string; description: string; systemPrompt: string; enabled: boolean; toolAllowlist: string[]; routingPolicy: Record<string, unknown>; maxIterations: number; budgetUsdPerRun: number | null; config: Record<string, unknown> }>) {
     const set: Record<string, unknown> = { ...patch, updatedAt: new Date() };
-    if (patch.toolAllowlist !== undefined) set.toolAllowlist = [...new Set(patch.toolAllowlist.map(canonicalizeMcpAllowlistEntry))];
+    if (patch.toolAllowlist !== undefined) set.toolAllowlist = await this.canonicalAllowlist(scope, patch.toolAllowlist);
     if (patch.budgetUsdPerRun !== undefined) set.budgetUsdPerRun = patch.budgetUsdPerRun === null ? null : patch.budgetUsdPerRun.toFixed(4);
     const [a] = await this.db.update(agents).set(set).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }, eq(agents.id, id))).returning();
     if (a) await emitEvent(this.db, { organizationId: scope.organizationId, companyId: scope.companyId, type: "agent.updated", actor: scope.actor, payload: { agentId: id, fields: Object.keys(patch) } });
     return a ?? null;
+  }
+
+  private async canonicalAllowlist(scope: TenantScope, entries: string[]): Promise<string[]> {
+    if (!entries.some((entry) => /^mcp\.[^.]+\./.test(entry) && entry.split(".").slice(0, 2).join(".") !== mcpNamespace(entry.split(".")[1]!))) return [...new Set(entries)];
+    const servers = await this.db.select({ id: mcpServers.id, slug: mcpServers.slug }).from(mcpServers).where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }));
+    const tools = await this.db.select({ serverId: mcpTools.serverId, toolName: mcpTools.toolName }).from(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }));
+    const ambiguous = servers.map((server) => mcpNamespace(server.slug)).filter((namespace, index, all) => all.indexOf(namespace) !== index);
+    return [...new Set(entries.map((entry) => {
+      const server = servers.find((row) => row.slug === entry.split(".")[1]?.toLowerCase());
+      return canonicalizeMcpAllowlistEntry(entry, tools.filter((tool) => tool.serverId === server?.id).map((tool) => tool.toolName), ambiguous);
+    }).filter((entry): entry is string => entry !== null))];
   }
 
   listSchedules(scope: TenantScope) {

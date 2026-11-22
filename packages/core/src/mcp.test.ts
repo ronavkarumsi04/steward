@@ -159,6 +159,13 @@ describe("grants", () => {
   });
   const tools = ["mcp.ledger.lookup_invoice", "mcp.ledger.delete_customer", "mcp.ledger.reschedule"];
 
+  it("drops ambiguous legacy per-tool grants instead of retargeting them", () => {
+    const input = { slug: "a-b", toolNames: [] as string[], granted: true, allowlist: ["mcp.a-b.mcp.a_b.x"] };
+    expect(applyGrant({ ...input, serverTools: ["mcp.a_b.x"] })).toEqual(["mcp.a_b.x"]);
+    expect(applyGrant({ ...input, serverTools: ["mcp.a_b.mcp.a_b.x"] })).toEqual(["mcp.a_b.mcp.a_b.x"]);
+    expect(applyGrant({ ...input, serverTools: ["mcp.a_b.x", "mcp.a_b.mcp.a_b.x"] })).toEqual([]);
+  });
+
   it("grants a whole server in one pattern and finds it with the runtime's own matcher", () => {
     const granted = applyGrant({ allowlist: ["web.*"], slug: "ledger", toolNames: null, serverTools: tools, granted: true });
     expect(granted).toEqual(["web.*", "mcp.ledger.*"]);

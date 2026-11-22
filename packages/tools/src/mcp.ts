@@ -108,15 +108,17 @@ export function mcpNamespace(slug: string): string {
   return `mcp.${slug.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
 }
 
-export function canonicalizeMcpAllowlistEntry(entry: string): string {
+export function canonicalizeMcpAllowlistEntry(entry: string, recordedTools: readonly string[] = [], ambiguousNamespaces: readonly string[] = []): string | null {
   const match = /^mcp\.([^.]+)\.(.+)$/.exec(entry);
   if (!match) return entry;
   const namespace = mcpNamespace(match[1]!);
-  let rest = match[2]!;
-  if (`mcp.${match[1]}` !== namespace) {
-    while (rest.startsWith(`${namespace}.`)) rest = rest.slice(namespace.length + 1);
-  }
-  return `${namespace}.${rest}`;
+  if (`mcp.${match[1]}` === namespace) return entry;
+  if (ambiguousNamespaces.includes(namespace)) return null;
+  const rest = match[2]!;
+  const canonical = `${namespace}.${rest}`;
+  if (rest === "*") return canonical;
+  const candidates = [...new Set([canonical, ...(rest.startsWith(`${namespace}.`) ? [rest] : [])])].filter((candidate) => recordedTools.includes(candidate));
+  return candidates.length === 1 ? candidates[0]! : null;
 }
 
 /**

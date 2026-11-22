@@ -53,15 +53,26 @@ describe("mcp names", () => {
       ["web.*", "web.*"],
       ["", ""],
       ["mcp.local-protocol-check.*", "mcp.local_protocol_check.*"],
-      ["mcp.local-protocol-check.delete_customer", "mcp.local_protocol_check.delete_customer"],
-      ["mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", "mcp.local_protocol_check.delete_customer"],
+      ["mcp.local-protocol-check.delete_customer", null],
+      ["mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", null],
       ["mcp.local_protocol_check.delete_customer", "mcp.local_protocol_check.delete_customer"],
-      ["mcp.a-b.mcp.other.tool", "mcp.a_b.mcp.other.tool"],
+      ["mcp.a-b.mcp.other.tool", null],
       ["mcp.a_b.mcp.a_b.tool", "mcp.a_b.mcp.a_b.tool"],
     ]) {
       expect(canonicalizeMcpAllowlistEntry(before!)).toBe(after);
-      expect(canonicalizeMcpAllowlistEntry(after!)).toBe(after);
+      if (after !== null) expect(canonicalizeMcpAllowlistEntry(after!)).toBe(after);
     }
+  });
+  it("resolves exactly one recorded interpretation and never strips repeatedly", () => {
+    const legacy = "mcp.a-b.mcp.a_b.x";
+    const collapsed = "mcp.a_b.x";
+    const literal = "mcp.a_b.mcp.a_b.x";
+    expect(canonicalizeMcpAllowlistEntry(legacy, [collapsed])).toBe(collapsed);
+    expect(canonicalizeMcpAllowlistEntry(legacy, [literal])).toBe(literal);
+    expect(canonicalizeMcpAllowlistEntry(legacy, [collapsed, literal])).toBeNull();
+    expect(canonicalizeMcpAllowlistEntry(legacy, [])).toBeNull();
+    expect(canonicalizeMcpAllowlistEntry("mcp.a-b.mcp.a_b.mcp.a_b.x", [collapsed])).toBeNull();
+    expect(canonicalizeMcpAllowlistEntry("mcp.a-b.*", [], ["mcp.a_b"])).toBeNull();
   });
   it("names a tool after its install, so two servers cannot mean the same thing", () => {
     expect(mcpToolName("ledger", "lookup_invoice")).toBe("mcp.ledger.lookup_invoice");
