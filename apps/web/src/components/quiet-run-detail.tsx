@@ -22,6 +22,7 @@ export function QuietRunDetail({ companyId, initial, overview: initialOverview, 
   const [snapshotAt, setSnapshotAt] = useState(observedAt);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [contextFailed, setContextFailed] = useState(!initialOverview);
   const [lostAccess, setLostAccess] = useState(false);
   const [cancelState, setCancelState] = useState<"idle" | "requested" | "uncertain">("idle");
   const lock = useRef(false);
@@ -40,17 +41,17 @@ export function QuietRunDetail({ companyId, initial, overview: initialOverview, 
   /** Read-only retries never replay a tool or a cancel signal. Sequence guards reject older snapshots. */
   const refresh = useCallback(async () => {
     const seq = ++readSeq.current;
-    try {
-      const [next, company] = await Promise.all([browserApi.get<RunDetail>(path), browserApi.get<CompanyOverview>(`/companies/${companyId}`)]);
-      if (!mounted.current || seq !== readSeq.current) return null;
-      setDetail(next); setOverview(company); setSnapshotAt(Date.now()); setFailed(false);
-      return { detail: next, overview: company };
-    } catch (e) {
-      if (!mounted.current || seq !== readSeq.current) return null;
-      if (e instanceof ApiError && [401, 403, 404].includes(e.status)) { setLostAccess(true); setOverview(null); }
-      else setFailed(true);
-      return null;
+    const [next, company] = await Promise.allSettled([browserApi.get<RunDetail>(path), browserApi.get<CompanyOverview>(`/companies/${companyId}`)]);
+    if (!mounted.current || seq !== readSeq.current) return null;
+    // Losing authority hides the snapshot. A transient context outage must not
+    // freeze successful run reads, but it must disable permissioned actions.
+    if ([next, company].some((result) => result.status === "rejected" && result.reason instanceof ApiError && [401, 403, 404].includes(result.reason.status))) {
+      setLostAccess(true); setOverview(null); return null;
     }
+    if (next.status === "fulfilled") { setDetail(next.value); setSnapshotAt(Date.now()); }
+    setOverview(company.status === "fulfilled" ? company.value : null);
+    setFailed(next.status === "rejected"); setContextFailed(company.status === "rejected");
+    return next.status === "fulfilled" && company.status === "fulfilled" ? { detail: next.value, overview: company.value } : null;
   }, [companyId, path]);
 
   const matchedSeq = events.reduce((max, event) => event.correlation.runId === initial.run.id ? Math.max(max, event.seq) : max, 0);
@@ -97,6 +98,7 @@ export function QuietRunDetail({ companyId, initial, overview: initialOverview, 
     <header className="q-page-heading"><div><h1>{run.intent || c.runs}</h1><div className="q-run-heading-meta"><StatusPill status={run.status} label={statusLabel(locale, run.status)} /><span>{agent?.name ?? c.unavailable}</span><span>{c.started}: {time(run.startedAt)}</span></div></div></header>
     {cancellation && <p role="status" className="q-notice">{cancellation}</p>}
     {failed && <p role="alert" className="q-notice">{c.refreshFailed}</p>}
+    {contextFailed && <p role="alert" className="q-notice">{c.noAuthority}</p>}
     {!connected && active && <p className="q-notice">{c.stale}</p>}
     {active && snapshotAt - Date.parse(latest) > 5 * 60_000 && <p className="q-notice">{c.staleTrace}</p>}
     <div className="q-row q-snapshot"><span>{c.observed}: {time(new Date(snapshotAt).toISOString())}</span><button className="btn" disabled={busy} onClick={() => void refresh()}>{cancelState !== "idle" && active ? c.cancelCheck : c.refresh}</button></div>
