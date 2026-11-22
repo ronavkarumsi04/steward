@@ -1,4 +1,5 @@
 /* Depth surfaces use the canonical Quiet aliases, only inside the server-selected shell. */
+:root:has(.quiet-workspace .q-depth) { scrollbar-gutter: stable; }
 .quiet-workspace .q-depth { width: 100%; max-width: 1180px; margin-inline: auto; padding: 32px clamp(16px, 3vw, 40px) 64px; overflow-wrap: anywhere; }
 .quiet-workspace .q-depth-heading { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
 .q-depth-heading :is(h1, h2) { font-size: clamp(26px, 3vw, 32px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; }
@@ -42,6 +43,18 @@
 .q-depth-table th { background: var(--panel-2); font-weight: 600; }
 .q-depth-table tbody tr:last-child td { border-bottom: 0; }
 .q-depth-account { max-width: 1080px !important; }
+.q-depth-account .q-depth-table th { white-space: nowrap; overflow-wrap: normal; }
+.q-depth-account .q-depth-table td:nth-child(2) { white-space: nowrap; }
+/* Native dark checkbox painting ignores the authored control border and looks filled when off. */
+.quiet-workspace .q-depth input[type="checkbox"] { appearance: none; display: inline-grid; place-content: center; width: 18px; height: 18px; flex-shrink: 0; vertical-align: middle; border: 1px solid var(--control-border); border-radius: 4px; background: var(--panel); color: var(--accent-fg); cursor: pointer; }
+.quiet-workspace .q-depth input[type="checkbox"]::before { content: ""; width: 9px; height: 5px; border: solid currentColor; border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); opacity: 0; }
+.quiet-workspace .q-depth input[type="checkbox"]:checked { border-color: var(--accent); background: var(--accent); }
+.quiet-workspace .q-depth input[type="checkbox"]:checked::before { opacity: 1; }
+.quiet-workspace .q-depth input[type="checkbox"]:disabled { opacity: .6; cursor: not-allowed; }
+@media (forced-colors: active) {
+  .quiet-workspace .q-depth input[type="checkbox"] { appearance: auto; }
+  .quiet-workspace .q-depth input[type="checkbox"]::before { display: none; }
+}
 .q-depth-danger { padding: 20px !important; border: 1px solid var(--danger) !important; border-radius: 10px !important; background: var(--danger-soft) !important; }
 .q-depth-danger :is(input, .input, .btn:not(.btn-primary)) { border-color: var(--danger); }
 .q-depth-inbox { max-width: 900px !important; }

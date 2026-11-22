@@ -46,6 +46,13 @@ export default async function AccountPage() {
   // Never chosen is treated as off, but the copy below says so rather than implying a prior opt-out.
   const marketingOn = marketing?.marketing.optedIn === true;
   const SectionTable = quiet ? QuietTable : ({ children }: { children: React.ReactNode; label: string }) => children;
+  const deletion = <section className={quiet ? "card q-depth-danger" : "card border-danger p-5"} aria-labelledby="danger">
+    <h2 id="danger" className="text-[15px] font-semibold text-danger">{T("account.delete")}</h2>
+    <p className="mt-1 text-sm leading-relaxed text-muted">
+      {T("account.deleteBefore")} <Link href="/legal/retention" className="font-medium text-accent hover:underline">{T("account.retentionPolicy")}</Link>{T("account.deleteAfter")}
+    </p>
+    <div className="mt-3"><DeleteAccountForm /></div>
+  </section>;
 
   return (
     <div className={quiet ? "q-depth q-depth-account" : "mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5"}>
@@ -55,7 +62,7 @@ export default async function AccountPage() {
           {T("account.intro")}
         </p>
       </header>}
-      <QuietDepthLayout quiet={quiet} navigation={<QuietSectionNav label={T("account.title")} items={[["agreements", T("account.agreed")], ["preferences", T("account.comms")], ["export", T("account.export")], ["requests", T("account.requests")], ["interface", T("account.interface")], ["danger", T("account.delete")]]} />}>
+      <QuietDepthLayout quiet={quiet} navigation={<QuietSectionNav label={T("account.title")} items={[["agreements", T("account.agreed")], ["preferences", T("account.comms")], ["export", T("account.export")], ["requests", T("account.requests")], ["language", T("account.language")], ["interface", T("account.design")], ["danger", T("account.delete")]]} />}>
 
       <section className="card p-5" aria-labelledby="agreements">
         <h2 id="agreements" className="text-[15px] font-semibold">
@@ -87,7 +94,7 @@ export default async function AccountPage() {
                   </Link>
                 </td>
                 <td className="border border-line px-3 py-2 font-mono text-xs">{row.version}</td>
-                <td className="border border-line px-3 py-2 text-muted">{new Date(row.acceptedAt).toLocaleString(quiet ? locale : undefined)}</td>
+                <td className="border border-line px-3 py-2 text-muted">{quiet ? <time dateTime={row.acceptedAt}>{new Date(row.acceptedAt).toLocaleString(locale, { timeZone: "UTC", timeZoneName: "short" })}</time> : new Date(row.acceptedAt).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
@@ -117,7 +124,7 @@ export default async function AccountPage() {
           </a>
           {me.memberships.map((m) => (
             <a key={m.organizationId} href={`/api/v1/privacy/export?organizationId=${m.organizationId}`} className="btn h-10" download>
-              {tf(locale, "account.orgExport", { name: m.name })}
+              {tf(locale, quiet ? "account.downloadOrg" : "account.orgExport", { name: m.name })}
             </a>
           ))}
         </div>
@@ -147,37 +154,34 @@ export default async function AccountPage() {
         </p>
       </section>
 
-      <section className={quiet ? "card q-depth-danger" : "card border-danger p-5"} aria-labelledby="danger">
-        <h2 id="danger" className="text-[15px] font-semibold text-danger">
-          {T("account.delete")}
-        </h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted">
-          {T("account.deleteBefore")} <Link href="/legal/retention" className="font-medium text-accent hover:underline">{T("account.retentionPolicy")}</Link>{T("account.deleteAfter")}
-        </p>
-        <div className="mt-3">
-          <DeleteAccountForm />
-        </div>
-      </section>
+      {!quiet && deletion}
+
+      {quiet && <section className="card p-5" aria-labelledby="language">
+        <h2 id="language" className="text-[15px] font-semibold">{T("account.language")}</h2>
+        <LanguageSelect current={me.user.locale} />
+        <p className="mt-2 text-xs leading-relaxed text-muted">{T("account.languageHelp")}</p>
+      </section>}
 
       {/* Not an account setting: the design system is documented here because this is where a curious person
           already is, and because the interface is something you are entitled to read. */}
       <section className="card p-5" aria-labelledby="interface">
         <h2 id="interface" className="text-[15px] font-semibold">
-          {T("account.interface")}
+          {T(quiet ? "account.design" : "account.interface")}
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
           {T("account.interfaceHelp")}
         </p>
-        <LanguageSelect current={me.user.locale} />
+        {!quiet && <><LanguageSelect current={me.user.locale} />
         <p className="mt-2 text-xs leading-relaxed text-muted">
           {T("account.languageHelp")}
-        </p>
+        </p></>}
         <p className="mt-3">
           <Link href="/app/design" className="btn">
             {T("account.openDesign")}
           </Link>
         </p>
       </section>
+      {quiet && deletion}
       </QuietDepthLayout>
     </div>
   );

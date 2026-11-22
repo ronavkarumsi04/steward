@@ -53,6 +53,21 @@ it("keeps the incumbent account surface and fallback behavior when Quiet is off"
   expect(html).toContain("consent-control");
 });
 
+it("puts discoverable language settings before design and deletion, with explicit export actions and UTC legal times", async () => {
+  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
+  get.mockImplementation(async (path: string) => {
+    if (path === "/auth/agreements") return { history: [{ id: "acceptance", document: "terms", version: "2026-11-01", acceptedAt: "2026-11-22T16:56:59Z" }], pending: [] };
+    return accountData(path);
+  });
+  const html = renderToStaticMarkup(await AccountPage());
+  expect(html.indexOf('id="language"')).toBeLessThan(html.indexOf('id="interface"'));
+  expect(html.indexOf('id="interface"')).toBeLessThan(html.indexOf('id="danger"'));
+  expect(html).toContain("Design system");
+  expect(html).toContain("Download Review workspace archive");
+  expect(html).toContain('dateTime="2026-11-22T16:56:59Z"');
+  expect(html).toContain("UTC");
+});
+
 it("does not turn a failed suppression request into nobody having opted out", async () => {
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
   get.mockRejectedValue(new Error("Offline"));
