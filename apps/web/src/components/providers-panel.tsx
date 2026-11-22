@@ -84,14 +84,14 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
             {providers.map((p) => (
               <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-provider-id={p.id}>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2"><span className="font-medium">{p.label}</span><span className="pill text-muted">{p.providerType}</span><StatusPill status={p.status} />{!p.enabled && <span className="pill text-warn">disabled</span>}{p.companyId && <span className="pill text-muted">company-scoped</span>}</div>
+                  <div className={quiet ? "quiet-provider-badges flex flex-wrap items-center gap-2" : "flex items-center gap-2"}><span className="font-medium">{p.label}</span><span className="pill text-muted">{p.providerType}</span><StatusPill status={p.status} />{!p.enabled && <span className="pill text-warn">disabled</span>}{p.companyId && <span className="pill text-muted">company-scoped</span>}</div>
                   <div className="text-xs text-muted">
                     {quiet ? p.secretLast4 ? "Credential stored" : p.authMethod : p.secretLast4 ? `•••• ${p.secretLast4}` : p.authMethod} · {p.baseUrl ?? "default endpoint"} · priority {p.priority} · {p.status === "catalog_only" ? "API key and generation unverified" : p.lastVerifiedAt || !quiet ? <>connection checked <Ago iso={p.lastVerifiedAt} /></> : "Connection check: Not available"}
                     {p.lastError && <span className="text-danger"> · {quiet ? "Connection check failed. Check configuration and test again." : p.lastError}</span>}
                   </div>
                   {testResult[p.id] !== undefined && <div role="status" className={`text-xs ${testResult[p.id]?.startsWith("OK") ? "text-ok" : testResult[p.id]?.startsWith("Catalog") ? "text-warn" : "text-danger"}`}>{testResult[p.id]}</div>}
                 </div>
-                <div className="flex gap-1">
+                <div className={quiet ? "quiet-provider-actions" : "flex gap-1"}>
                   <button className="btn" disabled={busy === p.id || !isAdmin} onClick={() => test(p.id)}>{busy === p.id ? "Testing…" : "Test"}</button>
                   <button className="btn" disabled={!isAdmin} onClick={() => toggle(p)}>{p.enabled ? "Disable" : "Enable"}</button>
                   <button className="btn btn-danger" disabled={!isAdmin} onClick={() => remove(p)}>Delete</button>

@@ -2,7 +2,7 @@
 .q-specialist { min-width: 0; overflow-wrap: anywhere; }
 .q-specialist :is(.grid, .flex) > * { min-width: 0; }
 .q-specialist fieldset { min-inline-size: 0; }
-.q-specialist .pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.q-specialist .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
 .q-specialist a.pill { min-height: 44px; }
 .q-specialist > :first-child { margin-top: 0; }
 .q-specialist .desk-heading { margin-bottom: 28px; padding-bottom: 0; border: 0; }
@@ -24,7 +24,7 @@
 .q-specialist[data-surface="signals"] .card.p-0 { border-inline: 0; border-radius: 0; }
 .q-specialist[data-surface="signals"] .q-signal-actions { flex-shrink: 1; max-width: 100%; }
 .q-specialist :is(input, select, textarea) { min-width: 0; max-width: 100%; min-height: 44px; font-size: max(14px, .875rem); }
-.q-specialist :is(button, .btn, summary) { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.q-specialist :is(button, .btn, summary) { min-height: 44px; white-space: normal; overflow-wrap: normal; }
 .q-specialist summary { cursor: pointer; padding-block: 12px; font-size: max(14px, .875rem); color: var(--accent); }
 .q-specialist :is(.truncate, [class*="line-clamp-"]) { overflow: visible; text-overflow: clip; white-space: normal; -webkit-line-clamp: unset; display: block; overflow-wrap: anywhere; }
 .q-specialist :is(pre, code) { overflow-wrap: anywhere; }

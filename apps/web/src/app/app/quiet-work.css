@@ -7,7 +7,7 @@
 .q-work-page :is(summary, label), .q-run-page summary { font-size: max(14px, .875rem); }
 .q-work-page summary, .q-run-page summary { cursor: pointer; color: var(--accent); padding-block: 10px; text-underline-offset: 4px; }
 .q-work-page summary:hover, .q-run-page summary:hover { text-decoration: underline; }
-.q-work-page :is(button, .btn), .q-run-page :is(button, .btn) { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.q-work-page :is(button, .btn), .q-run-page :is(button, .btn) { min-height: 44px; white-space: normal; overflow-wrap: normal; }
 .q-delegate { border: 1px solid var(--control-border); border-radius: 10px; margin-bottom: 28px; padding: 8px 20px; }
 .q-delegate > summary { font-weight: 650; }
 .q-task-form { display: grid; gap: 18px; padding-block: 14px 20px; }

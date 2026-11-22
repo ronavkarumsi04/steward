@@ -60,6 +60,8 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace :where(.text-xs, .pill, .kbd, .label, .help, .eyebrow, .nb-section-label, .nb-metric > :first-child, .table th, code, [class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"], [class*="text-[11px]"]) { font-size: max(12px, 0.75rem); }
 .quiet-workspace :where(.text-sm, .table, .panel-heading p, p.text-xs, li.text-xs, .text-xs p, .text-xs li, .prose) { font-size: max(14px, 0.875rem); }
 .quiet-workspace .btn { max-width: 100%; white-space: normal; overflow-wrap: normal; font-size: max(14px, 0.875rem); }
+/* Content may break long identifiers; controls and short labels keep whole words. */
+.quiet-workspace :is(button, .btn, .pill, label, .label, summary) { overflow-wrap: normal; }
 /* Text-only zoom enlarges intrinsic control widths without changing the viewport. */
 .quiet-workspace :is(.input, .select, textarea) { min-width: 0; max-width: 100%; }
 .quiet-workspace .quiet-page-heading { overflow-wrap: anywhere; }
