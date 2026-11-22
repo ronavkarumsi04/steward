@@ -9,7 +9,7 @@ import { buildPalette, kindBadge, loadSummary, paletteFor, rankPalette, stateLin
 import type { Agent, Approval, Run, Task } from "@/lib/types";
 import { useToast } from "./feedback";
 import { Pill, type Tone } from "./ui";
-import { WORKSPACE_ROUTES } from "@/lib/workspace-navigation";
+import { WORKSPACE_ROUTES, workspaceRouteHref } from "@/lib/workspace-navigation";
 import type { MessageKey } from "@/lib/i18n";
 
 const KIND_TONE: Record<PaletteKind, Tone> = {
@@ -89,7 +89,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
   }, [companyId]);
 
   const navOnly = useMemo(() => quiet ? [
-    ...WORKSPACE_ROUTES.map((route): PaletteAction => ({ id: `nav:${route.suffix}`, kind: "navigate", label: t(route.label), detail: t("shell.companyMenu"), keywords: route.keywords, target: { kind: "navigate", href: `/app/c/${companyId}${route.suffix}` } })),
+    ...WORKSPACE_ROUTES.map((route): PaletteAction => ({ id: `nav:${workspaceRouteHref("", route)}`, kind: "navigate", label: t(route.label), detail: t("shell.companyMenu"), keywords: route.keywords, target: { kind: "navigate", href: workspaceRouteHref(`/app/c/${companyId}`, route) } })),
     ...destinations.map((d): PaletteAction => ({ id: `nav:${d.href}`, kind: "navigate", label: t(d.label), detail: d.scope ? `${t("quiet.organization")} · ${d.scope}` : t("quiet.workspace"), keywords: `${d.href} ${d.scope ?? ""}`, target: { kind: "navigate", href: d.href } })),
   ] : buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale, quiet, destinations, t]);
   const actions = useMemo(() => {

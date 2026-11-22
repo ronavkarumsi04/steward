@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { browserApi } from "@/lib/api";
 import type { Company, Me } from "@/lib/types";
 import type { MessageKey } from "@/lib/i18n";
-import { isWorkspaceRoute, WORKSPACE_ROUTES, workspaceDestinations, workspaceRoute, type WorkspaceGroup } from "@/lib/workspace-navigation";
+import { WORKSPACE_ROUTES, workspaceDestinations, workspaceRoute, workspaceRouteHref, type WorkspaceGroup } from "@/lib/workspace-navigation";
 import { CompanyCommandPalette } from "./company-command-palette";
 import { ThemeToggle } from "./feedback";
 import { Icon } from "./icons";
@@ -26,6 +26,8 @@ function WorkspaceMenu({ me, orgId, companyId, label, children }: { me: Me; orgI
   const t = useT();
   const router = useRouter();
   const path = usePathname();
+  const search = useSearchParams();
+  const current = companyId ? workspaceRoute(path, companyId, search.toString()) : undefined;
   const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,7 +45,7 @@ function WorkspaceMenu({ me, orgId, companyId, label, children }: { me: Me; orgI
       <div className="quiet-dialog-header"><h2>{label}</h2><button type="button" className="btn" onClick={() => dialog.current?.close()}>{t("quiet.close")}</button></div>
       <p className="quiet-dialog-email">{me.user?.email}</p>
       {companyId && <nav aria-label={t("shell.companyMenu")}>
-        {WORKSPACE_ROUTES.filter((r) => ["knowledge", "tools", "settings"].includes(r.group)).map((route) => <Link key={route.suffix} className="nav-item" href={`/app/c/${companyId}${route.suffix}`} aria-current={isWorkspaceRoute(path, `/app/c/${companyId}`, route.suffix) ? "page" : undefined}>{t(route.label)}</Link>)}
+        {WORKSPACE_ROUTES.filter((r) => ["knowledge", "tools", "settings"].includes(r.group)).map((route) => <Link key={workspaceRouteHref("", route)} className="nav-item" href={workspaceRouteHref(`/app/c/${companyId}`, route)} aria-current={current === route ? "page" : undefined}>{t(route.label)}</Link>)}
       </nav>}
       <h3>{t("quiet.workspace")}</h3>
       <nav aria-label={t("quiet.workspace")}>
@@ -91,15 +93,17 @@ function MomentumMark() {
 export function CompanyWorkspace({ company, me, pendingApprovals, children }: { company: Company; me: Me; pendingApprovals: number; children: ReactNode }) {
   const t = useT();
   const path = usePathname();
+  const search = useSearchParams();
   const base = `/app/c/${company.id}`;
-  const current = workspaceRoute(path, company.id);
+  const current = workspaceRoute(path, company.id, search.toString());
   const group: WorkspaceGroup = current?.group ?? "overview";
   const content = useRef<HTMLElement>(null);
-  const previousPath = useRef(path);
+  const routeKey = `${path}?${search.toString()}`;
+  const previousPath = useRef(routeKey);
   const [announcement, setAnnouncement] = useState("");
   useEffect(() => {
-    if (previousPath.current === path) return;
-    previousPath.current = path;
+    if (previousPath.current === routeKey) return;
+    previousPath.current = routeKey;
     // Wait for streamed route content, not merely a pathname change, before announcing it.
     const announce = () => {
       const heading = content.current?.querySelector("h1");
@@ -112,13 +116,14 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
     const observer = new MutationObserver(() => { if (announce()) observer.disconnect(); });
     if (content.current) observer.observe(content.current, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [path]);
+  }, [routeKey]);
   const subroutes = WORKSPACE_ROUTES.filter((r) => r.group === group);
+  const organizationLinks = workspaceDestinations(me, company.organizationId).filter((destination) => destination.section === group);
   const primaryLink = (item: (typeof PRIMARY)[number], mobile = false) => {
     const [id, suffix, label, Glyph] = item;
     return <Link key={id} href={`${base}${suffix}`} className={mobile ? undefined : "nav-item"} aria-current={group === id ? (current?.suffix === suffix ? "page" : "location") : undefined}>
-      <Glyph size={18} /><span>{t(label)}</span>
-      {!mobile && id === "approvals" && pendingApprovals > 0 && <span className="pill pill-warn ms-auto" aria-label={`${pendingApprovals} ${t("nav.pending")}`}>{pendingApprovals}</span>}
+      <span className="quiet-nav-icon"><Glyph size={18} />{id === "approvals" && pendingApprovals > 0 && <span className={mobile ? "quiet-mobile-count" : "sr-only"} aria-label={`${pendingApprovals} ${t("nav.pending")}`}>{pendingApprovals}</span>}</span><span>{t(label)}</span>
+      {!mobile && id === "approvals" && pendingApprovals > 0 && <span className="pill pill-warn ms-auto" aria-hidden="true">{pendingApprovals}</span>}
     </Link>;
   };
   return <div className="quiet-frame">
@@ -135,7 +140,21 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
         <div className="quiet-context-name">{company.name} <span aria-hidden="true">/</span> {t(PRIMARY.find((p) => p[0] === group)?.[2] ?? "nav.settings")}</div>
         <CompanyCommandPalette key={company.id} companyId={company.id} quiet destinations={workspaceDestinations(me, company.organizationId)} />
       </div>
-      {subroutes.length > 1 && <nav className="quiet-tabs" aria-label={t("quiet.sectionNav")}>{subroutes.map((route) => <Link key={route.suffix} href={`${base}${route.suffix}`} aria-current={isWorkspaceRoute(path, base, route.suffix) ? "page" : undefined}>{t(route.label)}</Link>)}</nav>}
+      {subroutes.length > 1 && <div className="quiet-subnav">
+        {([undefined, "automation", "business"] as const).map((section) => {
+          const routes = subroutes.filter((route) => route.section === section);
+          if (!routes.length) return null;
+          const label = section ? t(`quiet.${section}`) : t("quiet.sectionNav");
+          return <nav key={section ?? "primary"} className="quiet-tabs" aria-label={label}>
+            {section && <span className="quiet-tab-label">{label}</span>}
+            {routes.map((route) => <Link key={workspaceRouteHref("", route)} href={workspaceRouteHref(base, route)} aria-current={current === route ? "page" : undefined}>{t(route.label)}</Link>)}
+          </nav>;
+        })}
+      </div>}
+      {organizationLinks.length > 0 && <nav className="quiet-tabs quiet-organization" aria-label={t("quiet.organization")}>
+        <span className="quiet-tab-label">{t("quiet.organization")} · {organizationLinks[0]?.scope}</span>
+        {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label)}</Link>)}
+      </nav>}
       <main ref={content} id="workspace-content" tabIndex={-1} className="quiet-content">{children}</main>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
     </div>

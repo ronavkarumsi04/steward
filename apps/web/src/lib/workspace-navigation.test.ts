@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { t } from "./i18n";
 import { buildPalette } from "./palette";
 import type { Me } from "./types";
-import { WORKSPACE_ROUTES, isWorkspaceRoute, workspaceDestinations, workspaceRoute } from "./workspace-navigation";
+import { WORKSPACE_ROUTES, isWorkspaceRoute, workspaceDestinations, workspaceRoute, workspaceRouteHref } from "./workspace-navigation";
 import { workspaceShell } from "./workspace-theme";
 
 describe("workspace navigation compatibility", () => {
@@ -30,6 +30,16 @@ describe("workspace navigation compatibility", () => {
     expect(isWorkspaceRoute("/app/c/a/runs-extra", "/app/c/a", "/runs")).toBe(false);
   });
 
+  it("groups Work and links directly to the existing Knowledge Memory view", () => {
+    const work = WORKSPACE_ROUTES.filter((route) => route.group === "work");
+    expect(work.filter((route) => route.section === "business").map((route) => route.suffix)).toEqual(["/growth", "/finance", "/site"]);
+    expect(work.filter((route) => !route.section).length).toBeLessThanOrEqual(6);
+    const memory = WORKSPACE_ROUTES.find((route) => route.query === "tab=memory")!;
+    expect(workspaceRouteHref("/app/c/a", memory)).toBe("/app/c/a/knowledge?tab=memory");
+    expect(workspaceRoute("/app/c/a/knowledge", "a", "tab=memory")).toBe(memory);
+    expect(workspaceRoute("/app/c/a/knowledge", "a", "source=search&tab=memory")).toBe(memory);
+  });
+
   it("scopes org links explicitly and never advertises admin to ordinary members", () => {
     const me: Me = { user: { id: "u", email: "u@example.com", name: "User", emailVerified: true, isSuperadmin: false }, memberships: [
       { organizationId: "a", name: "First", slug: "first", role: "viewer" },
@@ -37,6 +47,8 @@ describe("workspace navigation compatibility", () => {
     ] };
     const scoped = workspaceDestinations(me, "b");
     expect(scoped.filter((d) => d.scope).map((d) => d.scope)).toEqual(Array(4).fill("Second"));
+    expect(scoped.filter((d) => d.section === "tools").map((d) => d.href)).toEqual(["/app/org/b/providers", "/app/org/b/integrations"]);
+    expect(scoped.filter((d) => d.section === "settings").map((d) => d.href)).toEqual(["/app/org/b/members", "/app/org/b/privacy"]);
     expect(scoped.some((d) => d.href.includes("/org/a/"))).toBe(false);
     expect(scoped.some((d) => d.href.includes("/admin/"))).toBe(false);
     expect(workspaceDestinations(me, "missing").some((d) => d.scope)).toBe(false);

@@ -19,6 +19,11 @@ describe("Quiet momentum token contrast", () => {
       }
       expect(contrast(tokens.focus!, tokens.bg!)).toBeGreaterThanOrEqual(3);
       expect(contrast(tokens["line-strong"]!, tokens.bg!)).toBeGreaterThanOrEqual(3);
+      for (const surface of ["bg", "rail", "panel", "panel-2", "panel-3", "warn-soft"]) {
+        expect(tokens["control-border"]).toBeTruthy();
+        expect(contrast(tokens["control-border"]!, tokens[surface!]!), `control-border/${surface}`).toBeGreaterThanOrEqual(3);
+      }
+      expect(contrast(tokens.accent!, tokens["accent-soft"]!), "strong semantic outline on tinted surfaces").toBeGreaterThanOrEqual(3);
     });
   }
 });

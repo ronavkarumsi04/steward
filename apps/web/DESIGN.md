@@ -14,6 +14,19 @@ Overview/Approvals/Work/Team/More navigation replaces the rail. More includes to
 company switching and account/organization destinations. Native modal dialogs provide focus containment,
 Escape dismissal and background inertness. Authority and backend actions are unchanged.
 
+Work's five primary links are followed by labeled Automation and Business views groups (never one flat
+ten-link row). Knowledge exposes Documents and Memory at their existing `?tab=` deep links, plus
+Connections. Tools includes explicitly named organization provider/integration links; Settings includes
+organization membership/privacy links. Desktop and mobile Approvals show the same real pending count.
+
+Metadata, pills, shortcut hints and mobile labels have a **12px minimum**; ordinary body text is 14px+.
+`--line` is only a low-emphasis divider. Interactive outlines use `--control-border` (`#7d8a81` light,
+`#6c8474` dark), tested at **3:1 or better** against canvas/rail/panel and pending surfaces. Primary and danger
+actions retain semantic outlines; controls inside tinted panels use the stronger action-colored outline
+(the standard dark control border is below 3:1 on sage). Light/dark values follow the supplied tokens, not the prototype's
+divergent dark palette; controls and metadata floors above are the approved accessibility additions.
+The prototype is not normative for links, current-page semantics, focus or modal behavior.
+
 Set the **web process** environment variable `STEWARD_WORKSPACE_SHELL=legacy` and restart/redeploy that
 process to restore the incumbent shell, colors and typography. Unset it (or use `quiet`) to return to the
 new shell. This is server-resolved per authenticated request, not a client-controlled auth/policy flag.

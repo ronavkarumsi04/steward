@@ -25,7 +25,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
   return (
     <div>
       <PageHeader eyebrow={t(locale, "knowledge.eyebrow")} title={t(locale, "knowledge.title")} description={t(locale, "knowledge.description")} />
-      <KnowledgePanel companyId={companyId} initialTab={tab} documents={documents} decisions={decisions} memories={memories} pending={pending} canManageMemories={canManage} artifacts={artifacts} projects={projects} canManagePlaybooks={role === "owner" || role === "admin"} />
+      <KnowledgePanel key={tab ?? "default"} companyId={companyId} initialTab={tab} documents={documents} decisions={decisions} memories={memories} pending={pending} canManageMemories={canManage} artifacts={artifacts} projects={projects} canManagePlaybooks={role === "owner" || role === "admin"} />
     </div>
   );
 }

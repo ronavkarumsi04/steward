@@ -2,7 +2,7 @@ import type { MessageKey } from "./i18n";
 import type { Me } from "./types";
 
 export type WorkspaceGroup = "overview" | "approvals" | "work" | "team" | "knowledge" | "tools" | "settings";
-export interface WorkspaceRoute { suffix: string; label: MessageKey; group: WorkspaceGroup; keywords: string }
+export interface WorkspaceRoute { suffix: string; label: MessageKey; group: WorkspaceGroup; keywords: string; query?: string; section?: "automation" | "business" }
 
 /** Canonical navigation inventory. Existing URLs and detail-page deep links stay unchanged. */
 export const WORKSPACE_ROUTES: readonly WorkspaceRoute[] = [
@@ -13,13 +13,14 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRoute[] = [
   { suffix: "/projects", label: "nav.projects", group: "work", keywords: "repository artifacts" },
   { suffix: "/chat", label: "quiet.conversations", group: "work", keywords: "chat chief of staff" },
   { suffix: "/activity", label: "nav.activity", group: "work", keywords: "audit events history" },
-  { suffix: "/workflows", label: "nav.workflows", group: "work", keywords: "builder schedules" },
-  { suffix: "/signals", label: "nav.signals", group: "work", keywords: "triggers inbox" },
-  { suffix: "/growth", label: "nav.growth", group: "work", keywords: "business marketing leads" },
-  { suffix: "/finance", label: "nav.finance", group: "work", keywords: "business spend budget" },
-  { suffix: "/site", label: "quiet.site", group: "work", keywords: "business website studio" },
+  { suffix: "/workflows", label: "nav.workflows", group: "work", section: "automation", keywords: "builder schedules" },
+  { suffix: "/signals", label: "nav.signals", group: "work", section: "automation", keywords: "triggers inbox" },
+  { suffix: "/growth", label: "nav.growth", group: "work", section: "business", keywords: "business marketing leads" },
+  { suffix: "/finance", label: "nav.finance", group: "work", section: "business", keywords: "business spend budget" },
+  { suffix: "/site", label: "quiet.site", group: "work", section: "business", keywords: "business website studio" },
   { suffix: "/agents", label: "quiet.team", group: "team", keywords: "agents roles authority" },
-  { suffix: "/knowledge", label: "quiet.documents", group: "knowledge", keywords: "knowledge memory sources" },
+  { suffix: "/knowledge", label: "quiet.documents", group: "knowledge", query: "tab=documents", keywords: "knowledge documents sources" },
+  { suffix: "/knowledge", label: "quiet.memory", group: "knowledge", query: "tab=memory", keywords: "knowledge memory provenance" },
   { suffix: "/graph", label: "quiet.connections", group: "knowledge", keywords: "graph entities relationships" },
   { suffix: "/integrations", label: "quiet.connected", group: "tools", keywords: "integrations oauth accounts" },
   { suffix: "/mcp", label: "nav.marketplace", group: "tools", keywords: "tools mcp servers" },
@@ -32,11 +33,17 @@ export function isWorkspaceRoute(path: string, base: string, suffix: string): bo
   return path === `${base}${suffix}` || (suffix !== "" && path.startsWith(`${base}${suffix}/`));
 }
 
-export function workspaceRoute(path: string, companyId: string): WorkspaceRoute | undefined {
-  return WORKSPACE_ROUTES.find((route) => isWorkspaceRoute(path, `/app/c/${companyId}`, route.suffix));
+export function workspaceRouteHref(base: string, route: WorkspaceRoute): string {
+  return `${base}${route.suffix}${route.query ? `?${route.query}` : ""}`;
 }
 
-export interface WorkspaceDestination { href: string; label: MessageKey; scope?: string }
+export function workspaceRoute(path: string, companyId: string, search = ""): WorkspaceRoute | undefined {
+  const matches = WORKSPACE_ROUTES.filter((route) => isWorkspaceRoute(path, `/app/c/${companyId}`, route.suffix));
+  const params = new URLSearchParams(search);
+  return matches.find((route) => route.query && [...new URLSearchParams(route.query)].every(([key, value]) => params.get(key) === value)) ?? matches[0];
+}
+
+export interface WorkspaceDestination { href: string; label: MessageKey; scope?: string; section?: "tools" | "settings" }
 
 /** Organization scope is explicit; never substitute an unrelated membership for an inaccessible company. */
 export function workspaceDestinations(me: Me, orgId?: string): WorkspaceDestination[] {
@@ -48,10 +55,10 @@ export function workspaceDestinations(me: Me, orgId?: string): WorkspaceDestinat
     { href: "/app/account", label: "top.accountLong" },
     { href: "/app/design", label: "quiet.design" },
     ...(org ? [
-      { href: `/app/org/${org.organizationId}/providers`, label: "top.providers" as const, scope: org.name },
-      { href: `/app/org/${org.organizationId}/integrations`, label: "top.integrations" as const, scope: org.name },
-      { href: `/app/org/${org.organizationId}/members`, label: "top.members" as const, scope: org.name },
-      { href: `/app/org/${org.organizationId}/privacy`, label: "top.privacy" as const, scope: org.name },
+      { href: `/app/org/${org.organizationId}/providers`, label: "top.providers" as const, scope: org.name, section: "tools" as const },
+      { href: `/app/org/${org.organizationId}/integrations`, label: "top.integrations" as const, scope: org.name, section: "tools" as const },
+      { href: `/app/org/${org.organizationId}/members`, label: "top.members" as const, scope: org.name, section: "settings" as const },
+      { href: `/app/org/${org.organizationId}/privacy`, label: "top.privacy" as const, scope: org.name, section: "settings" as const },
     ] : []),
     ...(me.user?.isSuperadmin ? [{ href: "/app/admin/waitlist", label: "quiet.waitlist" as const }] : []),
   ];
