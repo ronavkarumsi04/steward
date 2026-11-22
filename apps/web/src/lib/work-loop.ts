@@ -3,6 +3,12 @@ import type { RunDetail } from "./types";
 export type WorkKind = "tasks" | "runs";
 export type WorkView = "active" | "completed" | "all";
 export type WorkFilters = { view?: string; status?: string; taskId?: string; q?: string };
+export type WorkQuery = { [Key in keyof WorkFilters]?: string | string[] };
+/** Next supplies arrays for repeated parameters. Take the first, like URLSearchParams.get. */
+export const queryValue = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+export function normalizeWorkFilters(query: WorkQuery): WorkFilters {
+  return { view: queryValue(query.view), status: queryValue(query.status), taskId: queryValue(query.taskId), q: queryValue(query.q) };
+}
 export const cancellable = (status: string) => ["queued", "building_context", "planning", "executing", "verifying", "waiting_approval", "waiting_budget"].includes(status);
 export const workView = (value?: string): WorkView => value === "all" || value === "completed" ? value : "active";
 

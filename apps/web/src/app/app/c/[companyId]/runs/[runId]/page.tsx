@@ -5,11 +5,11 @@ import type { Agent, CompanyOverview, RunDetail } from "@/lib/types";
 import { RunDetailView } from "@/components/run-detail";
 import { QuietRunDetail } from "@/components/quiet-run-detail";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { workHref } from "@/lib/work-loop";
+import { queryValue, workHref } from "@/lib/work-loop";
 
 export const metadata: Metadata = { title: "Run" };
 
-export default async function RunPage({ params, searchParams }: { params: Promise<{ companyId: string; runId: string }>; searchParams: Promise<{ from?: string }> }) {
+export default async function RunPage({ params, searchParams }: { params: Promise<{ companyId: string; runId: string }>; searchParams: Promise<{ from?: string | string[] }> }) {
   const { companyId, runId } = await params;
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
@@ -19,7 +19,7 @@ export default async function RunPage({ params, searchParams }: { params: Promis
     ]);
     if (!detail) notFound();
     // Only same-company run filters survive into Back. No arbitrary return URL is trusted.
-    const { from } = await searchParams;
+    const from = queryValue((await searchParams).from);
     const base = `/app/c/${companyId}/runs`;
     const qs = from?.startsWith(`${base}?`) ? new URLSearchParams(from.slice(base.length + 1)) : new URLSearchParams();
     const back = workHref(companyId, "runs", { view: qs.get("view") ?? "all", status: qs.get("status") ?? undefined, taskId: qs.get("taskId") ?? undefined, q: qs.get("q") ?? undefined });

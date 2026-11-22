@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evidenceView, safeArtifactHref, workHref, workStatuses, lastRecordedAt, cancellable } from "./work-loop";
+import { evidenceView, safeArtifactHref, workHref, workStatuses, lastRecordedAt, cancellable, normalizeWorkFilters, queryValue } from "./work-loop";
 import type { RunDetail } from "./types";
 
 describe("Quiet work loop contracts", () => {
@@ -15,6 +15,13 @@ describe("Quiet work loop contracts", () => {
   });
   it("retains task, status and search in inspect/back links without open redirects", () => {
     expect(workHref("c", "runs", { view: "all", status: "failed,cancelled", taskId: "t", q: "a & b" })).toBe("/app/c/c/runs?view=all&status=failed%2Ccancelled&taskId=t&q=a+%26+b");
+  });
+  it("normalizes repeated URL parameters before filtering or building Back links", () => {
+    const filters = normalizeWorkFilters({ q: ["review", "other"], view: ["all", "active"], status: ["failed", "cancelled"], taskId: ["task-1"] });
+    expect(filters).toEqual({ q: "review", view: "all", status: "failed", taskId: "task-1" });
+    expect(filters.q?.toLocaleLowerCase()).toBe("review");
+    expect(queryValue(["/app/c/c/runs?view=all", "//other.test"])).toBe("/app/c/c/runs?view=all");
+    expect(queryValue([])).toBeUndefined();
   });
   it("removes credentials and private reasoning recursively, including JSON-encoded outputs", () => {
     const result = JSON.stringify(evidenceView({ title: "Visible evidence", nested: { api_key: "secret-one", chainOfThought: "private-thought", text: '{"authorization":"secret-two","summary":"Done"}' } }));

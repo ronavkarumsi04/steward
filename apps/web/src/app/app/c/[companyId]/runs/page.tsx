@@ -9,21 +9,23 @@ import { Empty, PageHeader, StatusPill, ago, usd } from "@/components/ui";
 import { runsHref } from "@/lib/run-filters";
 import { QuietWork } from "@/components/quiet-work";
 import { workspaceShell } from "@/lib/workspace-theme";
-import type { WorkFilters } from "@/lib/work-loop";
+import { normalizeWorkFilters, type WorkQuery } from "@/lib/work-loop";
 import { QuietWorkLoading } from "@/components/quiet-work-loading";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "runs.title") };
 }
 
-export default async function RunsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<WorkFilters> }) {
+export default async function RunsPage({ params, searchParams }: { params: Promise<{ companyId: string }>; searchParams: Promise<WorkQuery> }) {
   const { companyId } = await params;
-  const { status, taskId } = await searchParams;
+  const query = await searchParams;
   const api = await serverApi();
   const locale = await getLocale();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietWorkLoading locale={locale} />}><QuietWork companyId={companyId} kind="runs" filters={await searchParams} api={api} locale={locale} /></Suspense>;
+    return <Suspense fallback={<QuietWorkLoading locale={locale} />}><QuietWork companyId={companyId} kind="runs" filters={normalizeWorkFilters(query)} api={api} locale={locale} /></Suspense>;
   }
+  // Preserve the incumbent URLSearchParams string coercion in the legacy branch.
+  const status = query.status?.toString(), taskId = query.taskId?.toString();
   const qs = new URLSearchParams({ limit: "100" });
   if (status) qs.set("status", status);
   if (taskId) qs.set("taskId", taskId);
