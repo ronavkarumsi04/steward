@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { serverApi, tryApi } from "@/lib/server";
 import type { CodeBranchesRead, CodeTreeRead, CodeWorkspaceRead } from "@/lib/types";
 import { CodeWorkspace } from "@/components/code-workspace";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietToolsFrame, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
+import { QuietToolsFrame, QuietToolsLoading, readTools, ToolsPermission, ToolsReadError } from "@/components/quiet-tools";
 
 export const metadata: Metadata = { title: "Code" };
 
@@ -26,7 +27,14 @@ export const metadata: Metadata = { title: "Code" };
  */
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 
-export default async function CodePage({
+export default async function CodePage(props: Parameters<typeof CodeContent>[0]) {
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    return <Suspense fallback={<QuietToolsLoading />}><CodeContent {...props} /></Suspense>;
+  }
+  return CodeContent(props);
+}
+
+async function CodeContent({
   params,
   searchParams,
 }: {
