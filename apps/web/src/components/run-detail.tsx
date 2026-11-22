@@ -10,6 +10,7 @@ import type { Agent, RunDetail } from "@/lib/types";
 import { ApprovalCard } from "./approval-card";
 import { Icon } from "./icons";
 import { RunTimeline } from "./run-timeline";
+import { RunOutput, runOutput } from "./run-output";
 import { Card, Empty, Json, RiskPill, StatusPill, Ago, usd } from "./ui";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
@@ -99,7 +100,7 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
   };
   const callsForStep = (stepId: string) => aiCalls.filter((call) => call.stepId === stepId);
   const outputs = produced(toolCalls);
-  const resultSummary = run.result && typeof (run.result as { summary?: unknown }).summary === "string" ? String((run.result as { summary: string }).summary) : null;
+  const output = runOutput(run.result);
   const longBrief = (run.intent ?? "").length > 240;
 
   return (
@@ -131,11 +132,11 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {run.error && <div className="nb-panel-flat nb-left-red px-3 py-2.5 text-sm text-danger whitespace-pre-wrap">{run.error}</div>}
 
-      {(outputs.length > 0 || resultSummary) && (
+      {(outputs.length > 0 || output != null || TERMINAL.has(run.status) || run.status === "needs_review") && (
         <Card title="What this run produced" className="nb-left-green">
-          {resultSummary && <p className="mb-3 text-sm text-fg-2">{resultSummary}</p>}
+          <RunOutput value={output} />
           {outputs.length > 0 && (
-            <ul className="grid gap-2 sm:grid-cols-2">
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
               {outputs.map((o, i) => (
                 <li key={`${o.label}-${i}`}>
                   <Link href={`/app/c/${companyId}/${o.href}`} className="nb-panel-flat nb-accent-green flex items-center justify-between gap-2 border px-3 py-2 text-sm hover:nb-accent-yellow">
@@ -146,9 +147,6 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
               ))}
             </ul>
           )}
-
-      <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
-
         </Card>
       )}
 
@@ -167,6 +165,8 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
           </div>
         </Card>
       )}
+
+      <RunTimeline detail={detail} companyId={companyId} observedAt={snapshotAt} />
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Card title={`Steps (${steps.length})`} className="nb-left-blue">
@@ -247,7 +247,7 @@ export function RunDetailView({ companyId, initial, agents, observedAt }: { comp
             )}
           </Card>
           {run.plan && <Card title="Plan" className="nb-left-blue"><Json value={run.plan} /></Card>}
-          {run.result && <Card title="Result" className="nb-left-green"><Json value={run.result} /></Card>}
+          {run.result && <details className="nb-panel-flat p-3 text-sm"><summary className="cursor-pointer text-muted">Raw result JSON</summary><Json value={run.result} /></details>}
           {approvals.filter((a) => a.status !== "pending").length > 0 && (
             <Card title="Approval history" className="nb-left-yellow">
               <ul className="space-y-1 text-sm">
