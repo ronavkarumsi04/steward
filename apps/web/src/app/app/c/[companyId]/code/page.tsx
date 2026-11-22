@@ -29,7 +29,7 @@ const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 
 export default async function CodePage(props: Parameters<typeof CodeContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietToolsLoading />}><CodeContent {...props} /></Suspense>;
+    return <Suspense fallback={<QuietToolsLoading page="code" />}><CodeContent {...props} /></Suspense>;
   }
   return CodeContent(props);
 }
@@ -46,14 +46,14 @@ async function CodeContent({
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const read = await readTools(() => api.get<CodeWorkspaceRead>(`/companies/${companyId}/code`));
-    if (!read.data) return <QuietToolsFrame title="Code" description="Read repositories and propose changes through an agent run." scope="This company only."><ToolsReadError error={read.error} subject="Code workspace" href={`/app/c/${companyId}/code`} /></QuietToolsFrame>;
+    if (!read.data) return <QuietToolsFrame page="code"><ToolsReadError error={read.error} subject="Code workspace" href={`/app/c/${companyId}/code`} /></QuietToolsFrame>;
     const workspace = read.data;
     const repo = repoParam && REPO_PATTERN.test(repoParam) ? repoParam : workspace.defaultRepo;
     const branches = repo ? await readTools(() => api.get<CodeBranchesRead>(`/companies/${companyId}/code/branches?repo=${encodeURIComponent(repo)}`)) : null;
     const wanted = refParam && refParam.length <= 200 && branches?.data?.branches.some(branch => branch.name === refParam) ? refParam : null;
     const ref = wanted ?? branches?.data?.defaultBranch ?? null;
     const tree = repo && ref ? await readTools(() => api.get<CodeTreeRead>(`/companies/${companyId}/code/tree?repo=${encodeURIComponent(repo)}&ref=${encodeURIComponent(ref)}`)) : null;
-    return <div className="quiet-tools"><ToolsPermission allowed={workspace.canEdit} action="propose and apply code changes" />{(branches && !branches.data || tree && !tree.data) && <ToolsReadError error={branches?.error ?? tree?.error} subject="Repository contents" href={`/app/c/${companyId}/code`} />}<CodeWorkspace quiet companyId={companyId} initial={workspace} initialRepo={repo} initialRef={ref} initialTree={tree?.data ?? null} initialBranches={branches?.data ?? null} /></div>;
+    return <QuietToolsFrame page="code"><ToolsPermission allowed={workspace.canEdit} action="propose and apply code changes" />{(branches && !branches.data || tree && !tree.data) && <ToolsReadError error={branches?.error ?? tree?.error} subject="Repository contents" href={`/app/c/${companyId}/code`} />}<CodeWorkspace quiet companyId={companyId} initial={workspace} initialRepo={repo} initialRef={ref} initialTree={tree?.data ?? null} initialBranches={branches?.data ?? null} /></QuietToolsFrame>;
   }
 
   const workspace = await tryApi(() => api.get<CodeWorkspaceRead>(`/companies/${companyId}/code`));

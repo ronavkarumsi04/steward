@@ -163,7 +163,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
           </nav>;
         })}
       </div>}
-      {organizationLinks.length > 0 && <nav className="quiet-tabs quiet-organization" aria-label={t("quiet.organization")}>
+      {organizationLinks.length > 0 && <nav className="quiet-tabs" aria-label={t("quiet.organization")}>
         <span className="quiet-tab-label">{t("quiet.organization")} · {organizationLinks[0]?.scope}</span>
           {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label === "top.privacy" ? "quiet.privacy" : destination.label)}</Link>)}
       </nav>}

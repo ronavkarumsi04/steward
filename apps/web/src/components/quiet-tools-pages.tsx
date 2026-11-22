@@ -13,7 +13,7 @@ export async function QuietConnections({ api, orgId, companyId, membership, over
   ]);
   const role = overview?.role ?? membership?.role;
   const canManage = role === "owner" || role === "admin";
-  return <QuietToolsFrame title="Connections" description="Connect the services your team needs. Every action still follows your approval policies." scope={companyId ? `${overview?.company.name ?? "This company"} · Organization connections are inherited and read-only here.` : `${membership?.name ?? "This organization"} · Shared across its companies.`} organization={!companyId} orgId={orgId} active="integrations">
+  return <QuietToolsFrame page={companyId ? "connections" : "organizationConnections"} orgId={companyId ? undefined : orgId}>
     <ToolsPermission allowed={canManage} />
     {oauth?.error && <p role="alert" className="quiet-tools-permission">Authorization did not complete. No new connection is confirmed. Try connecting again.</p>}
     {oauth?.connected && !oauth.error && <p role="status" className="quiet-tools-permission">Authorization returned. Check the connection’s current status below.</p>}
@@ -32,7 +32,7 @@ export async function QuietProviders({ api, orgId, membership, serverUrl }: { ap
     api.get<{ devices: CompanionDevice[] }>(`/orgs/${orgId}/companion/devices`),
   ]);
   const isAdmin = membership?.role === "owner" || membership?.role === "admin";
-  return <QuietToolsFrame title="AI providers" description="Choose the models your companies can use, check their connections and review recorded usage." scope={`${membership?.name ?? "This organization"} · Shared across all its companies. Company model routing stays in company Settings.`} organization orgId={orgId} active="providers">
+  return <QuietToolsFrame page="providers" orgId={orgId}>
     <ToolsPermission allowed={isAdmin} action="manage providers and companions" />
     {[[types, "Provider catalog"], [providers, "Configured providers"], [models, "Available models"], [usage, "Usage"], [devices, "Companions"]].map(([result, subject]) => {
       const read = result as PromiseSettledResult<unknown>;

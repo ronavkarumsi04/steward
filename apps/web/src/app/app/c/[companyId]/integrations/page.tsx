@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Integrations" };
 
 export default async function IntegrationsPage(props: Parameters<typeof IntegrationsContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietToolsLoading />}><IntegrationsContent {...props} /></Suspense>;
+    return <Suspense fallback={<QuietToolsLoading page="connections" />}><IntegrationsContent {...props} /></Suspense>;
   }
   return IntegrationsContent(props);
 }

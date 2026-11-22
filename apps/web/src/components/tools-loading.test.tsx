@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Suspense } from "react";
+import { cloneElement, Suspense, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ConnectionsPage from "@/app/app/c/[companyId]/integrations/page";
 import McpPage from "@/app/app/c/[companyId]/mcp/page";
@@ -8,7 +9,7 @@ import BrowserPage from "@/app/app/c/[companyId]/browser/page";
 import CodePage from "@/app/app/c/[companyId]/code/page";
 import OrgConnectionsPage from "@/app/app/(shell)/org/[orgId]/integrations/page";
 import ProvidersPage from "@/app/app/(shell)/org/[orgId]/providers/page";
-import { QuietToolsLoading } from "./quiet-tools";
+import { QuietToolsFrame, QuietToolsLoading } from "./quiet-tools";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -35,6 +36,19 @@ const routes = [
 function response(path: string) {
   if (path === "/companies/company") return { company: { organizationId: "org" }, role: "owner" };
   return { catalog: [], integrations: [], types: [], providers: [], models: [], usage: [], devices: [], sessions: [], defaultRepo: null };
+}
+
+async function loadedContent(node: ReactElement): Promise<ReactElement> {
+  if (node.type === QuietToolsFrame) return cloneElement(node as ReactElement<{ children: null }>, { children: null });
+  if (typeof node.type === "function") {
+    return loadedContent(await (node.type as (props: unknown) => ReactElement | Promise<ReactElement>)(node.props));
+  }
+  return node;
+}
+
+function chrome(node: ReactElement) {
+  const markup = renderToStaticMarkup(node);
+  return [...markup.matchAll(/<(header|nav) class="(?:quiet-page-heading|quiet-organization-nav)"[^>]*>[\s\S]*?<\/\1>/g)].map(match => match[0]);
 }
 
 describe.each(routes)("Tools loading: $path", ({ path, page }) => {
@@ -64,5 +78,17 @@ describe.each(routes)("Tools loading: $path", ({ path, page }) => {
     expect(result.type).toBe(Suspense);
     expect(result.props.fallback.type).toBe(QuietToolsLoading);
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("keeps destination headings, scope and organization navigation identical while loading", async () => {
+    vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
+    get.mockImplementation(async (url: string) => response(url));
+    const boundary = await page();
+    const fallback = boundary.props.fallback;
+    const content = await loadedContent(boundary.props.children);
+    const loadingChrome = chrome(fallback);
+    expect(loadingChrome.length).toBeGreaterThan(0);
+    expect(loadingChrome).toEqual(chrome(content));
+    expect(renderToStaticMarkup(fallback)).not.toContain(">Loading tools</h1>");
   });
 });

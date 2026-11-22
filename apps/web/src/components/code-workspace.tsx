@@ -18,6 +18,7 @@ import type {
 import { useToast } from "./feedback";
 import { Icon } from "./icons";
 import { Ago, Card, Empty, Pill, PageHeader } from "./ui";
+import { QuietToolsContext } from "./quiet-tools-context";
 
 /**
  * The code IDE.
@@ -296,7 +297,7 @@ export function CodeWorkspace({
   if (!initial.connected) {
     return (
       <>
-        <PageHeader eyebrow="Code" title="Code" description="Read your repository, edit a file, and hand the change to an agent to commit." />
+        {!quiet && <PageHeader eyebrow="Code" title="Code" description="Read your repository, edit a file, and hand the change to an agent to commit." />}
         <Card title="Connect source control">
           <Empty icon={<Icon.Code size={28} />}>
             Steward reads your repository directly rather than keeping a copy of it, so the IDE needs a GitHub connection. Connect
@@ -309,12 +310,13 @@ export function CodeWorkspace({
   }
 
   const current = detail?.session ?? null;
+  const Header = quiet ? QuietToolsContext : PageHeader;
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <Header
         eyebrow="Code"
-        title={repo || "Code"}
+        title={repo || (quiet ? "Repository" : "Code")}
         description={
           tree
             ? `Editing ${tree.repo} at ${tree.ref}${tree.defaultBranch === tree.ref ? " (the default branch)" : ""}. A session proposes; an agent run commits and opens the pull request.`
