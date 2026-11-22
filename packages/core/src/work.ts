@@ -1,10 +1,18 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
-import { canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
+import { EXPLICIT_NO_TOOLS, canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
 export const AGENT_TOOL_ALLOWLIST_LIMIT = 200;
+export const AGENT_TOOL_DENYLIST_LIMIT = 20_000;
+export class ToolAllowlistLimitError extends Error {}
+export function toolAllowlistLimitIssue(entries: readonly string[], previous: readonly string[] = [], generatedToolDenies = false): string | null {
+  const count = (patterns: readonly string[], deny: boolean) => new Set(patterns.filter((entry) => entry !== EXPLICIT_NO_TOOLS && entry.startsWith("!") === deny)).size;
+  if (count(entries, false) > Math.max(AGENT_TOOL_ALLOWLIST_LIMIT, count(previous, false))) return `At most ${AGENT_TOOL_ALLOWLIST_LIMIT} positive tool allowlist entries are allowed. Existing over-limit lists may only keep or reduce their count.`;
+  if (!generatedToolDenies && count(entries, true) > Math.max(AGENT_TOOL_DENYLIST_LIMIT, count(previous, true))) return `At most ${AGENT_TOOL_DENYLIST_LIMIT} tool deny entries are allowed. Existing over-limit lists may only keep or reduce their count.`;
+  return null;
+}
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 async function assertScopedProject(db: DbOrTx, scope: TenantScope, projectId?: string | null) {
@@ -128,24 +136,34 @@ export class AgentService {
     const [a] = await this.db.insert(agents).values({ organizationId: scope.organizationId, companyId: scope.companyId!, kind: input.kind, name: input.name, description: input.description ?? "", systemPrompt: input.systemPrompt ?? "", toolAllowlist, routingPolicy: input.routingPolicy ?? {}, maxIterations: input.maxIterations ?? 24, budgetUsdPerRun: input.budgetUsdPerRun?.toFixed(4) }).returning();
     return a!;
   }
-  async update(scope: TenantScope, id: string, patch: Partial<{ name: string; description: string; systemPrompt: string; enabled: boolean; toolAllowlist: string[]; routingPolicy: Record<string, unknown>; maxIterations: number; budgetUsdPerRun: number | null; config: Record<string, unknown> }>) {
+  async update(scope: TenantScope, id: string, patch: Partial<{ name: string; description: string; systemPrompt: string; enabled: boolean; toolAllowlist: string[]; routingPolicy: Record<string, unknown>; maxIterations: number; budgetUsdPerRun: number | null; config: Record<string, unknown> }>, options: { generatedToolDenies?: boolean } = {}) {
     const set: Record<string, unknown> = { ...patch, updatedAt: new Date() };
-    if (patch.toolAllowlist !== undefined) set.toolAllowlist = await this.canonicalAllowlist(scope, patch.toolAllowlist);
+    if (patch.toolAllowlist !== undefined) {
+      const existing = await this.get(scope, id);
+      if (!existing) return null;
+      set.toolAllowlist = await this.canonicalAllowlist(scope, patch.toolAllowlist, existing.toolAllowlist, options.generatedToolDenies);
+    }
     if (patch.budgetUsdPerRun !== undefined) set.budgetUsdPerRun = patch.budgetUsdPerRun === null ? null : patch.budgetUsdPerRun.toFixed(4);
     const [a] = await this.db.update(agents).set(set).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }, eq(agents.id, id))).returning();
     if (a) await emitEvent(this.db, { organizationId: scope.organizationId, companyId: scope.companyId, type: "agent.updated", actor: scope.actor, payload: { agentId: id, fields: Object.keys(patch) } });
     return a ?? null;
   }
 
-  private async canonicalAllowlist(scope: TenantScope, entries: string[]): Promise<string[]> {
-    if (!entries.some((entry) => /^mcp\.[^.]+\./.test(entry) && entry.split(".").slice(0, 2).join(".") !== mcpNamespace(entry.split(".")[1]!))) return [...new Set(entries)];
+  private async canonicalAllowlist(scope: TenantScope, entries: string[], previous: readonly string[] = [], generatedToolDenies = false): Promise<string[]> {
+    const issue = toolAllowlistLimitIssue(entries, previous, generatedToolDenies);
+    if (issue) throw new ToolAllowlistLimitError(`${issue} No permissions were changed.`);
+    const checked = (patterns: string[]) => {
+      const result = patterns.length ? explicitToolAllowlist(patterns) : entries.length ? explicitToolAllowlist([]) : [];
+      return result;
+    };
+    if (!entries.some((entry) => /^!?mcp\.[^.]+\./.test(entry) && entry.replace(/^!/, "").split(".").slice(0, 2).join(".") !== mcpNamespace(entry.split(".")[1]!))) return checked(entries);
     const servers = await this.db.select({ id: mcpServers.id, slug: mcpServers.slug }).from(mcpServers).where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }));
     const tools = await this.db.select({ serverId: mcpTools.serverId, toolName: mcpTools.toolName }).from(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }));
     const ambiguous = servers.map((server) => mcpNamespace(server.slug)).filter((namespace, index, all) => all.indexOf(namespace) !== index);
-    return explicitToolAllowlist(entries.map((entry) => {
+    return checked(entries.flatMap((entry) => {
       const server = servers.find((row) => row.slug === entry.split(".")[1]?.toLowerCase());
       return canonicalizeMcpAllowlistEntry(entry, tools.filter((tool) => tool.serverId === server?.id).map((tool) => tool.toolName), ambiguous);
-    }).filter((entry): entry is string => entry !== null));
+    }));
   }
 
   listSchedules(scope: TenantScope) {

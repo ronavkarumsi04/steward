@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 import { DEFAULT_TOOL_ALLOWLIST } from "@steward/agents";
-import { AGENT_TOOL_ALLOWLIST_LIMIT, MCP_LIMITS, MCP_TRANSPORTS, applyGrant, describeInstall, grantedBy, installOf, mcpTarget, type McpServerRow, type McpToolRow } from "@steward/core";
-import { HttpError, companyScope, param, type AppEnv } from "../context.js";
+import { MCP_LIMITS, MCP_TRANSPORTS, applyGrant, describeInstall, grantedBy, installOf, mcpTarget, type McpServerRow, type McpToolRow } from "@steward/core";
+import { companyScope, param, type AppEnv } from "../context.js";
 import { defineRoute, type RouteRegistry } from "../route.js";
 
 /**
@@ -152,8 +152,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const base = usedDefaults ? (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) : agent.toolAllowlist;
     const recorded = await deps.services.mcp.toolsOf(scope, server.id);
     const next = applyGrant({ allowlist: base, slug: server.slug, toolNames: input.toolNames ?? null, serverTools: recorded.map((tool) => tool.toolName), granted: input.granted });
-    if (next.length > AGENT_TOOL_ALLOWLIST_LIMIT) throw new HttpError(400, "tool_allowlist_limit", `This change would exceed the agent's limit of ${AGENT_TOOL_ALLOWLIST_LIMIT} tool allowlist entries. Remove other grants first. No permissions were changed.`);
-    await deps.services.agents.update(scope, agent.id, { toolAllowlist: next });
+    await deps.services.agents.update(scope, agent.id, { toolAllowlist: next }, { generatedToolDenies: true });
 
     const notices: string[] = [];
     if (usedDefaults && input.granted) notices.push(`“${agent.name}” had no tools of its own and was using the defaults for a ${agent.kind} agent, so those defaults are now written out beside the grant.`);

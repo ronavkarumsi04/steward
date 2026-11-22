@@ -4,7 +4,7 @@ import { earningRule, expiryFor } from "@steward/memory";
 import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
 import { redactSecrets } from "@steward/crypto";
 import { PolicyRule, RoutingPolicy, VerificationVerdict, effectiveOverclock, phaseRequest, skillContext, type OverclockConfig, type ApprovalRequest, type PolicyDecision, type RiskLevel, type TaskStatus, type ToolManifest, BrandKit, brandKitDecided, brandVoiceBrief } from "@steward/schema";
-import { matchTool, type ToolContext, type ToolDefinition, type ToolRegistry } from "@steward/tools";
+import { allowlistPermits, type ToolContext, type ToolDefinition, type ToolRegistry } from "@steward/tools";
 import { z } from "zod";
 import { PLAN_SCHEMA, ROLE_PROMPTS, RUNTIME_RULES, VERIFY_SCHEMA } from "./prompts.js";
 import type { AgentServices } from "./services.js";
@@ -38,8 +38,8 @@ export function toolHolders(agents: ReadonlyArray<{ kind: string; enabled: boole
 }
 
 export function missingPlanTools(steps: ReadonlyArray<{ tools: readonly string[] }>, toolNames: readonly string[], holders: ReadonlyArray<ToolHolder>): Array<{ tool: string; owners: string[] }> {
-  const planned = [...new Set(steps.flatMap((s) => s.tools))].filter((t) => t && !toolNames.some((n) => matchTool(n, t)));
-  return planned.map((tool) => ({ tool, owners: [...new Set(holders.filter((h) => h.allow.some((n) => matchTool(n, tool))).map((h) => h.kind))] }));
+  const planned = [...new Set(steps.flatMap((s) => s.tools))].filter((t) => t && !allowlistPermits(toolNames, t));
+  return planned.map((tool) => ({ tool, owners: [...new Set(holders.filter((h) => allowlistPermits(h.allow, tool)).map((h) => h.kind))] }));
 }
 
 export function missingToolsNote(missing: ReadonlyArray<{ tool: string; owners: string[] }>, canDelegate: boolean): string {
@@ -229,7 +229,11 @@ export class AgentRuntime {
   async buildContext(runId: string): Promise<RunContextBundle> {
     const { run, agent } = await this.loadRun(runId);
     const existing = (await this.s.runs.steps(this.scope, runId)).find((st) => st.kind === "context" && st.status === "succeeded");
-    if (existing) return existing.output as RunContextBundle;
+    if (existing) {
+      const saved = existing.output as RunContextBundle;
+      const allow = agent.toolAllowlist.length ? agent.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!);
+      return { ...saved, toolNames: saved.toolNames.filter((name) => this.registry.get(name) && allowlistPermits(allow, name)) };
+    }
 
     await this.s.runs.setStatus({ ...this.scope, actor: this.actor(agent.id, runId) }, runId, "building_context");
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "context", title: "Build context" });
@@ -343,7 +347,7 @@ export class AgentRuntime {
       const plan = (planStep.output as { plan?: Plan } | null)?.plan;
       if (plan) {
         const holders = toolHolders((await this.s.agents.list(this.scope)).filter((a) => a.id !== agentId));
-        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames, holders), ctx.toolNames.some((n) => matchTool(n, "delegate.run")));
+        const note = missingToolsNote(missingPlanTools(plan.steps, ctx.toolNames, holders), allowlistPermits(ctx.toolNames, "delegate.run"));
         messages.push({ role: "assistant", content: `Plan:\n${plan.steps.map((s, i) => `${i + 1}. ${s.title}`).join("\n")}\nSuccess criteria: ${plan.successCriteria.join("; ")}` }, { role: "user", content: `Proceed with the plan. Use tools as needed.${note}` });
       }
     }
@@ -373,6 +377,8 @@ export class AgentRuntime {
 
   async iterate(runId: string, ctx: RunContextBundle, resume?: ApprovalResumption, signal?: AbortSignal, deadline?: number): Promise<IterationOutcome> {
     const { run, agent } = await this.loadRun(runId);
+    const allow = agent.toolAllowlist.length ? agent.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!);
+    ctx = { ...ctx, toolNames: ctx.toolNames.filter((name) => allowlistPermits(allow, name)) };
     const actor = this.actor(agent.id, runId);
     const scope = { ...this.scope, actor };
     if (run.status === "cancelled") return { kind: "done", finalText: "Run was cancelled." };
@@ -383,7 +389,11 @@ export class AgentRuntime {
     if (pending) {
       if (!resume || resume.approvalId !== pending.approvalId) return { kind: "needs_approval", approvalId: pending.approvalId ?? "", toolCallId: pending.toolCallId, toolName: pending.toolName };
       const tool = this.registry.get(pending.toolName);
-      if (resume.status !== "approved" || !tool) {
+      if (!tool || !allowlistPermits(allow, pending.toolName)) {
+        await this.s.runs.finishStep(this.scope, pending.stepId, { status: "failed", error: `Tool ${pending.toolName} is not available to this agent.` });
+        return { kind: "continue" };
+      }
+      if (resume.status !== "approved") {
         await this.s.runs.finishStep(this.scope, pending.stepId, { status: "skipped", error: `Approval ${resume.status}${resume.note ? `: ${resume.note}` : ""}` });
         return { kind: "continue" };
       }
@@ -472,7 +482,7 @@ export class AgentRuntime {
     for (const tc of toolCalls) {
       signal?.throwIfAborted();
       const tool = this.registry.get(tc.name);
-      if (!tool || !ctx.toolNames.some((n) => matchTool(n, tc.name))) {
+      if (!tool || !allowlistPermits(ctx.toolNames, tc.name) || !allowlistPermits(allow, tc.name)) {
         const st = await this.s.runs.beginStep(this.scope, runId, { kind: "tool_call", title: `${tc.name} (unavailable)`, input: { toolCallId: tc.id, toolName: tc.name, args: tc.arguments } });
         await this.s.runs.finishStep(this.scope, st.id, { status: "failed", error: `Tool ${tc.name} is not available to this agent. Available: ${ctx.toolNames.join(", ")}` });
         continue;

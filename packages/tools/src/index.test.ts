@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { assertPublicUrl, htmlToText, isPrivateAddress } from "./web.js";
-import { ToolRegistry, defineTool, matchTool, untrusted } from "./registry.js";
+import { EXPLICIT_NO_TOOLS, ToolRegistry, allowlistPermits, defineTool, explicitToolAllowlist, matchTool, untrusted } from "./registry.js";
 
 describe("ssrf protection", () => {
   it("classifies private ranges", () => {
@@ -19,6 +19,22 @@ describe("ssrf protection", () => {
 });
 
 describe("registry", () => {
+  it("gives denies precedence over every positive pattern and never treats them as grants", () => {
+    const registry = new ToolRegistry();
+    for (const name of ["demo.echo", "demo.other"]) registry.register(defineTool({ name, description: name, input: z.object({}), risk: "LOW", execute: async () => ({ ok: true, content: "" }) }));
+    for (const positive of ["*", "demo.*", "demo.echo"]) {
+      const allow = [positive, "!demo.echo"];
+      expect(allowlistPermits(allow, "demo.echo")).toBe(false);
+      expect(registry.list({ allow }).map((tool) => tool.manifest.name)).not.toContain("demo.echo");
+      expect(registry.specs(allow).map((tool) => tool.name)).not.toContain("demo.echo");
+    }
+    expect(registry.list({ allow: ["*", "!demo.*"] })).toEqual([]);
+    expect(allowlistPermits([], "demo.echo")).toBe(false);
+    expect(allowlistPermits(["!demo.echo"], "demo.echo")).toBe(false);
+    expect(matchTool("!demo.echo", "!demo.echo")).toBe(false);
+    expect(explicitToolAllowlist(["!demo.echo"])).toEqual([EXPLICIT_NO_TOOLS, "!demo.echo"]);
+    expect(explicitToolAllowlist([EXPLICIT_NO_TOOLS, "*", "!demo.echo"])).toEqual(["*", "!demo.echo"]);
+  });
   it("registers, lists, filters, produces specs", async () => {
     const reg = new ToolRegistry();
     const t = defineTool({ name: "demo.echo", description: "echo", input: z.object({ text: z.string() }), risk: "LOW", execute: async ({ text }) => ({ ok: true, content: text }) });

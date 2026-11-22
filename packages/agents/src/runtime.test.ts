@@ -24,7 +24,7 @@ describe("AgentRuntime cancellation", () => {
         beginStep: vi.fn(async () => ({ id: "step-1" })),
         finishStep: vi.fn(async () => undefined),
       },
-      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom" })) },
+      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom", toolAllowlist: ["test.*"] })) },
     } as unknown as AgentServices;
     const runtime = new AgentRuntime(services, {} as never);
     const context = {
@@ -95,7 +95,7 @@ describe("AgentRuntime cancellation", () => {
         finishStep: vi.fn(async () => undefined),
         recordToolCall: vi.fn(async () => undefined),
       },
-      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom" })) },
+      agents: { get: vi.fn(async () => ({ id: "agent-1", kind: "custom", toolAllowlist: ["test.*"] })) },
       budgets: { assertAvailable: vi.fn(async () => undefined), charge: vi.fn(async () => undefined) },
     } as unknown as AgentServices;
     const runtime = new AgentRuntime(services, registry);
@@ -242,6 +242,17 @@ describe("missingPlanTools", () => {
     const holders = toolHolders([{ kind: "research", enabled: true, toolAllowlist: [EXPLICIT_NO_TOOLS] }]);
     expect(holders).toEqual([{ kind: "research", allow: [EXPLICIT_NO_TOOLS] }]);
     expect(missingPlanTools([{ tools: ["web.search"] }], [], holders)).toEqual([{ tool: "web.search", owners: [] }]);
+  });
+  it("does not delegate tools denied by a wildcard or a materialized role default", () => {
+    const defaults = toolHolders([{ kind: "research", enabled: true, toolAllowlist: [] }])[0]!.allow;
+    const holders = toolHolders([
+      { kind: "research", enabled: true, toolAllowlist: [...defaults, "!web.search"] },
+      { kind: "marketing", enabled: true, toolAllowlist: ["*", "!web.*"] },
+    ]);
+    expect(missingPlanTools([{ tools: ["web.search", "web.fetch"] }], ["web.*", "!web.search", "!web.fetch"], holders)).toEqual([
+      { tool: "web.search", owners: [] },
+      { tool: "web.fetch", owners: ["research"] },
+    ]);
   });
 
   it("is empty when every planned tool matches the allowlist, wildcards included", () => {

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { parseBoolean } from "@steward/core";
 import { cors } from "hono/cors";
-import { AuthError, BrowserError, CodeError, GraphError, McpError, SiteError, WorkflowError, type EventBus } from "@steward/core";
+import { AuthError, BrowserError, CodeError, GraphError, McpError, SiteError, ToolAllowlistLimitError, WorkflowError, type EventBus } from "@steward/core";
 import { MemoryError } from "@steward/memory";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
@@ -127,6 +127,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
 
   app.notFound((c) => c.json({ error: { code: "not_found", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
   app.onError((err, c) => {
+    if (err instanceof ToolAllowlistLimitError) return c.json({ error: { code: "tool_allowlist_limit", message: err.message } }, 400);
     const rid = c.get("requestId");
     if (err instanceof HttpError) return c.json({ error: { code: err.code, message: err.message, details: err.details, requestId: rid } }, err.status);
     if (err instanceof AuthError) {

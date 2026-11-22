@@ -113,6 +113,32 @@ describe("migration invariants", () => {
       client.release();
     }
   });
+  live("preserves every reading of ambiguous denies, including unknown tools and installed aliases", async () => {
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("CREATE TEMP TABLE agents (id text, company_id text, tool_allowlist jsonb) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_servers (id text, company_id text, slug text) ON COMMIT DROP");
+      await client.query("CREATE TEMP TABLE mcp_tools (server_id text, company_id text, tool_name text) ON COMMIT DROP");
+      for (const company of ["ambiguous", "missing", "collision", "literal", "collapsed", "deny_only"]) {
+        await client.query("INSERT INTO mcp_servers VALUES ($1, $1, 'a-b')", [company]);
+        const entries = company === "deny_only" ? ["!mcp.a-b.mcp.a_b.x"] : ["*", "!mcp.a-b.mcp.a_b.x", "!mcp.a-b.billing.*", "!web.*"];
+        await client.query("INSERT INTO agents VALUES ($1, $1, $2)", [company, JSON.stringify(entries)]);
+      }
+      await client.query("INSERT INTO mcp_servers VALUES ('alias', 'collision', 'a_b')");
+      await client.query("INSERT INTO mcp_tools VALUES ('ambiguous','ambiguous','mcp.a_b.x'), ('ambiguous','ambiguous','mcp.a_b.mcp.a_b.x'), ('literal','literal','mcp.a_b.mcp.a_b.x'), ('collapsed','collapsed','mcp.a_b.x')");
+      const migration = readFileSync(path.join(drizzleDir, "0024_mcp_canonical_grants.sql"), "utf8");
+      for (let pass = 0; pass < 2; pass++) {
+        await client.query(migration);
+        for (const row of (await client.query("SELECT id, tool_allowlist FROM agents ORDER BY id")).rows) {
+          expect(row.tool_allowlist).toEqual(row.id === "deny_only" ? ["__steward_no_tools__", "!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x"] : ["*", "!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x", "!mcp.a_b.billing.*", "!web.*"]);
+        }
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
   live("migrates only the unique recorded interpretation of legacy per-tool grants", async () => {
     const client = await pool!.connect();
     try {

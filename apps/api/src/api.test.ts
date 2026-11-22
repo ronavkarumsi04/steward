@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AGENT_TOOL_ALLOWLIST_LIMIT, AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, unsubscribeToken, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AGENT_TOOL_ALLOWLIST_LIMIT, AGENT_TOOL_DENYLIST_LIMIT, AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, unsubscribeToken, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -2320,6 +2320,56 @@ describe("workflows", () => {
 });
 
 describe("mcp marketplace", () => {
+
+  for (const count of [190, 200]) d(`revokes one of ${count} recorded tools while retaining 15 unrelated grants`, async () => {
+    const me = await marketplace();
+    await me.api.json("POST", `/orgs/${me.orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await core.pool.query("INSERT INTO mcp_tools (id,organization_id,company_id,server_id,name,tool_name,risk,side_effects,risk_source) SELECT gen_random_uuid()::text,$1,$2,$3,'tool_' || n,'mcp.ledger.tool_' || n,'LOW','none','name' FROM generate_series(1,$4) n", [me.orgId, me.companyId, serverId, count]);
+    const other = Array.from({ length: 15 }, (_, i) => i === 0 ? "web.search" : `web.unrelated_${i}`);
+    await me.api.call("PATCH", `/companies/${me.companyId}/agents/${me.agentId}`, { toolAllowlist: other });
+    const path = `/companies/${me.companyId}/mcp/${serverId}/grant`;
+    expect((await me.api.call("POST", path, { agentId: me.agentId, granted: true })).status).toBe(200);
+    const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, actor: { type: "system", component: "deny-test" } };
+    const scoped = services.forScope(scope);
+    const registry = await registryWithMcpTools(buildToolRegistry(), scoped);
+    const runtime = new AgentRuntime(scoped, registry);
+    const run = await services.runs.create(scope, { agentId: me.agentId, trigger: { kind: "user", instruction: "Check allowed tools." } });
+    const before = await runtime.buildContext(run.id);
+    expect(before.toolNames).toContain("mcp.ledger.tool_1");
+    const revoked = await me.api.json<{ agent: { toolAllowlist: string[] }; error?: { message: string } }>("POST", path, { agentId: me.agentId, toolNames: ["mcp.ledger.tool_1"], granted: false });
+    console.log(`REVOKE_${count}`, JSON.stringify({ status: revoked.status, entries: revoked.body.agent?.toolAllowlist.length, error: revoked.body.error?.message }));
+    expect(revoked.status).toBe(200);
+    const allowlist = revoked.body.agent.toolAllowlist;
+    expect(allowlist).toEqual([...other, "mcp.ledger.*", "!mcp.ledger.tool_1"]);
+    expect((await me.read()).body.servers[0]!.tools.find((tool) => tool.toolName === "mcp.ledger.tool_1")!.grantedTo.some((grant) => grant.agentId === me.agentId)).toBe(false);
+    const permitted = registry.list({ allow: allowlist }).map((tool) => tool.manifest.name);
+    expect(permitted).not.toContain("mcp.ledger.tool_1");
+    expect(permitted).toContain("mcp.ledger.tool_2");
+    expect(permitted).toContain("web.search");
+    expect((await runtime.buildContext(run.id)).toolNames).toEqual(before.toolNames.filter((name) => name !== "mcp.ledger.tool_1"));
+    const chat = vi.spyOn(scoped.gateway, "chat").mockResolvedValue({
+      id: "deny-test", model: "test", provider: "nvidia", text: "", toolCalls: [{ id: "revoked", name: "mcp.ledger.tool_1", arguments: {} }],
+      route: { credentialId: "deny-test", provider: "nvidia", model: "test", reason: "deny regression" },
+      finishReason: "tool_calls", usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    try {
+      await runtime.iterate(run.id, before);
+      expect(chat.mock.calls[0]![0].tools!.map((tool) => tool.name)).not.toContain("mcp.ledger.tool_1");
+      expect((await services.runs.steps(scope, run.id)).some((step) => step.kind === "tool_call" && step.status === "failed" && step.error?.includes("not available"))).toBe(true);
+      const pending = await services.runs.beginStep(scope, run.id, { kind: "approval", title: "Previously requested tool", input: { toolCallId: "pending", toolName: "mcp.ledger.tool_1", args: {}, approvalId: "deny-test" } });
+      await runtime.iterate(run.id, before, { approvalId: "deny-test", toolCallId: "pending", status: "approved" });
+      expect((await services.runs.steps(scope, run.id)).find((step) => step.id === pending.id)).toMatchObject({ status: "failed", error: "Tool mcp.ledger.tool_1 is not available to this agent." });
+    } finally {
+      chat.mockRestore();
+    }
+    expect((await me.api.call("POST", path, { agentId: me.agentId, granted: false })).status).toBe(200);
+    expect((await me.read()).body.servers[0]!.tools.every((tool) => !tool.grantedTo.some((grant) => grant.agentId === me.agentId))).toBe(true);
+    const regrant = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", path, { agentId: me.agentId, toolNames: ["tool_1"], granted: true });
+    expect(regrant.status).toBe(200);
+    expect(regrant.body.agent.toolAllowlist).toEqual([...other, "mcp.ledger.tool_1"]);
+  }, 60_000);
   const EXPLICIT_NO_TOOLS = "__steward_no_tools__";
   /**
    * Install a server, see what it may do, decide who may call it.
@@ -2509,7 +2559,7 @@ describe("mcp marketplace", () => {
     expect((await update(["web.*", "mcp.a-b.*", "mcp.a-b.billing.*", legacy])).body.agent.toolAllowlist).toEqual(["web.*"]);
   }, 60_000);
 
-  d("rejects oversized MCP grant and wildcard revoke results without writing, while allowing the shared limit", async () => {
+  d("limits positive entries without preventing revokes at the shared limit", async () => {
     const me = await marketplace();
     const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
     const serverId = installed.body.server.id;
@@ -2519,26 +2569,113 @@ describe("mcp marketplace", () => {
     const target = "mcp.ledger.billing.lookup_invoice";
     const agentPath = `/companies/${me.companyId}/agents/${me.agentId}`;
     const grantPath = `/companies/${me.companyId}/mcp/${serverId}/grant`;
-    const cases = [
-      { toolAllowlist: unrelated, granted: true, toolNames: null },
-      { toolAllowlist: unrelated, granted: true, toolNames: [target] },
-      ...["mcp.ledger.*", "mcp.ledger.billing.*"].map((wildcard) => ({ toolAllowlist: [...unrelated.slice(1), wildcard], granted: false, toolNames: [target] })),
-    ];
-    for (const { toolAllowlist, ...change } of cases) {
-      expect((await me.api.call("PATCH", agentPath, { toolAllowlist })).status).toBe(200);
-      const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0];
-      const rejected = await me.api.json<{ error: { code: string; message: string } }>("POST", grantPath, { agentId: me.agentId, ...change });
+    expect((await me.api.call("PATCH", agentPath, { toolAllowlist: unrelated })).status).toBe(200);
+    const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0];
+    for (const toolNames of [null, [target]]) {
+      const rejected = await me.api.json<{ error: { code: string; message: string } }>("POST", grantPath, { agentId: me.agentId, granted: true, toolNames });
       expect(rejected.status).toBe(400);
       expect(rejected.body.error.code).toBe("tool_allowlist_limit");
       expect(rejected.body.error.message).toContain(String(AGENT_TOOL_ALLOWLIST_LIMIT));
       expect((await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0]).toEqual(before);
     }
-    await me.api.call("PATCH", agentPath, { toolAllowlist: [...unrelated.slice(5), "mcp.ledger.billing.*"] });
-    const boundary = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: me.agentId, toolNames: [target], granted: false });
-    expect(boundary.status).toBe(200);
-    expect(boundary.body.agent.toolAllowlist).toHaveLength(AGENT_TOOL_ALLOWLIST_LIMIT);
-    expect(boundary.body.agent.toolAllowlist).not.toContain(target);
-    expect((await me.api.call("PATCH", agentPath, { name: "Still editable", toolAllowlist: boundary.body.agent.toolAllowlist })).status).toBe(200);
+    for (const wildcard of ["mcp.ledger.*", "mcp.ledger.billing.*", "*", "mcp.*"]) {
+      const base = [...unrelated.slice(1), wildcard];
+      expect((await me.api.call("PATCH", agentPath, { toolAllowlist: base })).status).toBe(200);
+      const revoked = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: me.agentId, toolNames: [target], granted: false });
+      expect(revoked.status).toBe(200);
+      expect(revoked.body.agent.toolAllowlist).toEqual([...base, `!${target}`]);
+      expect((await me.api.call("PATCH", agentPath, { name: "Still editable", toolAllowlist: revoked.body.agent.toolAllowlist })).status).toBe(200);
+    }
+  }, 60_000);
+
+  d("shares positive and deny bounds across agent create/update without changing rejected rows", async () => {
+    const me = await marketplace();
+    const path = `/companies/${me.companyId}/agents`;
+    const positives = Array.from({ length: AGENT_TOOL_ALLOWLIST_LIMIT }, (_, i) => `web.tool_${i}`);
+    const denies = Array.from({ length: AGENT_TOOL_DENYLIST_LIMIT }, (_, i) => `!web.blocked_${i}`);
+    const allowlist = [...positives, ...denies];
+    const created = await me.api.json<{ agent: { id: string; toolAllowlist: string[] } }>("POST", path, { kind: "custom", name: "Bounded denies", toolAllowlist: allowlist });
+    expect(created.status).toBe(201);
+    expect(created.body.agent.toolAllowlist).toEqual(allowlist);
+    const agentPath = `${path}/${created.body.agent.id}`;
+    expect((await me.api.call("PATCH", agentPath, { toolAllowlist: allowlist })).status).toBe(200);
+    const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [created.body.agent.id])).rows[0];
+    for (const invalid of [[...allowlist, "web.over_limit"], [...allowlist, "!web.over_limit"]]) {
+      expect((await me.api.call("POST", path, { kind: "custom", name: "Too large", toolAllowlist: invalid })).status).toBe(400);
+      expect((await me.api.call("PATCH", agentPath, { toolAllowlist: invalid })).status).toBe(400);
+      expect((await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [created.body.agent.id])).rows[0]).toEqual(before);
+    }
+    const none = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", path, { kind: "research", name: "Only denies", toolAllowlist: ["!web.search"] });
+    expect(none.body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS, "!web.search"]);
+    expect(buildToolRegistry().list({ allow: none.body.agent.toolAllowlist })).toEqual([]);
+  }, 60_000);
+
+  d("revokes a tool even when the agent already has the maximum number of denies", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+    const toolAllowlist = ["mcp.ledger.*", ...Array.from({ length: AGENT_TOOL_DENYLIST_LIMIT }, (_, i) => `!web.blocked_${i}`)];
+    const saved = await me.api.call("PATCH", `/companies/${me.companyId}/agents/${me.agentId}`, { toolAllowlist });
+    expect(saved.status).toBe(200);
+    const revoked = await me.api.json<{ error?: { message: string } }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames: ["mcp.ledger.lookup_invoice"], granted: false });
+    console.log("REVOKE_AT_DENY_BOUND", JSON.stringify({ saved: saved.status, revoked: revoked.status, error: revoked.body.error?.message }));
+    expect(revoked.status).toBe(200);
+  }, 60_000);
+
+  d("saves over-limit settings round-trips and reductions while refusing new positive or typed deny growth", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+    const agentPath = `/companies/${me.companyId}/agents/${me.agentId}`;
+    const grantPath = `/companies/${me.companyId}/mcp/${serverId}/grant`;
+    const positives = Array.from({ length: AGENT_TOOL_ALLOWLIST_LIMIT - 1 }, (_, i) => `web.tool_${i}`);
+    const denies = Array.from({ length: AGENT_TOOL_DENYLIST_LIMIT }, (_, i) => `!web.blocked_${i}`);
+    expect((await me.api.call("PATCH", agentPath, { toolAllowlist: [...positives, "mcp.ledger.*", ...denies] })).status).toBe(200);
+    const revoked = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: me.agentId, toolNames: ["mcp.ledger.lookup_invoice"], granted: false });
+    expect(revoked.status).toBe(200);
+    expect(revoked.body.agent.toolAllowlist.filter((entry) => entry.startsWith("!"))).toHaveLength(AGENT_TOOL_DENYLIST_LIMIT + 1);
+    for (const legacy of [false, true]) {
+      const current = legacy ? [...revoked.body.agent.toolAllowlist, "web.legacy_1", "web.legacy_2", "web.legacy_3"] : revoked.body.agent.toolAllowlist;
+      if (legacy) await core.pool.query("UPDATE agents SET tool_allowlist=$1 WHERE id=$2", [JSON.stringify(current), me.agentId]);
+      const saved = await me.api.json<{ agent: { name: string; toolAllowlist: string[] } }>("PATCH", agentPath, { name: "Still editable", toolAllowlist: current });
+      expect(saved.status).toBe(200);
+      expect(saved.body.agent).toMatchObject({ name: "Still editable", toolAllowlist: current });
+      expect((await me.api.call("PATCH", agentPath, { name: "Name only" })).status).toBe(200);
+      const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0];
+      for (const entry of ["web.extra", "!web.extra"]) {
+        const rejected = await me.api.json<{ error: { code: string } }>("PATCH", agentPath, { toolAllowlist: [...current, entry], generatedToolDenies: true });
+        expect(rejected.status).toBe(400);
+        expect(rejected.body.error.code).toBe("tool_allowlist_limit");
+        expect((await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0]).toEqual(before);
+      }
+      const narrowed = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: me.agentId, toolNames: ["mcp.ledger.reschedule"], granted: false });
+      expect(narrowed.status).toBe(200);
+      expect(narrowed.body.agent.toolAllowlist).toEqual([...current, "!mcp.ledger.reschedule"]);
+      const reduced = current.filter((entry) => entry !== "!mcp.ledger.lookup_invoice" && entry !== positives[0]);
+      expect((await me.api.call("PATCH", agentPath, { name: "Reduced", toolAllowlist: reduced })).status).toBe(200);
+    }
+  }, 60_000);
+
+  d("preserves ambiguous deny readings and refuses outside-denied grants without a write", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+    await core.pool.query("UPDATE mcp_tools SET tool_name=CASE name WHEN 'lookup_invoice' THEN 'mcp.a_b.x' WHEN 'reschedule' THEN 'mcp.a_b.mcp.a_b.x' ELSE tool_name END WHERE server_id=$1", [serverId]);
+    const agentPath = `/companies/${me.companyId}/agents/${me.agentId}`;
+    const saved = await me.api.json<{ agent: { toolAllowlist: string[] } }>("PATCH", agentPath, { toolAllowlist: ["*", "!mcp.a-b.mcp.a_b.x"] });
+    expect(saved.body.agent.toolAllowlist).toEqual(["*", "!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x"]);
+    for (const name of ["mcp.a_b.x", "mcp.a_b.mcp.a_b.x"]) expect((await me.read()).body.servers[0]!.tools.find((tool) => tool.toolName === name)!.grantedTo.some((grant) => grant.agentId === me.agentId)).toBe(false);
+    await me.api.call("PATCH", agentPath, { toolAllowlist: ["*", "!mcp.*", "!web.search"] });
+    const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0];
+    for (const toolNames of [null, ["mcp.a_b.x"]]) {
+      const rejected = await me.api.json<{ error: { message: string } }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames, granted: true });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error.message).toContain("outside deny");
+      expect((await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0]).toEqual(before);
+    }
   }, 60_000);
 
   d("rewrites legacy nested wildcard grants without widening their scope", async () => {
@@ -2558,10 +2695,10 @@ describe("mcp marketplace", () => {
     const grantPath = `/companies/${me.companyId}/mcp/${installed.body.server.id}/grant`;
     const narrowed = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: created.body.agent.id, toolNames: ["billing.invoices.read"], granted: false });
     expect(narrowed.status).toBe(200);
-    expect(narrowed.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.write"]);
+    expect(narrowed.body.agent.toolAllowlist).toEqual(["mcp.a_b.billing.*", "mcp.a_b.billing.invoices.*", "!mcp.a_b.billing.invoices.read"]);
     expect(registry.list({ allow: narrowed.body.agent.toolAllowlist }).map((tool) => tool.manifest.name)).toEqual(["mcp.a_b.billing.write"]);
     const emptied = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: created.body.agent.id, toolNames: ["mcp.a_b.billing.write"], granted: false });
-    expect(emptied.body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
+    expect(registry.list({ allow: emptied.body.agent.toolAllowlist })).toEqual([]);
   }, 60_000);
 
   d("refuses namespace aliases and fails closed on stored collisions without losing other tools", async () => {
@@ -2607,11 +2744,13 @@ describe("mcp marketplace", () => {
       expect(revoked.body.agent.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
       expect(buildToolRegistry().list({ allow: revoked.body.agent.toolAllowlist })).toEqual([]);
     }
-    await me.api.call("PATCH", agentPath, { toolAllowlist: ["mcp.a_b.*"] });
+    await me.api.call("PATCH", agentPath, { toolAllowlist: ["mcp.a_b.*", "!mcp.a-b.lookup_invoice", "!mcp.a_b.*"] });
+    const remainingDeny = await me.api.json<{ agent: { id: string } }>("POST", `/companies/${me.companyId}/agents`, { kind: "research", name: "Unrelated deny", toolAllowlist: [target, "!web.search"] });
     expect((await me.api.call("DELETE", path)).status).toBe(200);
     const scope: TenantScope = { organizationId: me.orgId, companyId: me.companyId, userId: me.userId, role: "owner", actor: { type: "user", userId: me.userId } };
     const after = (await services.agents.get(scope, agent.body.agent.id))!;
     expect(after.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS]);
+    expect((await services.agents.get(scope, remainingDeny.body.agent.id))!.toolAllowlist).toEqual([EXPLICIT_NO_TOOLS, "!web.search"]);
     const replacement = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a_b" }));
     await me.api.json("POST", `/companies/${me.companyId}/mcp/${replacement.body.server.id}/inspect`, {});
     const registry = await registryWithMcpTools(buildToolRegistry(), services.forScope(scope));
@@ -2698,12 +2837,11 @@ describe("mcp marketplace", () => {
     const agents = await me.api.json<{ agents: Array<{ id: string; toolAllowlist: string[] }> }>("GET", `/companies/${me.companyId}/agents`);
     expect(agents.body.agents.find((row) => row.id === me.agentId)!.toolAllowlist).toContain("mcp.ledger.*");
 
-    // Taking one tool back from a wildcard has to leave the other five named explicitly, or "revoke one" would
-    // either do nothing or take the whole server away.
+    // A deny narrows the wildcard while keeping every other grant intact.
     const one = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", `/companies/${me.companyId}/mcp/${serverId}/grant`, { agentId: me.agentId, toolNames: ["mcp.ledger.delete_customer"], granted: false });
-    expect(one.body.agent.toolAllowlist).not.toContain("mcp.ledger.*");
+    expect(one.body.agent.toolAllowlist).toContain("mcp.ledger.*");
     expect(one.body.agent.toolAllowlist).not.toContain("mcp.ledger.delete_customer");
-    expect(one.body.agent.toolAllowlist).toContain("mcp.ledger.lookup_invoice");
+    expect(one.body.agent.toolAllowlist).toContain("!mcp.ledger.delete_customer");
     const narrowed = (await me.read()).body.servers[0]!;
     // Read per agent, because another agent holding the whole server is exactly the case this is not about.
     const heldBy = (name: string) => narrowed.tools.find((tool) => tool.name === name)!.grantedTo.filter((row) => row.agentId === me.agentId);

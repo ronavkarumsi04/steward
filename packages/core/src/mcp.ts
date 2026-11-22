@@ -43,6 +43,7 @@ import {
   MCP_TRANSPORTS,
   EXPLICIT_NO_TOOLS,
   canonicalizeMcpAllowlistEntry,
+  allowlistPermits,
   explicitToolAllowlist,
   isPrivateAddress,
   listMcpTools,
@@ -550,10 +551,12 @@ export class McpService {
     const existing = await this.required(scope, id);
     return this.db.transaction(async (tx) => {
       await tx.update(agents).set({ toolAllowlist: sql`(
-        SELECT coalesce(jsonb_agg(entry ORDER BY position),
-          CASE WHEN jsonb_array_length(${agents.toolAllowlist}) > 0 THEN jsonb_build_array(${EXPLICIT_NO_TOOLS}::text) ELSE '[]'::jsonb END)
+        SELECT CASE WHEN jsonb_array_length(${agents.toolAllowlist}) > 0
+          AND count(*) FILTER (WHERE entry NOT LIKE '!%' AND entry <> ${EXPLICIT_NO_TOOLS}) = 0
+          THEN jsonb_build_array(${EXPLICIT_NO_TOOLS}::text) ELSE '[]'::jsonb END
+          || coalesce(jsonb_agg(entry ORDER BY position) FILTER (WHERE entry <> ${EXPLICIT_NO_TOOLS}), '[]'::jsonb)
         FROM jsonb_array_elements_text(${agents.toolAllowlist}) WITH ORDINALITY AS grants(entry, position)
-        WHERE NOT (entry ~ '^mcp\\.[^.]+\\..+$' AND
+        WHERE NOT (entry ~ '^!?mcp\\.[^.]+\\..+$' AND
           'mcp.' || regexp_replace(lower(split_part(entry, '.', 2)), '[^a-z0-9_]', '_', 'g') = ${mcpNamespace(existing.slug)})
       )`, updatedAt: this.now() }).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }));
       const removed = await tx.delete(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, eq(mcpTools.serverId, id))).returning({ id: mcpTools.id });
@@ -761,50 +764,52 @@ export class McpService {
 /**
  * Whether an agent may call a tool, and what says so.
  *
- * The same `matchTool` the runtime uses, so the surface's answer and a run's answer are the same answer: an
- * exact name, a server wildcard, or nothing.
+ * Uses the runtime's deny-aware matcher, so the surface and a run agree.
  */
 export function grantedBy(allowlist: readonly string[], toolName: string): string | null {
-  return allowlist.find((pattern) => matchTool(pattern, toolName)) ?? null;
+  return allowlistPermits(allowlist, toolName) ? allowlist.find((pattern) => matchTool(pattern, toolName)) ?? null : null;
 }
 
 /**
  * The allowlist after a grant or a revocation. Pure, so the API can hand it to the agent update it already has
  * rather than inventing a second place where permissions live.
  *
- * `toolNames: null` means the whole server. Revoking one tool from an agent that holds the server wildcard has to
- * *materialise* the wildcard — the remaining tools are written out by name — because otherwise "revoke this one"
- * would either do nothing or take the other five away too, and both are worse than a longer list.
+ * `toolNames: null` means the whole server. Explicit denies narrow wildcard grants without expanding them.
  */
 export function applyGrant(input: { allowlist: readonly string[]; slug: string; toolNames: string[] | null; serverTools: readonly string[]; granted: boolean }): string[] {
   const { slug, toolNames, serverTools, granted } = input;
-  const allowlist = [...new Set(input.allowlist.map((entry) => canonicalizeMcpAllowlistEntry(entry, serverTools)).filter((entry): entry is string => entry !== null))];
   const prefix = `${mcpNamespace(slug)}.`;
   const wildcard = mcpToolPattern(slug);
+  const inNamespace = (entry: string) => entry.replace(/^!/, "").startsWith(prefix);
+  const allowlist = [...new Set(input.allowlist.flatMap((entry) => {
+    const match = /^!?mcp\.([^.]+)\./.exec(entry);
+    return match && `${mcpNamespace(match[1]!)}.` === prefix ? canonicalizeMcpAllowlistEntry(entry, serverTools) : [entry];
+  }))];
   const unique = explicitToolAllowlist;
   const requested = toolNames?.map((name) => {
     const tool = serverTools.includes(name) ? name : mcpToolName(slug, name);
     if (!serverTools.includes(tool)) throw new McpError("invalid_tool", `Tool “${name}” is not a recorded tool of this server.`);
     return tool;
   });
-  if (!granted) {
-    const targets = requested ?? serverTools;
-    const broad = allowlist.find((pattern) => !pattern.startsWith(prefix) && (pattern === "*" || pattern.endsWith(".*")) && targets.some((tool) => matchTool(pattern, tool)));
-    if (broad) throw new McpError("invalid_tool", `Remove the broader grant “${broad}” before revoking this server's tools.`);
-  }
-
   if (granted) {
+    const outsideDeny = allowlist.find((entry) => entry.startsWith("!") && !inNamespace(entry) && (requested ?? serverTools).some((tool) => matchTool(entry.slice(1), tool)));
+    if (outsideDeny) throw new McpError("invalid_tool", `Remove the outside deny “${outsideDeny}” before granting this server's tools.`);
     if (toolNames === null) {
-      // Everything, and so nothing narrower that it already covers.
-      return unique([...allowlist.filter((pattern) => !(pattern.startsWith(prefix) && pattern !== wildcard)), wildcard]);
+      return unique([...allowlist.filter((pattern) => !inNamespace(pattern)), wildcard]);
     }
-    const added = requested!.filter((tool) => !grantedBy(allowlist, tool));
-    return unique([...allowlist, ...added]);
+    const removedDenies = allowlist.filter((entry) => entry.startsWith("!") && inNamespace(entry) && requested!.some((tool) => matchTool(entry.slice(1), tool)));
+    const remaining = allowlist.filter((entry) => !removedDenies.includes(entry));
+    const otherDenies = serverTools.filter((tool) => !requested!.includes(tool) && removedDenies.some((entry) => matchTool(entry.slice(1), tool))).map((tool) => `!${tool}`);
+    const next = [...remaining, ...otherDenies];
+    return unique([...next, ...requested!.filter((tool) => !allowlistPermits(next, tool))]);
   }
 
-  if (toolNames === null) return unique(allowlist.filter((pattern) => !pattern.startsWith(prefix)));
+  if (toolNames === null) {
+    const remaining = allowlist.filter((pattern) => !inNamespace(pattern));
+    return unique([...remaining, ...(serverTools.some((tool) => allowlistPermits(remaining, tool)) || allowlistPermits(remaining, wildcard) ? [`!${wildcard}`] : [])]);
+  }
 
   const revoked = new Set(requested!);
-  const narrowed = allowlist.filter((pattern) => pattern.startsWith(prefix) && pattern.endsWith(".*") && requested!.some((tool) => matchTool(pattern, tool)));
-  return unique([...allowlist.filter((pattern) => !narrowed.includes(pattern) && !revoked.has(pattern)), ...serverTools.filter((tool) => !revoked.has(tool) && narrowed.some((pattern) => matchTool(pattern, tool)))]);
+  const remaining = allowlist.filter((pattern) => !revoked.has(pattern));
+  return unique([...remaining, ...requested!.filter((tool) => allowlistPermits(remaining, tool)).map((tool) => `!${tool}`)]);
 }

@@ -108,18 +108,21 @@ export function mcpNamespace(slug: string): string {
   return `mcp.${slug.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
 }
 
-export function canonicalizeMcpAllowlistEntry(entry: string, recordedTools: readonly string[] = [], ambiguousNamespaces: readonly string[] = []): string | null {
-  const match = /^mcp\.([^.]+)\.(.+)$/.exec(entry);
-  if (!match) return entry;
+export function canonicalizeMcpAllowlistEntry(entry: string, recordedTools: readonly string[] = [], ambiguousNamespaces: readonly string[] = []): string[] {
+  const deny = entry.startsWith("!");
+  const pattern = deny ? entry.slice(1) : entry;
+  const match = /^mcp\.([^.]+)\.(.+)$/.exec(pattern);
+  if (!match) return [entry];
   const namespace = mcpNamespace(match[1]!);
-  if (`mcp.${match[1]}` === namespace) return entry;
-  if (ambiguousNamespaces.includes(namespace)) return null;
+  if (`mcp.${match[1]}` === namespace) return [entry];
   const rest = match[2]!;
   const canonical = `${namespace}.${rest}`;
   const wrapped = rest.startsWith(`${namespace}.`);
-  if (rest === "*" || (rest.endsWith(".*") && !wrapped)) return canonical;
+  if (deny) return [...new Set([`!${canonical}`, ...(wrapped ? [`!${rest}`] : [])])];
+  if (ambiguousNamespaces.includes(namespace)) return [];
+  if (rest === "*" || (rest.endsWith(".*") && !wrapped)) return [canonical];
   const candidates = [...new Set([canonical, ...(wrapped ? [rest] : [])])].filter((candidate) => recordedTools.some((tool) => matchTool(candidate, tool)));
-  return candidates.length === 1 ? candidates[0]! : null;
+  return candidates.length === 1 ? candidates : [];
 }
 
 /**
