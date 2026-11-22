@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { networkSettled, register, watchErrors } from "./session";
 
+async function navigationTypography(page: Page) {
+  return page.locator(".quiet-bottom > :is(a, button)").evaluateAll((controls) => controls.map((control) => {
+    const style = getComputedStyle(control.lastElementChild!);
+    return { size: parseFloat(style.fontSize), weight: style.fontWeight, leading: parseFloat(style.lineHeight), current: control.hasAttribute("aria-current") };
+  }));
+}
+
 async function assertNavigationFits(page: Page, rows: "one" | "multiple") {
   const nav = page.locator(".quiet-bottom");
   await expect(nav).toBeVisible();
@@ -66,6 +73,11 @@ test("Quiet mobile navigation reflows whole labels and reserves its changing hei
   // This regression targets the opt-in Quiet web process, never legacy's default.
   await assertNavigationFits(page, "one");
   const nav = page.locator(".quiet-bottom");
+  const normalType = await navigationTypography(page);
+  expect(normalType.map(({ size }) => size)).toEqual(Array(5).fill(normalType[0]!.size));
+  expect(normalType.map(({ leading }) => leading)).toEqual(Array(5).fill(normalType[0]!.leading));
+  const inactiveWeights = normalType.filter(({ current }) => !current).map(({ weight }) => weight);
+  expect(inactiveWeights).toEqual(Array(inactiveWeights.length).fill(inactiveWeights[0]));
   const compactHeight = await nav.evaluate((element) => element.getBoundingClientRect().height);
   expect(compactHeight).toBeLessThan(90);
 
@@ -78,12 +90,16 @@ test("Quiet mobile navigation reflows whole labels and reserves its changing hei
     element.append(badge);
   });
 
-  // Deterministic font-only stress for Chromium CI, not a substitute for native
-  // Firefox 200% text-only zoom in the recorded browser acceptance check.
-  await nav.locator(":scope > a, :scope > button").evaluateAll((controls) => {
-    const sizes = controls.map((control) => parseFloat(getComputedStyle(control).fontSize));
-    controls.forEach((control, index) => { (control as HTMLElement).style.fontSize = `${sizes[index]! * 2}px`; });
+  // Change the root, not each control: per-control inline font sizes concealed
+  // the fixed-px links versus rem-based More mismatch. Native Firefox text zoom
+  // is checked separately; a CSS root preference is not native browser zoom.
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    root.style.fontSize = `${parseFloat(getComputedStyle(root).fontSize) * 2}px`;
   });
+  const enlargedType = await navigationTypography(page);
+  expect(enlargedType.map(({ size }) => size)).toEqual(normalType.map(({ size }) => size * 2));
+  expect(enlargedType.map(({ weight }) => weight)).toEqual(normalType.map(({ weight }) => weight));
   await nav.locator(".quiet-mobile-count").evaluate((element) => {
     const style = getComputedStyle(element);
     const size = parseFloat(style.fontSize) * 2;
@@ -99,9 +115,7 @@ test("Quiet mobile navigation reflows whole labels and reserves its changing hei
   )).toBe(true);
   await page.setViewportSize({ width: 320, height: 700 });
   await assertNavigationFits(page, "multiple");
-  await nav.locator(":scope > a, :scope > button").evaluateAll((controls) => {
-    controls.forEach((control) => { (control as HTMLElement).style.removeProperty("font-size"); });
-  });
+  await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
   await nav.locator(".quiet-mobile-count").evaluate((element) => { element.remove(); });
   await page.setViewportSize({ width: 390, height: 844 });
   await assertNavigationFits(page, "one");
