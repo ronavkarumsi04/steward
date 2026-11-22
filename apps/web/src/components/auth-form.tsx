@@ -27,6 +27,8 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
   const [busy, setBusy] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -44,11 +46,17 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
       payload = { ...body, accepted: agreements.map((a) => ({ document: a.document, version: a.version })), marketingOptIn };
     }
     try {
-      await browserApi.post(`/auth/${mode}`, payload);
+      const result = await browserApi.post<{ verificationRequired?: boolean }>(`/auth/${mode}`, payload);
+      if (result.verificationRequired) {
+        setNotice("Check your email for a verification link before signing in. The link is valid for 24 hours.");
+        setBusy(false);
+        return;
+      }
       const next = params.get("next");
       router.replace(next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/app");
       router.refresh();
     } catch (err) {
+      setVerificationEmail(err instanceof ApiError && err.code === "email_unverified" ? body.email ?? null : null);
       setError(err instanceof ApiError ? friendly(err) : "Something went wrong");
       setBusy(false);
     }
@@ -115,6 +123,18 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
         </fieldset>
       )}
       {error && <p role="alert" className="nb-panel-flat nb-left-red px-3 py-2 text-sm text-danger">{error}</p>}
+      {notice && <p role="status" className="nb-panel-flat nb-left-green px-3 py-2 text-sm">{notice}</p>}
+      {verificationEmail && <button type="button" className="btn btn-ghost w-full" disabled={busy} onClick={async () => {
+        setBusy(true);
+        try {
+          await browserApi.post("/auth/resend-verification", { email: verificationEmail });
+          setNotice("If this address has an unverified account and email delivery is available, a new verification link will arrive shortly.");
+        } catch (err) {
+          setError(err instanceof ApiError ? friendly(err) : "Something went wrong");
+        } finally {
+          setBusy(false);
+        }
+      }}>Resend verification email</button>}
       <button type="submit" className="btn btn-primary h-11 w-full text-[15px]" disabled={busy || (mode === "register" && agreements.length > 0 && !accepted)}>
         {busy && <span className="spinner" aria-hidden="true" />}
         {mode === "login" ? "Sign in" : invite ? "Create account & join" : "Create account"}
@@ -130,10 +150,12 @@ export function AuthForm({ mode, invite, agreements = [] }: { mode: "login" | "r
   );
 }
 
-export function friendly(err: ApiError): string {
+export function friendly(err: ApiError, emailKind = "Email delivery"): string {
   switch (err.code) {
     case "email_unavailable":
-      return "Password-reset email is unavailable right now. No email was sent. Ask your organization admin for help.";
+      return `${emailKind} is unavailable right now. No email was sent. Ask your organization admin for help.`;
+    case "email_unverified":
+      return "Check your email and verify your address before signing in, or request a new link below.";
     case "signup_closed":
       return "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.";
     case "invalid_invitation":

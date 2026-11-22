@@ -1,11 +1,12 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { ApiError, createClient, type ApiClient } from "./api";
 import type { Me } from "./types";
 import { resolveLocale, type Locale } from "./i18n";
 import { serverTransport } from "./server-transport";
+import { proxyClientHeaders } from "./proxy-client-ip";
 
 const transport = serverTransport();
 export const API_URL = transport.baseUrl;
@@ -18,7 +19,13 @@ export async function serverApi(): Promise<ApiClient> {
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  return createClient({ baseUrl: `${API_URL}/v1`, cookie, fetchImpl: serverFetch });
+  const incoming = await headers();
+  const clientHeaders: Record<string, string> = proxyClientHeaders(incoming, process.env);
+  for (const name of ["x-vercel-forwarded-for", "x-forwarded-for", "x-real-ip"]) {
+    const value = incoming.get(name);
+    if (value) clientHeaders[name] = value;
+  }
+  return createClient({ baseUrl: `${API_URL}/v1`, cookie, fetchImpl: serverFetch, clientHeaders });
 }
 
 /** Memoized per request: the layout and the page both ask, and the answer cannot change between them. */
