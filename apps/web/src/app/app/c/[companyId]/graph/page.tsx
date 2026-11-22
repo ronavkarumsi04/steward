@@ -4,10 +4,8 @@ import { getLocale, serverApi, tryApi } from "@/lib/server";
 import type { GraphRead } from "@/lib/types";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { PageHeader } from "@/components/ui";
-import { QuietKnowledgeNav } from "@/components/quiet-knowledge-nav";
+import { QuietKnowledge } from "@/components/quiet-knowledge";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { depthCopy } from "@/lib/depth-copy";
-import { DepthFailure, QuietDepth } from "@/components/quiet-depth";
 
 export const metadata: Metadata = { title: "Graph" };
 
@@ -25,12 +23,7 @@ export default async function GraphPage({ params }: { params: Promise<{ companyI
   const { companyId } = await params;
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    const locale = await getLocale();
-    const c = depthCopy(locale);
-    let records: GraphRead;
-    try { records = await api.get<GraphRead>(`/companies/${companyId}/graph`); }
-    catch (error) { return <QuietDepth title={c.graphTitle} description={c.graphIntro}><DepthFailure error={error} href={`/app/c/${companyId}/graph`} locale={locale} /></QuietDepth>; }
-    return <QuietDepth title={c.graphTitle} description={c.graphIntro}><QuietKnowledgeNav companyId={companyId} active="connections" /><div className="q-depth-panel"><KnowledgeGraph companyId={companyId} initial={records} /></div></QuietDepth>;
+    return <QuietKnowledge companyId={companyId} api={api} locale={await getLocale()} tab="connections" />;
   }
   const graph = await tryApi(() => api.get<GraphRead>(`/companies/${companyId}/graph`));
   if (!graph) notFound();

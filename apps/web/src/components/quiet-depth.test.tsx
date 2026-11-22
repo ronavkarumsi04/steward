@@ -11,6 +11,7 @@ import KnowledgePage from "@/app/app/c/[companyId]/knowledge/page";
 import { AgentsPanel } from "./agents-panel";
 import { KnowledgePanel } from "./knowledge";
 import type { Agent, Run } from "@/lib/types";
+import { depthCopy } from "@/lib/depth-copy";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -22,6 +23,19 @@ const agent: Agent = { id: "a1", kind: "research", name: "Research", description
 const markup = (node: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(node);
 
 describe("Quiet depth boundaries", () => {
+  it("keeps one Knowledge header, scope context and real collection counts across all seven destinations", async () => {
+    get.mockResolvedValue({ documents: [{ id: "d1", kind: "document", title: "Brief", folder: "/", version: 3, updatedAt: "2026-11-22T00:00:00Z", projectId: null }], decisions: [], memories: [], pending: [], canManage: false, artifacts: [], projects: [], images: [], role: "viewer", overview: { counts: [], nodeKinds: [], entitiesByType: [], links: { total: 0, dangling: 0, byRelation: [] }, limits: {}, relations: [] }, nodes: [], canRecord: false });
+    let navigation: string | undefined;
+    for (const tab of ["documents", "playbooks", "decisions", "memory", "artifacts", "pictures", "connections"]) {
+      const html = markup(await QuietKnowledge({ companyId: "north", api, locale: "en", tab }));
+      expect(html).toContain(`<h1>${depthCopy("en").knowledgeTitle}</h1>`);
+      expect(html).toContain("Company-scoped knowledge");
+      const nav = html.match(/<nav class="q-knowledge-nav".*?<\/nav>/)?.[0].replace(/ aria-current="page"/g, "");
+      expect(nav).toBeTruthy();
+      if (navigation) expect(nav).toBe(navigation);
+      navigation = nav;
+    }
+  });
   it("shows permission failure rather than a fictional empty roster", async () => {
     get.mockRejectedValue(new ApiError(403, "forbidden", "private server detail"));
     const html = markup(await QuietTeam({ companyId: "north", api, locale: "en" }));

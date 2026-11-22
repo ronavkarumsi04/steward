@@ -29,6 +29,13 @@ export const kindLabel = (overview: GraphOverviewView, kind: string): string => 
 /** The label for a type of known thing, from the same vocabulary. */
 export const typeLabel = (overview: GraphOverviewView, type: string): string => overview.entitiesByType.find((row) => row.type === type)?.label ?? type;
 
+/** Keep status and source context, not a second spelling of a type already labelled by the UI. */
+export function nodeSubtitle(overview: GraphOverviewView, node: GraphNodeView): string | null {
+  const redundant = [node.kind, kindLabel(overview, node.kind), ...(node.entityType ? [node.entityType, typeLabel(overview, node.entityType)] : [])];
+  const subtitle = node.sublabel.trim();
+  return subtitle && !redundant.some((label) => label.toLowerCase() === subtitle.toLowerCase()) ? subtitle : null;
+}
+
 /**
  * What the company has, grouped by kind, in the order the API lists kinds rather than alphabetically.
  *

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useLocale, useT, useTf } from "./locale-provider";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Agent, CompanyOverview, Run } from "@/lib/types";
 import { QuietAgentRoster } from "./quiet-agent-roster";
@@ -25,6 +25,10 @@ export interface Schedule {
   temporalScheduleId: string | null;
 }
 
+function ScheduleField({ quiet, label, wide, children }: { quiet: boolean; label: string; wide?: boolean; children: ReactNode }) {
+  return quiet ? <label className={`q-schedule-field${wide ? " q-schedule-wide" : ""}`}><span>{label}</span>{children}</label> : children;
+}
+
 export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, overclockEnabled = false, isAdmin = false, quiet = false, runs = null, overview = null, schedulesAvailable = true }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]>; overclockEnabled?: boolean; isAdmin?: boolean; quiet?: boolean; runs?: Run[] | null; overview?: CompanyOverview | null; schedulesAvailable?: boolean }) {
   const router = useRouter();
   const c = depthCopy(useLocale());
@@ -34,7 +38,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   useEffect(() => { setHydrated(true); }, []);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scheduleFeedback, setScheduleFeedback] = useState<{ id: string | null; message: string; error: boolean } | null>(null);
+  const [scheduleFeedback, setScheduleFeedback] = useState<{ id: string | null; message: string; error: boolean; field?: "timezone" } | null>(null);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
 
@@ -95,7 +99,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
     const timezone = String(fd.get("timezone") || "UTC");
     if (quiet) {
       try { new Intl.DateTimeFormat(undefined, { timeZone: timezone }); }
-      catch { setScheduleFeedback({ id: null, message: c.invalidTimeZone, error: true }); return; }
+      catch { setScheduleFeedback({ id: null, message: c.invalidTimeZone, error: true, field: "timezone" }); return; }
     }
     try {
       await browserApi.post(`/companies/${companyId}/schedules`, {
@@ -175,15 +179,16 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
       )}
 
       {editing && overclockEnabled && <AgentOverclock key={editing.id} companyId={companyId} agent={editing} isAdmin={isAdmin} />}
-      {schedulesAvailable && <Card title={t("agents.schedules")} className="nb-left-orange">
+      {schedulesAvailable && <Card title={t("agents.schedules")} className={quiet ? undefined : "nb-left-orange"}>
         <p className="mb-3 text-sm text-muted">{t("agents.schedulesHelp")}</p>
-        <fieldset disabled={quiet && (!isAdmin || !hydrated || busy)}><form onSubmit={(e) => { if (!quiet) return addSchedule(e); e.preventDefault(); void change(() => addSchedule(e)); }} className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-          <select name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-          <input name="name" className="input" placeholder={t("agents.scheduleNamePlaceholder")} required aria-label={t("agents.scheduleName")} />
-          <input name="cron" className="input mono" placeholder="0 9 * * MON" required aria-label={t("agents.cron")} />
-          <input name="timezone" className="input" placeholder="UTC" aria-label={t("agents.timezone")} />
-          <button className="btn btn-primary">{t("agents.add")}</button>
-          <input name="instruction" className="input md:col-span-5" placeholder={t("agents.instructionPlaceholder")} aria-label={t("agents.instruction")} />
+        <fieldset disabled={quiet && (!isAdmin || !hydrated || busy)}><form onSubmit={(e) => { if (!quiet) return addSchedule(e); e.preventDefault(); void change(() => addSchedule(e)); }} className={quiet ? "q-schedule-form" : "mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]"}>
+          <ScheduleField quiet={quiet} label={t("agents.agent")}><select name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></ScheduleField>
+          <ScheduleField quiet={quiet} label={t("agents.scheduleName")}><input name="name" className="input" placeholder={t("agents.scheduleNamePlaceholder")} required aria-label={t("agents.scheduleName")} /></ScheduleField>
+          <ScheduleField quiet={quiet} label={t("agents.cron")}><input name="cron" className="input mono" placeholder="0 9 * * MON" required aria-label={t("agents.cron")} /></ScheduleField>
+          <ScheduleField quiet={quiet} label={t("agents.timezone")}><input name="timezone" className="input" placeholder="UTC" aria-label={t("agents.timezone")} aria-invalid={quiet && scheduleFeedback?.field === "timezone" || undefined} aria-describedby={quiet && scheduleFeedback?.field === "timezone" ? "schedule-error" : undefined} /></ScheduleField>
+          {!quiet && <button className="btn btn-primary">{t("agents.add")}</button>}
+          <ScheduleField quiet={quiet} label={t("agents.instruction")} wide><input name="instruction" className="input md:col-span-5" placeholder={t("agents.instructionPlaceholder")} aria-label={t("agents.instruction")} /></ScheduleField>
+          {quiet && <button className="btn btn-primary q-schedule-submit">{t("agents.add")}</button>}
         </form></fieldset>
         {quiet && scheduleFeedback?.id === null && <p id="schedule-error" tabIndex={-1} role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (

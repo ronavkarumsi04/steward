@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useLocale, useT, useTf } from "./locale-provider";
 import type { MessageKey } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Artifact, Decision, Document, DocumentVersion, ImageView, Memory, MemoryRevision, Project } from "@/lib/types";
 import { Card, Empty, Json, Ago } from "./ui";
@@ -42,7 +42,7 @@ const blankDocument = (kind: Document["kind"]): Document => ({
   updatedAt: "",
 });
 
-export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks, initialTab, quiet = false }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean; initialTab?: string; quiet?: boolean }) {
+export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks, initialTab, quiet = false, initialPictures = null, connections }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean; initialTab?: string; quiet?: boolean; initialPictures?: ImageView[] | null; connections?: ReactNode }) {
   const locale = useLocale();
   const c = depthCopy(locale);
   const [query, setQuery] = useState("");
@@ -51,10 +51,10 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
   const router = useRouter();
   // Open on the tab the link asked for, else the first one that has something in it, so a company with
   // three documents and no playbooks does not open on an empty pane.
-  const tab: Tab = initialTab && (TAB_IDS as readonly string[]).includes(initialTab)
+  const tab: Tab | "connections" = quiet && initialTab === "connections" ? "connections" : initialTab && (TAB_IDS as readonly string[]).includes(initialTab)
     ? initialTab as Tab
     : documents.some((document) => document.kind !== "playbook") ? "documents" : decisions.length ? "decisions" : "playbooks";
-  const [pictures, setPictures] = useState<ImageView[] | null>(null);
+  const [pictures, setPictures] = useState<ImageView[] | null>(initialPictures);
   const [open, setOpen] = useState<Document | null>(null);
   const [history, setHistory] = useState<DocumentVersion[] | null>(null);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
@@ -254,7 +254,8 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
           <Link key={id} href={`/app/c/${companyId}/knowledge?tab=${id}`} scroll={false} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-current={tab === id ? "page" : undefined}>{t(label)} <span className="text-muted">{quiet && id === "pictures" && pictures === null ? "" : n}</span></Link>
         ))}
       </nav>}
-      {quiet && <p className="q-caption">{tab === "documents" ? c.sourcesHint : tab === "playbooks" ? c.playbooksHint : tab === "pictures" ? "" : c.boundedHint}</p>}
+      {quiet && <p className="q-caption">{tab === "documents" ? c.sourcesHint : tab === "playbooks" ? c.playbooksHint : tab === "connections" ? c.graphIntro : tab === "pictures" ? "" : c.boundedHint}</p>}
+      {quiet && tab === "connections" && connections}
       {quiet && ["documents", "playbooks"].includes(tab) && <div className="q-depth-search"><label>{c.searchSources}<input type="search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>{query && <button className="btn" onClick={() => setQuery("")}>{c.clear}</button>}</div>}
       {quiet && <p role="status" className="sr-only">{query.trim() && !(tab === "playbooks" ? playbooks : regularDocuments).length ? c.noMatches : ""}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}

@@ -54,8 +54,14 @@
 .q-depth .q-member-list .input { min-height: 44px; }
 .q-depth .q-depth-section { margin-top: 40px; }
 .q-depth-failure { display: grid; gap: 14px; }
+.q-schedule-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.q-schedule-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 14px; }
+.q-schedule-wide { grid-column: 1 / -1; }
+.q-schedule-submit { justify-self: start; }
+.q-depth .q-graph-summary { font-size: 14px; line-height: 1.5; }
 .q-depth-loading > div { min-height: 100px; margin-top: 24px; border-radius: 10px; background: var(--bg-tint); border: 1px solid var(--line); }
 @media (max-width: 767px) {
+  .q-schedule-form { grid-template-columns: minmax(0, 1fr); }
   .q-depth > .q-page-heading { gap: 12px; margin-bottom: 20px; }
   .q-depth > .q-page-heading p { margin-top: 6px; }
   .q-depth .q-depth-search { margin-block: 12px; }
