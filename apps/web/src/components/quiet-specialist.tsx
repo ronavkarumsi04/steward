@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { workspaceShell } from "@/lib/workspace-theme";
@@ -14,8 +14,13 @@ export function quietSpecialistEnabled() {
 }
 
 /** Share presentation, not data: every surface retains its existing scoped API reads and actions. */
-export async function specialistPage(surface: string, render: () => Promise<ReactNode>) {
+export function specialistPage(surface: string, render: () => Promise<ReactNode>) {
   if (!quietSpecialistEnabled()) return render();
+  // Keep loading inside the Quiet page: segment loading files also change legacy navigation.
+  return <Suspense fallback={<SpecialistLoading />}><SpecialistContent surface={surface} render={render} /></Suspense>;
+}
+
+async function SpecialistContent({ surface, render }: { surface: string; render: () => Promise<ReactNode> }) {
   try {
     return <QuietSpecialistProvider surface={surface}>{await render()}</QuietSpecialistProvider>;
   } catch (error) {

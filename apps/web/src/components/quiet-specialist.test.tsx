@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { existsSync } from "node:fs";
+import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import { specialistPage, SpecialistLoading } from "./quiet-specialist";
@@ -17,6 +18,13 @@ vi.mock("@/lib/server", () => ({ getLocale: async () => "en" }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), notFound: () => { throw new Error("NEXT_HTTP_ERROR_FALLBACK;404"); } }));
 afterEach(() => vi.unstubAllEnvs());
 const html = (element: React.ReactNode) => renderToStaticMarkup(element);
+const streamed = async (element: React.ReactNode) => {
+  const errors: unknown[] = [];
+  const stream = await renderToReadableStream(element, { onError: (error) => { errors.push(error); } });
+  await stream.allReady;
+  if (errors.length) throw errors[0];
+  return new Response(stream).text();
+};
 
 describe("specialist rollout boundary", () => {
   it.each([undefined, "legacy", "unknown"])("keeps the production incumbent unchanged for %s", async (value) => {
@@ -27,40 +35,47 @@ describe("specialist rollout boundary", () => {
     expect(html(await SpecialistLoading())).toBe(html(createElement(WorkspaceLoading)));
     await expect(specialistPage("projects", async () => { throw new ApiError(403, "forbidden", "old error"); })).rejects.toThrow("old error");
   });
-  it.each([
-    ["projects", () => import("@/app/app/c/[companyId]/projects/loading")],
-    ["chat", () => import("@/app/app/c/[companyId]/chat/loading")],
-    ["activity", () => import("@/app/app/c/[companyId]/activity/loading")],
-    ["workflows", () => import("@/app/app/c/[companyId]/workflows/loading")],
-    ["signals", () => import("@/app/app/c/[companyId]/signals/loading")],
-    ["growth", () => import("@/app/app/c/[companyId]/growth/loading")],
-    ["finance", () => import("@/app/app/c/[companyId]/finance/loading")],
-    ["site", () => import("@/app/app/c/[companyId]/site/loading")],
-  ] as const)("retains the workspace skeleton at the shell-off %s boundary", async (_surface, load) => {
-    vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
-    vi.stubEnv("VERCEL_ENV", "production");
-    const { default: Loading } = await load();
-    expect(html(await Loading())).toBe(html(createElement(WorkspaceLoading)));
+  // A segment fallback changes shell-off transitions even if it renders PageSkeleton or null.
+  it.each(["projects", "chat", "activity", "workflows", "signals", "growth", "finance", "site"])("does not install a legacy-changing segment boundary at %s", (surface) => {
+    expect(existsSync(new URL(`../app/app/c/[companyId]/${surface}/loading.tsx`, import.meta.url))).toBe(false);
   });
   it("only wraps the real result when Quiet is selected", async () => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
     const render = vi.fn(async () => createElement("p", null, "Actual API output"));
-    expect(html(await specialistPage("growth", render))).toContain('data-surface="growth"');
+    expect(await streamed(await specialistPage("growth", render))).toContain('data-surface="growth"');
     expect(render).toHaveBeenCalledTimes(1);
     expect(html(await SpecialistLoading())).toContain('aria-busy="true"');
   });
+  it("streams the inline Quiet fallback before the real scoped result resolves", async () => {
+    vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
+    let complete!: (result: React.ReactNode) => void;
+    const pending = new Promise<React.ReactNode>((resolve) => { complete = resolve; });
+    const render = vi.fn(() => pending);
+    const stream = await renderToReadableStream(createElement("main", null, await specialistPage("projects", render)));
+    const reader = stream.getReader();
+    const first = await reader.read();
+    complete(createElement("p", null, "Actual scoped projects"));
+    const decoder = new TextDecoder();
+    const fallback = decoder.decode(first.value);
+    expect(fallback).toContain('aria-busy="true"');
+    expect(fallback).not.toContain("Actual scoped projects");
+    let remaining = "";
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) remaining += decoder.decode(chunk.value);
+    expect(remaining).toContain("Actual scoped projects");
+    expect(render).toHaveBeenCalledTimes(1);
+  });
   it.each([403, 503])("shows safe %s recovery instead of an empty dataset or API body", async (status) => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-    const result = html(await specialistPage("finance", async () => { throw new ApiError(status, "private", "sensitive upstream body"); }));
+    const result = await streamed(await specialistPage("finance", async () => { throw new ApiError(status, "private", "sensitive upstream body"); }));
     expect(result).toContain(status === 403 ? "Access is limited" : "This view is unavailable");
     expect(result).not.toContain("sensitive upstream body");
     expect(result.includes("Try again")).toBe(status !== 403);
   });
   it("preserves not-found boundaries and unexpected failures", async () => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-    await expect(specialistPage("project", async () => { throw new ApiError(404, "missing", "foreign company"); })).rejects.toThrow("404");
-    await expect(specialistPage("project", async () => { throw new Error("NEXT_REDIRECT"); })).rejects.toThrow("NEXT_REDIRECT");
-    expect(html(await specialistPage("projects", async () => { throw new TypeError("fetch failed"); }))).toContain("Try again");
+    await expect(streamed(await specialistPage("project", async () => { throw new ApiError(404, "missing", "foreign company"); }))).rejects.toThrow("404");
+    await expect(streamed(await specialistPage("project", async () => { throw new Error("NEXT_REDIRECT"); }))).rejects.toThrow("NEXT_REDIRECT");
+    expect(await streamed(await specialistPage("projects", async () => { throw new TypeError("fetch failed"); }))).toContain("Try again");
   });
 });
 
