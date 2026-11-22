@@ -264,11 +264,12 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
 
   /** Escape backs out one step at a time: the confirmation, then the picker, then the palette. */
   function backOut() {
-    if (confirming) setConfirming(null);
+    if (confirming) { setConfirming(null); inputRef.current?.focus(); }
     else if (picking) {
       setPicking(null);
       setQuery("");
-    } else setOpen(false);
+      inputRef.current?.focus();
+    } else close();
   }
 
   function onDialogKeyDown(e: React.KeyboardEvent<HTMLElement>) {
@@ -276,6 +277,9 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
     // step has real buttons, and a keyboard user must not have to find the input again to undo it.
     if (e.key === "Escape") {
       e.preventDefault();
+      // Backing out removes the focused confirmation button synchronously. Do not let
+      // the window listener mistake its now-detached target for an outside Escape.
+      e.stopPropagation();
       backOut();
       return;
     }
@@ -345,7 +349,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
           aria-labelledby="command-palette-title"
           onCancel={(e) => { e.preventDefault(); backOut(); }}
           className="nb-command-overlay fixed inset-0 z-[var(--z-overlay)] m-0 flex h-full max-h-none w-full max-w-none items-start justify-center border-0 bg-black/60 px-3 pt-[10vh] text-fg"
-          onMouseDown={(e) => e.currentTarget === e.target && close()}
+          onMouseDown={(e) => { if (e.currentTarget === e.target) { e.preventDefault(); close(); } }}
         >
           <section
             ref={dialogRef}
@@ -396,7 +400,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
                   <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void act(confirming)}>
                     {busy ? "…" : confirming.confirm!.confirmLabel}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirming(null)}>
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={backOut}>
                     {t("palette.back")}
                   </button>
                 </div>
