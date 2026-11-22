@@ -8,12 +8,12 @@ it("keeps multiple pasted credentials separate, including replacement and CRLF",
   const preventDefault = vi.fn();
   input.props.onPaste({ clipboardData: { getData: () => "A=first\r\nB=second" }, preventDefault, currentTarget: { selectionStart: 0, selectionEnd: 9 } });
   expect(preventDefault).toHaveBeenCalled();
-  expect(parseEnv(onChange.mock.calls[0][0])).toEqual({ A: "first", B: "second", KEEP: "unchanged" });
+  expect(parseEnv(onChange.mock.calls[0]![0])).toEqual({ A: "first", B: "second", KEEP: "unchanged" });
 });
 
 it("inserts pasted headers at the selection without merging credentials", () => {
   const onChange = vi.fn();
   const input = SecretLines({ value: "X-One: stale", onChange, name: "Headers" }).props.children[0][0];
   input.props.onPaste({ clipboardData: { getData: () => "first\nX-Two: second" }, preventDefault: vi.fn(), currentTarget: { selectionStart: 7, selectionEnd: 12 } });
-  expect(parseHeaders(onChange.mock.calls[0][0])).toEqual({ "X-One": "first", "X-Two": "second" });
+  expect(parseHeaders(onChange.mock.calls[0]![0])).toEqual({ "X-One": "first", "X-Two": "second" });
 });

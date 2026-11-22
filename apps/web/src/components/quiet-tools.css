@@ -16,6 +16,15 @@
 .quiet-tools :is(p, li, td, input, select, textarea) { font-size: max(14px, .875rem); }
 .quiet-tools :is(.text-xs, .hint, .label, code, th, [class*="text-[11px]"]) { font-size: max(12px, .75rem); }
 .quiet-tools :is(input, select, textarea, .btn) { min-height: 44px; max-width: 100%; }
+/* Pressed primary controls must retain foreground contrast on the accent fill. */
+.quiet-tools .btn.btn-primary[aria-pressed="true"] { color: var(--accent-fg); }
+/* Block field labels participate in vertical spacing; inline labels swallowed it.
+   Eight pixels also clears the shell's 2px outline plus 3px offset at any text size. */
+.quiet-tools form label { display: block; }
+.quiet-tools form > :is(.space-y-3, .space-y-4) > label { display: block; }
+.quiet-tools form label > :is(input, select, textarea) { margin-block-start: 8px; }
+.quiet-tools form label.label { margin-block-end: 8px; }
+.quiet-tools form :is(input, select, textarea) + :is(p, span, .help) { margin-block-start: 8px; }
 .quiet-tools :is(.flex, .grid) > * { min-width: 0; }
 .quiet-tools :is(p, li, td, th, code, .pill) { overflow-wrap: anywhere; }
 .quiet-tools .pill { max-width: 100%; white-space: normal; }
