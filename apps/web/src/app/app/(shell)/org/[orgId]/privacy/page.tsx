@@ -4,7 +4,8 @@ import { OrgHeader } from "@/components/org-header";
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { activeSubprocessors, legalContactChannel, retentionRules } from "@/lib/legal";
 import { workspaceShell } from "@/lib/workspace-theme";
-import { QuietPageHeading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
+import { QuietOrganizationFrame } from "@/components/quiet-organization";
 
 export const metadata = { title: "Data & privacy" };
 
@@ -28,10 +29,7 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
   const subprocessors = activeSubprocessors();
   const SectionTable = quiet ? QuietTable : ({ children }: { children: React.ReactNode; label: string }) => children;
 
-  return (
-    <div className={quiet ? "q-depth" : undefined}>
-      {quiet ? <QuietPageHeading title="Data & privacy" description="Export your organization's records, inspect opt-outs and understand what is retained." scope={<><strong>{membership?.name ?? "Organization"}</strong><span>{membership?.role ?? "Not available"}</span></>} actions={<Link href={`/app/org/${orgId}/members`} className="btn">Organization members</Link>} /> : <OrgHeader orgId={orgId} membership={membership} title="Data & privacy" />}
-
+  const content = (
       <div className={quiet ? "q-depth-layout" : "contents"}>
       {quiet && <QuietSectionNav label="Data & privacy sections" items={[["export", "Export data"], ["suppression", "Opt-outs"], ["retention", "Retention"], ["processors", "Subprocessors"], ...(isOwner ? [["danger", "Delete organization"] as const] : [])]} />}
       <div className={quiet ? "q-depth-content" : "mt-5 space-y-5"}>
@@ -132,6 +130,23 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
         )}
       </div>
       </div>
+  );
+
+  return quiet ? (
+    <div className="q-depth q-depth-organization">
+      <QuietOrganizationFrame
+        orgId={orgId}
+        title="Data & privacy"
+        description="Export your organization's records, inspect opt-outs and understand what is retained."
+        scope={`${membership?.name ?? "Organization"} · ${membership?.role ?? "Not available"}`}
+      >
+        {content}
+      </QuietOrganizationFrame>
+    </div>
+  ) : (
+    <div>
+      <OrgHeader orgId={orgId} membership={membership} title="Data & privacy" />
+      {content}
     </div>
   );
 }

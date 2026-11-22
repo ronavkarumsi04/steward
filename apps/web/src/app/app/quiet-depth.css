@@ -1,6 +1,7 @@
 /* Depth surfaces use the canonical Quiet aliases, only inside the server-selected shell. */
 :root:has(.quiet-workspace .q-depth) { scrollbar-gutter: stable; }
 .quiet-workspace .q-depth { width: 100%; max-width: 1180px; margin-inline: auto; padding: 32px clamp(16px, 3vw, 40px) 64px; overflow-wrap: anywhere; }
+.quiet-workspace .q-depth.q-depth-organization { max-width: none; padding: 0; }
 .quiet-workspace .q-depth-heading { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
 .q-depth-heading :is(h1, h2) { font-size: clamp(26px, 3vw, 32px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; }
 .q-depth-heading p { color: var(--muted); max-width: 70ch; margin-top: 10px; font-size: max(14px, .875rem); }
