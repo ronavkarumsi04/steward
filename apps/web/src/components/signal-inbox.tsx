@@ -93,7 +93,7 @@ export function SignalInbox({ companyId, initial, projects, autoReviewImportant,
                       {signal.summary && <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{signal.summary}</p>}
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-faint"><span>{signal.state}</span><span><Ago iso={signal.occurredAt} /></span>{signal.customerRef && <span className="truncate">{signal.customerRef}</span>}</div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
+                    <div className="q-signal-actions flex shrink-0 flex-wrap gap-2">
                       {signal.reviewRunId ? <Link className="btn btn-sm" href={`/app/c/${companyId}/runs/${signal.reviewRunId}`}>Open review</Link> : signal.state !== "dismissed" ? <button className="btn btn-primary btn-sm" disabled={busy === signal.id} onClick={() => review(signal)}>{busy === signal.id ? "Starting…" : "Review with Steward"}</button> : null}
                       {signal.state === "unread" && <button className="btn btn-sm" disabled={busy === signal.id} onClick={() => updateState(signal, "dismissed")}>Dismiss</button>}
                     </div>
