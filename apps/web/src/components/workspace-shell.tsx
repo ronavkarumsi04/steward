@@ -165,7 +165,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
       </div>}
       {organizationLinks.length > 0 && <nav className="quiet-tabs quiet-organization" aria-label={t("quiet.organization")}>
         <span className="quiet-tab-label">{t("quiet.organization")} · {organizationLinks[0]?.scope}</span>
-        {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label)}</Link>)}
+          {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label === "top.privacy" ? "quiet.privacy" : destination.label)}</Link>)}
       </nav>}
       <main ref={content} id="workspace-content" tabIndex={-1} className="quiet-content">{children}</main>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
