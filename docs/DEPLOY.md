@@ -400,6 +400,39 @@ Password-reset requests always return `202` whether or not the address exists, s
 
 Recommended: leave it `false`, register yourself, invite your team.
 
+### Provisioning a founder's own organization
+
+Ordinary member invitations cannot grant the owner role. An instance operator provisions a
+founder's organization with no initial members and a seven-day owner invitation. Accepting
+the link makes the founder its sole owner, including when `ALLOW_SIGNUP=false`. Existing
+users can sign in and accept the same link; new users register with the invited email.
+
+With `DATABASE_URL` and `APP_URL` exported on the API server, run:
+
+```sh
+pnpm --filter @steward/api provision:founder --org "Founder Co" --owner-email founder@example.com
+# Compiled production app:
+node apps/api/dist/cli/provision-founder.js --org "Founder Co" --owner-email founder@example.com
+```
+
+The CLI prints the accept URL, requires no superadmin account, and sends no email. Hand the
+printed link to the founder securely. It does not grant superadmin privileges.
+
+Alternatively, an authenticated superadmin can call the operator API:
+
+```sh
+curl "$API_URL/v1/admin/organizations" \
+  -H "Authorization: Bearer $OPERATOR_SESSION_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Founder Co","ownerEmail":"founder@example.com"}'
+```
+
+The response contains `organization`, `invitation`, `acceptUrl`, and `emailed`. Email delivery
+requires `PLATFORM_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified
+`PLATFORM_EMAIL_FROM`; otherwise hand over the returned link. The operator is not added as
+a member. **Superadmins retain read access to all organizations**, and instance-wide operator
+privileges still allow administrative access even without membership.
+
 ---
 
 ## 5. Sandbox (agent code execution)

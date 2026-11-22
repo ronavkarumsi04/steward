@@ -1,8 +1,9 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { generateToken, hashToken } from "@steward/crypto";
 import { auditLog, invitations, memberships, organizations, users, type DbOrTx } from "@steward/db";
 import type { Role } from "@steward/schema";
-import { AuthError, roleAtLeast } from "./auth.js";
+import { AuthError, createOrganizationTx, roleAtLeast } from "./auth.js";
 
 const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -48,11 +49,26 @@ export class OrganizationService {
   /** Creates an invitation; returns the one-time token so the caller can email/share the accept link. */
   async invite(organizationId: string, inviterUserId: string, inviterRole: Role, input: { email: string; role: Role }) {
     if (!roleAtLeast(inviterRole, input.role)) throw new AuthError("forbidden", "Cannot grant a role above your own");
+    if (input.role === "owner") throw new AuthError("owner_invite_requires_provisioning", "Founder organizations must be provisioned by an instance operator; ordinary invitations cannot grant owner access");
     const email = input.email.trim().toLowerCase();
     const { token, hash } = generateToken("inv");
     const [inv] = await this.db.insert(invitations).values({ organizationId, email, role: input.role, tokenHash: hash, invitedBy: inviterUserId, expiresAt: new Date(Date.now() + INVITE_TTL_MS) }).returning();
     await this.db.insert(auditLog).values({ organizationId, actor: { type: "user", userId: inviterUserId }, action: "invitation.created", target: inv!.id, metadata: { email, role: input.role } });
     return { invitation: inv!, token };
+  }
+
+  async provisionFounderOrganization(input: { name: string; ownerEmail: string; operatorUserId: string | null }) {
+    const name = input.name.trim();
+    const ownerEmail = input.ownerEmail.trim().toLowerCase();
+    if (!name || name.length > 120 || !z.email().safeParse(ownerEmail).success) throw new Error("A name and valid owner email are required");
+    return this.db.transaction(async (tx) => {
+      const organization = await createOrganizationTx(tx, name);
+      const { token, hash } = generateToken("inv");
+      const [invitation] = await tx.insert(invitations).values({ organizationId: organization.id, email: ownerEmail, role: "owner", tokenHash: hash, invitedBy: input.operatorUserId ?? "operator-cli", expiresAt: new Date(Date.now() + INVITE_TTL_MS) }).returning();
+      const actor = input.operatorUserId ? { type: "user", userId: input.operatorUserId } : { type: "system", name: "operator-cli" };
+      await tx.insert(auditLog).values({ organizationId: organization.id, actor, action: "organization.provisioned", target: organization.id, metadata: { ownerEmail } });
+      return { organization, invitation: invitation!, token };
+    });
   }
 
   async listInvitations(organizationId: string) {
