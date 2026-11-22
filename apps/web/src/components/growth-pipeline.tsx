@@ -129,6 +129,8 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
     <div className="space-y-5">
       <PageHeader eyebrow={t("growth.eyebrow")} title={t("growth.title")} description={t("growth.description")} />
 
+      {quiet && error && <p role="alert" className="text-sm text-danger">{error}</p>}
+
       <div data-specialist-metrics className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="card nb-left-blue p-4"><div className="eyebrow">{t("growth.openLeads")}</div><div className="tnum mt-2 text-2xl font-semibold">{summary.open}</div></div>
         <div className="card nb-left-pink p-4"><div className="eyebrow">{t("growth.openPipeline")}</div><div className="tnum mt-2 text-2xl font-semibold">{quiet && !knownLeadValues(initial.leads.filter((lead) => !["won", "lost"].includes(lead.stage))) ? t("quiet.notAvailable") : money(summary.pipeline)}</div></div>
@@ -157,7 +159,6 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
           <div className="lg:col-span-2"><label className="label">{t("growth.audience")}</label><input name="audience" aria-label={t("growth.audienceLabel")} className="input" placeholder={t("growth.audiencePlaceholder")} maxLength={2000} /></div>
           <div className="sm:col-span-2 lg:col-span-5"><label className="label">{t("growth.objective")}</label><input name="objective" aria-label={t("growth.objectiveLabel")} className="input" placeholder={t("growth.objectivePlaceholder")} maxLength={2000} /></div>
           <button className="btn btn-primary min-h-10 self-end" disabled={busy !== null}>{busy === "campaign-create" ? t("growth.creating") : t("growth.createCampaign")}</button>
-          {quiet && error && <p role="alert" className="text-sm text-danger sm:col-span-2 lg:col-span-6">{error}</p>}
         </form>
         </SpecialistDisclosure>
         {initial.campaigns.length === 0 ? (
@@ -205,7 +206,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
           <div className="min-w-36"><label className="label">{t("growth.source")}</label><input name="source" className="input" placeholder={t("growth.sourcePlaceholder")} aria-label={t("growth.leadSource")} maxLength={100} /></div>
           <button className="btn btn-primary min-h-10" disabled={busy !== null}>{busy === "create" ? t("growth.adding") : t("growth.addLead")}</button>
         </div>
-        {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+        {!quiet && error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
       </form>
       </SpecialistDisclosure>
 
