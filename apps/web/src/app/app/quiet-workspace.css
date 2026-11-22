@@ -169,6 +169,11 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
   body:has(.quiet-workspace) .toasts { bottom: calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 12px); }
   .quiet-workspace :focus { scroll-margin-block: 100px calc(var(--workspace-bottom-height, 76px + env(safe-area-inset-bottom)) + 24px); }
 }
+@media (max-width: 767px) {
+  /* A status badge must not squeeze a company name into a few letters. */
+  .quiet-workspace .company-entry { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+  .quiet-workspace .company-entry .company-id { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .quiet-workspace *, .quiet-workspace *::before, .quiet-workspace *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
