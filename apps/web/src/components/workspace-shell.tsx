@@ -12,6 +12,7 @@ import { ThemeToggle } from "./feedback";
 import { Icon } from "./icons";
 import { useT } from "./locale-provider";
 import { StatusPill } from "./ui";
+import { QuietWorkNavigation } from "./quiet-work-navigation";
 
 const PRIMARY = [
   ["overview", "", "quiet.overview", Icon.Overview],
@@ -152,7 +153,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
         <CompanyCommandPalette key={company.id} companyId={company.id} quiet destinations={workspaceDestinations(me, company.organizationId)} />
       </div>
       {/* Knowledge owns one collection nav, including Connections, inside its pages. */}
-      {group !== "knowledge" && subroutes.length > 1 && <div className="quiet-subnav">
+      {group === "work" ? <QuietWorkNavigation base={base} current={current} /> : group !== "knowledge" && subroutes.length > 1 && <div className="quiet-subnav">
         {([undefined, "automation", "business"] as const).map((section) => {
           const routes = subroutes.filter((route) => route.section === section);
           if (!routes.length) return null;

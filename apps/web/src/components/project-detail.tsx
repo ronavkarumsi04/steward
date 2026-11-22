@@ -6,11 +6,15 @@ import { useState } from "react";
 import { browserApi, ApiError } from "@/lib/api";
 import type { ProjectSnapshot, ProjectStatus } from "@/lib/types";
 import { Icon } from "./icons";
-import { PageHeader, Pill, StatusPill, ago, usd } from "./ui";
+import { PageHeader, Pill, StatusPill, ago, statusTone, usd } from "./ui";
+import { useQuietSpecialist } from "./quiet-specialist-context";
+import { useT } from "./locale-provider";
 
 const STATUS_TONE: Record<ProjectStatus, "neutral" | "accent" | "warn" | "ok"> = { active: "accent", blocked: "warn", complete: "ok", cancelled: "neutral" };
 
 export function ProjectDetail({ companyId, initial }: { companyId: string; initial: ProjectSnapshot }) {
+  const quiet = useQuietSpecialist();
+  const t = useT();
   const router = useRouter();
   const { project } = initial;
   const [status, setStatus] = useState<ProjectStatus>(project.status);
@@ -29,13 +33,13 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
   }
 
   return <div className="space-y-5">
-    <div className="flex items-start justify-between gap-4">
+    <div className={`flex items-start justify-between gap-4${quiet ? " q-project-heading" : ""}`}>
       <PageHeader eyebrow="Project" title={project.name} description={project.objective || project.description || "No objective recorded."} />
       <Link href={`/app/c/${companyId}/projects`} className="btn btn-sm"><Icon.ArrowRight className="rotate-180" size={14} />Projects</Link>
     </div>
 
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="card nb-left-yellow p-4"><div className="eyebrow">Status</div><div className="mt-2"><Pill tone={STATUS_TONE[status]}>{status}</Pill></div></div>
+    <section data-specialist-metrics className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="card nb-left-yellow p-4"><div className="eyebrow">Status</div><div className="mt-2"><Pill tone={quiet && status === "active" ? statusTone(status) : STATUS_TONE[status]}>{status}</Pill></div></div>
       <div className="card nb-left-purple p-4"><div className="eyebrow">Workers</div><div className="tnum mt-2 text-2xl font-semibold">{activeRuns.length}</div><div className="mt-1 text-xs text-muted">{initial.runs.length} total runs</div></div>
       <div className="card nb-left-green p-4"><div className="eyebrow">Outputs</div><div className="tnum mt-2 text-2xl font-semibold">{initial.artifacts.length}</div><div className="mt-1 text-xs text-muted">reviewable artifacts</div></div>
       <div className="card nb-left-pink p-4"><div className="eyebrow">Decisions</div><div className="tnum mt-2 text-2xl font-semibold">{initial.decisions.length}</div><div className="mt-1 text-xs text-muted">project-scoped</div></div>
@@ -55,11 +59,11 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
     <div className="grid gap-5 xl:grid-cols-2">
       <section className="card nb-left-purple overflow-hidden">
         <div className="border-b border-line px-5 py-3"><div className="eyebrow">Specialist work</div><h2 className="mt-1 text-base font-semibold">Runs</h2></div>
-        {initial.runs.length === 0 ? <div className="p-5 text-sm text-muted">No runs are linked yet.</div> : <div className="divide-y divide-line">{initial.runs.slice(0,12).map((run) => <Link key={run.id} href={`/app/c/${companyId}/runs/${run.id}`} className="block px-5 py-3 hover:bg-panel-2/60"><div className="flex items-center gap-2"><StatusPill status={run.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{run.intent || "Project work"}</span><span className="tnum text-xs text-muted">{usd(run.costUsd)}</span></div><div className="mt-1 text-xs text-faint">{ago(run.createdAt)}</div></Link>)}</div>}
+        {initial.runs.length === 0 ? <div className="p-5 text-sm text-muted">No runs are linked yet.</div> : <div className="divide-y divide-line">{initial.runs.slice(0,12).map((run) => <Link key={run.id} href={`/app/c/${companyId}/runs/${run.id}`} className="block px-5 py-3 hover:bg-panel-2/60"><div className={`flex ${quiet ? "flex-wrap " : ""}items-center gap-2`}><StatusPill status={run.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{run.intent || "Project work"}</span><span className="tnum text-xs text-muted">{quiet && (!Number.isFinite(Number(run.costUsd)) || Number(run.costUsd) <= 0) ? t("quiet.notAvailable") : usd(run.costUsd)}</span></div><div className="mt-1 text-xs text-faint">{ago(run.createdAt)}</div></Link>)}</div>}
       </section>
       <section className="card nb-left-orange overflow-hidden">
         <div className="border-b border-line px-5 py-3"><div className="eyebrow">Work queue</div><h2 className="mt-1 text-base font-semibold">Tasks</h2></div>
-        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={`/app/c/${companyId}/tasks/${task.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60"><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
+        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={quiet ? `/app/c/${companyId}/tasks?q=${encodeURIComponent(task.title)}` : `/app/c/${companyId}/tasks/${task.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60"><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
       </section>
     </div>
 
