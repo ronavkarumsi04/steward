@@ -37,6 +37,28 @@ describe("Quiet walkthrough regressions", () => {
     expect(result).not.toContain('data-testid="workflow-toggle"');
     expect(result).not.toContain('pill-warn">Paused');
   });
+  it("keeps published incomplete work controllable without claiming it was never published", () => {
+    for (const enabled of [true, false]) {
+      const initial: WorkflowWorkspaceRead = {
+        ...workspace,
+        workflows: workspace.workflows.map((workflow) => ({
+          ...workflow,
+          enabled,
+          publishedAt: "2026-01-01T00:00:00Z",
+          liveCount: 0,
+          nodes: workflow.nodes.map((node) => node.kind === "agent" ? { ...node, instruction: "" } : node),
+          problems: [{ code: "instruction_missing", where: "a1", message: "Add an instruction." }],
+        })),
+      };
+      const node = createElement(WorkflowStudio, { companyId: "company", initial });
+      const result = html(quiet(node));
+      expect(result).toContain(`data-testid="workflow-toggle">${enabled ? "Pause" : "Resume"}</button>`);
+      expect(result).toContain("This workflow has been published");
+      expect(result).not.toContain("this drawing has not been published");
+      expect(result).not.toContain("0 live row(s)");
+      expect(html(node)).toContain("Nothing is running yet: this drawing has not been published.");
+    }
+  });
   it("preserves raw activity in the inspector, not in the Quiet row heading", () => {
     const event: StewardEvent = { id: "event-1", companyId: "company", seq: 1, type: "run.status", createdAt: "2026-01-01T00:00:00Z", actor: { type: "agent", agentId: "agent-1" }, payload: { status: "waiting_approval" }, correlation: {} };
     const node = createElement(ActivityCenter, { companyId: "company", initial: [event], projects: [], agents: [{ id: "agent-1", name: "Researcher" }] });

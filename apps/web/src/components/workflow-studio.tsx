@@ -220,7 +220,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                           {!workflow.enabled && (!quiet || canTogglePublishedWorkflow(workflow)) && <Pill tone="warn">Paused</Pill>}
                         </span>
                         <span className="mono mt-1 block text-xs text-muted">
-                          {workflow.nodes.filter((node) => node.kind === "trigger").length} trigger(s) · revision {workflow.revision} · {workflow.liveCount} live row(s) · updated <Ago iso={workflow.updatedAt} />
+                          {workflow.nodes.filter((node) => node.kind === "trigger").length} trigger(s) · revision {workflow.revision} · {quiet && workflow.publishedAt && workflow.readings.length === 0 ? "published work not compared" : `${workflow.liveCount} live row(s)`} · updated <Ago iso={workflow.updatedAt} />
                         </span>
                       </button>
                     </li>
@@ -349,7 +349,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
             {!selected ? (
               <p className="text-sm text-muted">Nothing selected.</p>
             ) : selected.readings.length === 0 ? (
-              <p className="text-sm text-muted" data-testid="workflow-readings">Nothing is running yet: this drawing has not been published.</p>
+              <p className="text-sm text-muted" data-testid="workflow-readings">{quiet && selected.publishedAt ? "This workflow has been published, but its published work cannot be compared with this drawing." : "Nothing is running yet: this drawing has not been published."}</p>
             ) : (
               <ul className="space-y-4" data-testid="workflow-readings">
                 {readingsByTrigger(selected).map(({ node, reading }) => (
