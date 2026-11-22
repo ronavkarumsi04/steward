@@ -351,7 +351,8 @@ export class McpService {
   private async validate(scope: TenantScope, input: McpInstallInput, excludeId?: string): Promise<void> {
     const rows = await this.list(scope);
     const others = rows.filter((row) => row.id !== excludeId);
-    const problems = validateMcpInstall(input, { takenSlugs: others.map((row) => row.slug), existing: others.length, stdio: this.policy.stdio, privateTargets: this.policy.allowPrivate });
+    const unchangedSlug = rows.some((row) => row.id === excludeId && row.slug === input.slug.trim().toLowerCase());
+    const problems = validateMcpInstall(input, { takenSlugs: unchangedSlug ? [] : others.map((row) => row.slug), existing: others.length, stdio: this.policy.stdio, privateTargets: this.policy.allowPrivate });
     if (problems.length) throw new McpError("invalid", "This server cannot be installed as it stands.", { problems });
   }
 

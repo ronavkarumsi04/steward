@@ -2537,6 +2537,22 @@ describe("mcp marketplace", () => {
     }
   }, 60_000);
 
+  d("edits legacy colliding installs without allowing slug changes", async () => {
+    const me = await marketplace();
+    const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
+    const second = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
+    await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [second.body.server.id]);
+    for (const server of [first.body.server, { ...second.body.server, slug: "a_b" }]) {
+      const path = `/companies/${me.companyId}/mcp/${server.id}`;
+      const renamed = await me.api.json<{ server: ServerView }>("PATCH", path, { name: "Renamed alias", slug: server.slug });
+      expect(renamed.status).toBe(200);
+      expect(renamed.body.server.name).toBe("Renamed alias");
+      expect(renamed.body.server.slug).toBe(server.slug);
+      expect((await me.api.call("PATCH", path, { slug: "changed" })).status).toBe(422);
+    }
+    expect((await me.api.call("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a_b" }))).status).toBe(422);
+  }, 60_000);
+
   d("keeps uninspected and paused aliases closed and removes namespace grants on uninstall", async () => {
     const me = await marketplace();
     const first = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "a-b" }));
