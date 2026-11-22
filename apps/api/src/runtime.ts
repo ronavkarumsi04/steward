@@ -54,6 +54,9 @@ export async function createApiRuntime(options: RuntimeOptions = {}): Promise<Ap
   const disabled = parseBoolean(env.TEMPORAL_DISABLED, false);
   const core = createCoreContext(config, "api");
   const log = core.log;
+  if (config.env === "production" && env.RATE_LIMIT_DISABLED === "true") {
+    log.warn("SECURITY WARNING: RATE_LIMIT_DISABLED=true in production; all API rate limits are disabled");
+  }
   const connection = new WorkflowConnection<WorkflowClient>({
     disabled,
     retryMs: 30_000,

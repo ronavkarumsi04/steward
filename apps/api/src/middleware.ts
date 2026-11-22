@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import type { MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { SESSION_TTL_MS } from "@steward/core";
@@ -124,8 +125,21 @@ export function rateLimit(opts: { capacity: number; refillPerSec: number; key?: 
 export function clientIp(c: Ctx): string {
   const env = c.get("deps").env;
   if (env.TRUST_PROXY === "true") {
+    const vercel = c.req.header("x-vercel-forwarded-for")?.trim();
+    if (vercel) return vercel;
     const xff = c.req.header("x-forwarded-for");
-    if (xff) return xff.split(",")[0]!.trim();
+    const hops = Number(env.TRUST_PROXY_HOPS ?? "1");
+    if (xff && Number.isSafeInteger(hops) && hops > 0) {
+      const entries = xff.split(",").map((ip) => ip.trim());
+      const ip = entries[entries.length - hops];
+      if (ip) return ip;
+    }
+    const realIp = c.req.header("x-real-ip")?.trim();
+    if (realIp) return realIp;
   }
-  return c.req.header("x-real-ip") ?? "local";
+  try {
+    return getConnInfo(c).remote.address ?? "local";
+  } catch {
+    return "local";
+  }
 }

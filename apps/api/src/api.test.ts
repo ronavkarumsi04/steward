@@ -278,6 +278,115 @@ describe("auth + sessions", () => {
   });
 });
 
+describe("email verification and auth limits", () => {
+  function instance(overrides: NodeJS.ProcessEnv = {}, delivery: Mailer = mailer) {
+    const env = { ...ENV, ALLOW_SIGNUP: "true", REQUIRE_EMAIL_VERIFICATION: "true", ...overrides };
+    return createApp({ core: { ...core, config: loadConfig(env) }, auth: new AuthService(core.db), mailer: delivery, services, workflows: null, env }, null).app;
+  }
+  const credentials = () => ({ email: `verify-${uniq()}@example.com`, password: "correct-horse-battery", name: "Verify", accepted: CLICKWRAP });
+
+  d("requires verification before login, consumes the mail link once and exposes verified status", async () => {
+    await register();
+    const target = instance();
+    const anon = client("", "", () => target);
+    const body = credentials();
+    const response = await anon.call("POST", "/auth/register", body);
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ verificationRequired: true });
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect((await anon.json("POST", "/auth/login", { ...body, password: "wrong-password" })).status).toBe(401);
+    expect(await anon.json("POST", "/auth/login", body)).toMatchObject({ status: 403, body: { error: { code: "email_unverified" } } });
+    const token = tokenFromMail(lastMailTo(body.email)!)!;
+    expect(token.startsWith("verify_")).toBe(true);
+    const verified = await anon.json<{ token: string }>("POST", "/auth/verify-email", { token });
+    expect(verified.status).toBe(200);
+    expect((await client(verified.body.token, "", () => target).json("GET", "/auth/me")).body).toMatchObject({ user: { emailVerified: true } });
+    expect((await anon.json("POST", "/auth/verify-email", { token })).status).toBe(400);
+    expect((await anon.json("POST", "/auth/verify-email", { token: "verify_invalid_value" })).status).toBe(400);
+    expect((await anon.json("POST", "/auth/login", body)).status).toBe(200);
+  });
+
+  d("resend is uniform for unknown, verified and unverified accounts", async () => {
+    const owner = await register();
+    const target = instance();
+    const anon = client("", "", () => target);
+    const body = credentials();
+    await anon.json("POST", "/auth/register", body);
+    const before = outbox.length;
+    const missing = await anon.json("POST", "/auth/resend-verification", { email: `ghost-${uniq()}@example.com` });
+    expect(missing).toEqual({ status: 202, body: { ok: true } });
+    expect(outbox.length).toBe(before);
+    const resent = await anon.json("POST", "/auth/resend-verification", { email: body.email.toUpperCase() });
+    expect(resent).toEqual(missing);
+    expect(outbox.length).toBe(before + 1);
+    await anon.json("POST", "/auth/verify-email", { token: tokenFromMail(lastMailTo(body.email)!) });
+    expect(await anon.json("POST", "/auth/resend-verification", { email: body.email })).toEqual(missing);
+    expect(outbox.length).toBe(before + 1);
+    expect(owner.email).toBeTruthy();
+  });
+
+  d("invited accounts are verified and bootstrap is exempt; false retains immediate sessions", async () => {
+    const owner = await register();
+    const target = instance();
+    const anon = client("", "", () => target);
+    const body = credentials();
+    const inv = await owner.api.json<{ acceptUrl: string }>("POST", `/orgs/${owner.orgId}/invitations`, { email: body.email, role: "member" });
+    const inviteToken = inv.body.acceptUrl.split("/").at(-1);
+    const invited = await anon.json("POST", "/auth/register", { ...body, inviteToken });
+    expect(invited).toMatchObject({ status: 201, body: { user: { emailVerified: true }, token: expect.any(String) } });
+    const bootstrap = vi.spyOn(AuthService.prototype, "hasAnyUsers").mockResolvedValueOnce(false);
+    try {
+      expect(await anon.json("POST", "/auth/register", credentials())).toMatchObject({ status: 201, body: { user: { emailVerified: true }, token: expect.any(String) } });
+    } finally { bootstrap.mockRestore(); }
+    const disabled = instance({ REQUIRE_EMAIL_VERIFICATION: "false" });
+    expect(await client("", "", () => disabled).json("POST", "/auth/register", credentials())).toMatchObject({ status: 201, body: { token: expect.any(String) } });
+  });
+
+  d("production console refuses signup before creation and forgot-password uniformly", async () => {
+    await register();
+    const target = instance({ NODE_ENV: "production" });
+    const anon = client("", "", () => target);
+    const body = credentials();
+    expect(await anon.json("POST", "/auth/register", body)).toMatchObject({ status: 503, body: { error: { code: "email_unavailable" } } });
+    expect(await new AuthService(core.db).findUserByEmail(body.email)).toBeNull();
+    for (const email of [body.email, (await register()).email]) {
+      expect(await anon.json("POST", "/auth/password/forgot", { email })).toMatchObject({ status: 503, body: { error: { code: "email_unavailable" } } });
+    }
+  });
+
+  d("expired reset and verification tokens cannot be used", async () => {
+    const { email } = await register();
+    const auth = new AuthService(core.db);
+    const user = (await auth.findUserByEmail(email))!;
+    for (const purpose of ["reset_password", "verify_email"] as const) {
+      const token = await auth.issueEmailToken(user.id, purpose, -1000);
+      const path = purpose === "reset_password" ? "/auth/password/reset" : "/auth/verify-email";
+      expect((await client().json("POST", path, { token, password: "a-new-long-password" })).status).toBe(400);
+    }
+  });
+
+  d("enabled per-IP buckets are independent and register is separate from login", async () => {
+    const target = instance({ RATE_LIMIT_DISABLED: "false", TRUST_PROXY: "true", REQUIRE_EMAIL_VERIFICATION: "false" });
+    const anon = client("", "", () => target);
+    for (let i = 0; i < 10; i++) {
+      expect((await anon.json("POST", "/auth/login", { email: `missing-${uniq()}@example.com`, password: "wrong-password" }, { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(401);
+    }
+    expect((await anon.json("POST", "/auth/login", credentials(), { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(429);
+    expect((await anon.json("POST", "/auth/login", credentials(), { "x-vercel-forwarded-for": "192.0.2.2" })).status).toBe(401);
+    expect((await anon.json("POST", "/auth/register", credentials(), { "x-vercel-forwarded-for": "192.0.2.1" })).status).toBe(201);
+  });
+
+  d("enabled normalized-email login limiter triggers across client IPs", async () => {
+    const target = instance({ RATE_LIMIT_DISABLED: "false", TRUST_PROXY: "true" });
+    const anon = client("", "", () => target);
+    const email = `missing-${uniq()}@example.com`;
+    for (let i = 0; i < 11; i++) {
+      const result = await anon.json("POST", "/auth/login", { email: i % 2 ? email.toUpperCase() : email, password: "wrong-password" }, { "x-vercel-forwarded-for": `192.0.2.${i + 1}` });
+      expect(result.status).toBe(i < 10 ? 401 : 429);
+    }
+  });
+});
+
 describe("sign-up policy (ALLOW_SIGNUP=false)", () => {
   const closed = () => client("", "", () => closedApp);
 

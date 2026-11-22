@@ -54,7 +54,9 @@ Edit `.env`. Values that **must** change from the example:
 | `API_URL` | `https://api.example.com` |
 | `API_DOMAIN` | `api.example.com` — Caddy requests a Let's Encrypt certificate for this name. |
 | `ACME_EMAIL` | your email, for certificate expiry notices (optional but recommended) |
-| `TRUST_PROXY` | `true` — the API sits behind Caddy; this makes rate limits and audit logs use the real client IP from `X-Forwarded-For`. |
+| `TRUST_PROXY` | Set `true` only behind a trusted proxy. Vercel's `x-vercel-forwarded-for` takes precedence, then `X-Forwarded-For`, then `x-real-ip`. Without trust all forwarded headers are ignored and the socket address is used (or `local` for embedded requests without connection info). |
+| `TRUST_PROXY_HOPS` | Defaults to `1`: select this entry from the **right** of `X-Forwarded-For`. Use `1` for single-hop Caddy; configure the actual trusted hop count for longer chains. Restrict direct API access and ensure the outer proxy sanitizes forwarded headers. |
+| `REQUIRE_EMAIL_VERIFICATION` | Defaults to `true` in production, `false` otherwise. Public self-serve signup sends a 24-hour verification link and creates no session until verified. Bootstrap owners are exempt; invitation signup proves the address. Configure Resend before enabling public signup. |
 | `ALLOW_SIGNUP` | `false` (also the production default). The first owner can bootstrap; later accounts require an invitation. Set `true` only when public registration is intended. |
 | `PLATFORM_EMAIL_PROVIDER` / `PLATFORM_EMAIL_FROM` / `RESEND_API_KEY` | see §3 |
 | `SANDBOX_PROVIDER` | `none` unless you have a dedicated Docker host for agent code execution (see §5) |

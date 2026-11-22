@@ -18,6 +18,7 @@ export interface ApiDeps {
 export interface Vars {
   deps: ApiDeps;
   requestId: string;
+  loginEmail?: string;
   user?: SessionUser;
   sessionToken?: string;
   memberships?: Array<{ organizationId: string; role: Role; name: string; slug: string }>;

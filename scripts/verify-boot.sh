@@ -32,6 +32,8 @@ export APP_URL=http://localhost:$WEB_PORT
 export NEXT_PUBLIC_API_URL=$API_URL
 export ARTIFACT_DIR=$LOGS/artifacts
 export ALLOW_SIGNUP=true
+export REQUIRE_EMAIL_VERIFICATION=false
+export RATE_LIMIT_DISABLED=true
 export EMBEDDED_API=${EMBEDDED_API:-true}
 export LOG_LEVEL=${LOG_LEVEL:-info}
 

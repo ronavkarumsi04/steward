@@ -39,6 +39,7 @@ export interface RegisterInput {
   agreements?: RegisterAgreement[];
   ip?: string | null;
   userAgent?: string | null;
+  emailVerified?: boolean;
 }
 
 type Organization = typeof organizations.$inferSelect;
@@ -73,7 +74,7 @@ export class AuthService {
     return this.db.transaction(async (tx) => {
       const existing = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
       if (existing.length) throw new AuthError("email_taken", "An account with this email already exists");
-      const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim() }).returning();
+      const [user] = await tx.insert(users).values({ email, passwordHash, name: input.name.trim(), emailVerifiedAt: input.emailVerified ? new Date() : null }).returning();
       // Legal acceptance is evidence: it is written with the account, in the same transaction, so an
       // account can never exist without a record of what the person agreed to.
       if (input.agreements?.length) {

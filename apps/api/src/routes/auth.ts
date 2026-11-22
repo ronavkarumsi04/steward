@@ -12,6 +12,26 @@ const LOCALES = ["en", "es"] as const;
 
 const Credentials = z.object({ email: z.email(), password: z.string().min(10).max(200) });
 const RESET_TOKEN_TTL_MS = 1000 * 60 * 30;
+const VERIFY_TOKEN_TTL_MS = 1000 * 60 * 60 * 24;
+
+function requireEmailDelivery(deps: ApiDeps) {
+  if (deps.core.config.env === "production" && deps.mailer.provider === "console") {
+    throw new HttpError(503, "email_unavailable", "Email delivery is unavailable. Contact your organization admin.");
+  }
+}
+
+async function sendVerification(deps: ApiDeps, user: { id: string; email: string }) {
+  const token = await deps.auth.issueEmailToken(user.id, "verify_email", VERIFY_TOKEN_TTL_MS);
+  try {
+    await deps.mailer.send({
+      to: user.email,
+      subject: "Verify your Steward email",
+      ...renderEmail({ title: "Verify your email", intro: "Confirm your email address to sign in to Steward. This link is valid for 24 hours and can be used once.", actionLabel: "Verify email", actionUrl: `${deps.core.config.appUrl}/verify-email/${token}`, footer: "If you didn't create this account, you can ignore this email." }),
+    });
+  } catch (err) {
+    deps.core.log.error({ err, userId: user.id }, "failed to send verification email");
+  }
+}
 
 /** Clickwrap payload. Marketing consent is deliberately absent: it is opt-in elsewhere. */
 const AcceptanceInput = z.array(z.object({ document: z.enum(REQUIRED_AGREEMENTS), version: z.string().min(1).max(40) })).min(1);
@@ -37,11 +57,19 @@ async function signupOpen(deps: ApiDeps) {
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
-  const authLimiter = rateLimit({ capacity: 10, refillPerSec: 10 / 60, key: (c) => `auth:${clientIp(c)}` });
-  app.use("/auth/register", authLimiter);
-  app.use("/auth/login", authLimiter);
+  for (const route of ["register", "login", "password/reset", "verify-email"]) {
+    app.use(`/auth/${route}`, rateLimit({ capacity: 10, refillPerSec: 10 / 60, key: (c) => clientIp(c) }));
+  }
+  const accountLimiter = rateLimit({ capacity: 10, refillPerSec: 10 / 900, key: (c) => c.get("loginEmail") ?? "invalid" });
+  app.use("/auth/login", async (c, next) => {
+    const body: unknown = await c.req.raw.clone().json().catch(() => null);
+    const parsed = Credentials.safeParse(body);
+    if (!parsed.success) return next();
+    c.set("loginEmail", parsed.data.email.trim().toLowerCase());
+    return accountLimiter(c, next);
+  });
   app.use("/auth/password/forgot", rateLimit({ capacity: 5, refillPerSec: 5 / 300, key: (c) => `auth-forgot:${clientIp(c)}` }));
-  app.use("/auth/password/reset", authLimiter);
+  app.use("/auth/resend-verification", rateLimit({ capacity: 5, refillPerSec: 5 / 300, key: (c) => clientIp(c) }));
 
   defineRoute(app, reg, { method: "get", path: "/auth/config", tag: "auth", summary: "Public auth configuration (sign-up policy)", auth: "public" }, async (c) => {
     const deps = c.get("deps");
@@ -75,19 +103,41 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
       if (body.inviteToken && !invitation) throw new AuthError("invalid_invitation", "Invitation is invalid or expired");
       if (invitation && invitation.email !== body.email.trim().toLowerCase()) throw new AuthError("invitation_email_mismatch", "This invitation was issued to a different email address");
       if (!invitation && !(await signupOpen(deps))) throw new AuthError("signup_closed", "Sign-ups are closed on this Steward instance. Ask an organization admin for an invitation.");
+      const bootstrap = !(await auth.hasAnyUsers());
+      const verificationRequired = deps.core.config.requireEmailVerification && !invitation && !bootstrap;
+      if (verificationRequired) requireEmailDelivery(deps);
 
       // Account, legal acceptance, membership and invite consumption commit together. The public
       // preview above is advisory; acceptance rechecks expiration/consumption inside this transaction.
       const { user, organization, joined } = await deps.core.db.transaction(async (tx) => {
-        const account = await new AuthService(tx).register({ ...body, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
+        const account = await new AuthService(tx).register({ ...body, emailVerified: Boolean(invitation) || bootstrap, personalOrganization: !invitation, agreements, ip: clientIp(c), userAgent: c.req.header("user-agent") ?? null });
         const joined = body.inviteToken ? await new OrganizationService(tx).acceptInvitation(account.user.id, body.inviteToken) : null;
         return { ...account, joined };
       });
+      if (verificationRequired) {
+        await sendVerification(deps, user);
+        return c.json({ verificationRequired: true }, 202);
+      }
       const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
       setSessionCookie(c, token);
       return c.json({ user, organization, joined, session: { expiresAt: session.expiresAt }, token }, 201);
     },
   );
+
+  defineRoute(app, reg, { method: "post", path: "/auth/verify-email", tag: "auth", summary: "Verify an email address and sign in", auth: "public", body: z.object({ token: z.string().min(10).max(200) }) }, async (c, { body }) => {
+    const { auth } = c.get("deps");
+    const userId = await auth.consumeEmailToken(body.token, "verify_email");
+    const { token, session } = await auth.createSession(userId, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
+    setSessionCookie(c, token);
+    return c.json({ ok: true, session: { expiresAt: session.expiresAt }, token });
+  });
+
+  defineRoute(app, reg, { method: "post", path: "/auth/resend-verification", tag: "auth", summary: "Request a verification link (uniform response)", auth: "public", body: z.object({ email: z.email() }) }, async (c, { body }) => {
+    const deps = c.get("deps");
+    const user = await deps.auth.findUserByEmail(body.email);
+    if (user && !user.emailVerified) await sendVerification(deps, user);
+    return c.json({ ok: true }, 202);
+  });
 
   defineRoute(app, reg, { method: "post", path: "/auth/password/forgot", tag: "auth", summary: "Request a password-reset link (uniform response; 503 when production email is disabled)", auth: "public", body: z.object({ email: z.email() }) }, async (c, { body }) => {
     const deps = c.get("deps");
@@ -131,6 +181,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
   defineRoute(app, reg, { method: "post", path: "/auth/login", tag: "auth", summary: "Sign in with email and password", auth: "public", body: Credentials }, async (c, { body }) => {
     const { auth } = c.get("deps");
     const user = await auth.login(body);
+    if (c.get("deps").core.config.requireEmailVerification && !user.emailVerified) {
+      throw new HttpError(403, "email_unverified", "Verify your email before signing in. You can request a new verification link.");
+    }
     const { token, session } = await auth.createSession(user.id, { ip: clientIp(c), userAgent: c.req.header("user-agent") });
     setSessionCookie(c, token);
     return c.json({ user, session: { expiresAt: session.expiresAt }, token });

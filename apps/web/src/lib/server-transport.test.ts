@@ -3,13 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const factory = vi.hoisted(() => vi.fn());
 vi.mock("server-only", () => ({}));
 vi.mock("@steward/api/runtime", () => ({ createApiRuntime: factory }));
-vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [{ name: "steward_session", value: "test-session" }] }) }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [{ name: "steward_session", value: "test-session" }] }), headers: async () => new Headers({ "x-vercel-forwarded-for": "192.0.2.1" }) }));
 
 function clearRuntime() { delete (globalThis as typeof globalThis & { __stewardEmbeddedApiRuntime?: unknown }).__stewardEmbeddedApiRuntime; }
 beforeEach(() => { clearRuntime(); vi.resetModules(); factory.mockReset(); });
 afterEach(() => { clearRuntime(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("server API transport", () => {
+  it("forwards the incoming client IP header from SSR to the embedded API", async () => {
+    vi.stubEnv("EMBEDDED_API", "true");
+    factory.mockResolvedValue({ app: { fetch: (r: Request) => Response.json({ ip: r.headers.get("x-vercel-forwarded-for") }) } });
+    const { serverApi } = await import("./server");
+    expect(await (await serverApi()).get("/auth/config")).toEqual({ ip: "192.0.2.1" });
+  });
   it("uses the embedded API with cookies and query intact even when the HTTP API is unreachable", async () => {
     const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No loopback API"));
     factory.mockResolvedValue({ app: { fetch: (r: Request) => Response.json({ path: new URL(r.url).pathname, query: new URL(r.url).search, cookie: r.headers.get("cookie") }) } });
