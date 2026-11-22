@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AuthService, OrganizationService, SignupService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -44,6 +44,23 @@ describe("capped signup and waitlist", () => {
     return (await core.pool.query("select * from waitlist_entries where email=$1", [email])).rows[0];
   }
   const admissionToken = (url: string) => new URL(url).searchParams.get("waitlist")!;
+
+  d("deletes waitlist personal data by account linkage and normalized email only", async () => {
+    const owner = await register();
+    const linkedEmail = `previous-${uniq()}@example.com`;
+    const unrelatedEmail = `unrelated-${uniq()}@example.com`;
+    const signup = new SignupService(core.db);
+    await signup.join({ email: owner.email.toUpperCase(), note: "Pending application" }, "closed");
+    await signup.join({ email: linkedEmail, note: "Previous address" }, "closed");
+    await signup.join({ email: unrelatedEmail }, "closed");
+    await core.pool.query("update waitlist_entries set user_id=$1, registered_at=now() where email=$2", [owner.userId, linkedEmail]);
+    const privacy = new PrivacyService(core.db);
+    await privacy.deleteAccount(owner.userId);
+    expect(await entry(owner.email)).toBeUndefined();
+    expect(await entry(linkedEmail)).toBeUndefined();
+    expect(await entry(unrelatedEmail)).toMatchObject({ email: unrelatedEmail });
+    await expect(privacy.deleteAccount(owner.userId)).rejects.toMatchObject({ code: "not_found" });
+  });
 
   it("parses optional non-negative caps and rejects malformed startup configuration", () => {
     expect(loadConfig(ENV)).toMatchObject({ signupTotalCap: undefined, signupDailyCap: undefined });

@@ -1,4 +1,4 @@
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, or, sql } from "drizzle-orm";
 import { hmacSign, safeEqual } from "@steward/crypto";
 import {
   agreements,
@@ -9,6 +9,7 @@ import {
   privacyRequests,
   suppressionList,
   users,
+  waitlistEntries,
   type Db,
   type DbOrTx,
 } from "@steward/db";
@@ -349,6 +350,7 @@ export class PrivacyService {
     // locked out of an account that still holds data, nor leave a deleted account inside a live organization.
     await this.db.transaction(async (tx) => {
       for (const organizationId of removed) await this.deleteOrganization(organizationId, userId, tx);
+      await tx.delete(waitlistEntries).where(or(eq(waitlistEntries.userId, userId), eq(waitlistEntries.email, user.email.trim().toLowerCase())));
       await tx.insert(privacyRequests).values({
         userId: null,
         organizationId: null,
