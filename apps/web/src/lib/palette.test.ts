@@ -227,7 +227,8 @@ describe("what the palette offers", () => {
     expect(hrefs).toContain("/app/c/company-1");
     expect(hrefs).toContain("/app/c/company-1/approvals");
     expect(hrefs).toContain("/app/c/company-1/graph");
-    expect(hrefs).toHaveLength(15);
+    expect(hrefs).toEqual(expect.arrayContaining(["workflows", "mcp", "browser", "code", "site"].map((suffix) => `/app/c/company-1/${suffix}`)));
+    expect(hrefs).toHaveLength(20);
   });
 });
 
@@ -319,6 +320,15 @@ describe("choosing what to offer", () => {
     expect(rankPalette(pages, "policy settings").matches[0]!.label).toBe("Settings");
     // Two words that no single command owns match nothing, so the instruction path opens: that is the case it exists for.
     expect(paletteFor(withRows(), "settings integrations", { now: NOW }).some((a) => a.kind === "ask")).toBe(true);
+  });
+
+  it("checks the rendered navigation before offering an agent instruction", () => {
+    const organization: PaletteAction = { id: "org-settings", kind: "navigate", label: "Organization settings", detail: "Organization · North", keywords: "organization settings", target: { kind: "navigate", href: "/app/orgs/north/settings" } };
+    const actions = paletteFor(withRows(), "Organization settings", { now: NOW, navigation: [organization] });
+    expect(actions.some((action) => action.kind === "ask")).toBe(false);
+    expect(rankPalette(actions, "Organization settings").matches[0]).toEqual(organization);
+    expect(paletteFor(withRows(), "rewrite the onboarding emails for a technical audience", { navigation: [organization] }).some((action) => action.kind === "ask")).toBe(true);
+    expect(paletteFor(withRows(), "", { navigation: [organization], picking: { taskId: "t1", picking: "run" } }).every((action) => action.kind !== "navigate")).toBe(true);
   });
 
   it("does not put an instruction beside an empty search, where every row already matches", () => {

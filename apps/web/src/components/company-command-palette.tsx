@@ -93,8 +93,7 @@ export function CompanyCommandPalette({ companyId, quiet = false, destinations =
   ] : buildPalette({ companyId, ...EMPTY_DATA }, { locale }), [companyId, locale, quiet, destinations, t]);
   const actions = useMemo(() => {
     if (!data) return navOnly;
-    const built = paletteFor(data, query, picking ? { picking, locale } : { locale });
-    return quiet && !picking ? [...built.filter((a) => a.kind !== "navigate"), ...navOnly] : built;
+    return paletteFor(data, query, { picking: picking ?? undefined, locale, navigation: quiet ? navOnly : undefined });
   }, [data, locale, navOnly, picking, query, quiet]);
   const { matches, total } = useMemo(() => rankPalette(actions, query), [actions, query]);
 

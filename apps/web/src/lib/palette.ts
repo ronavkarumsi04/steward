@@ -58,6 +58,8 @@ export interface PaletteData {
 }
 
 export interface PaletteOptions {
+  /** Replace legacy page commands before deciding whether a query needs an instruction fallback. */
+  navigation?: readonly PaletteAction[];
   /** Second step: the founder has chosen a task and is choosing the agent for it. */
   picking?: { taskId: string; picking: "assign" | "run" };
   /** Injectable clock, so ordering by deadline is testable. */
@@ -369,7 +371,8 @@ export function paletteFor(
   options: PaletteOptions = {},
 ): PaletteAction[] {
   if (options.picking) return buildPalette(data, { picking: options.picking, now: options.now, locale: options.locale });
-  const commands = buildPalette(data, { now: options.now, locale: options.locale });
+  const built = buildPalette(data, { now: options.now, locale: options.locale });
+  const commands = options.navigation ? [...built.filter((action) => action.kind !== "navigate"), ...options.navigation] : built;
   if (query.trim().length === 0) return commands;
   const instruction = rankPalette(commands, query).total === 0 ? instructionCommand(data, query, options.locale) : null;
   return instruction ? [...commands, instruction] : commands;
