@@ -64,6 +64,12 @@ describe("Quiet depth boundaries", () => {
     const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
     expect(html).toContain("/runs/r1"); expect(html).toContain("Source unavailable");
   });
+  it("does not mix another agent's runs into history when instructions mention its name", () => {
+    const runs = [{ id: "unrelated", agentId: "another-agent", intent: "Ask Research", createdAt: "2026-11-22T00:00:00Z" }] as Run[];
+    const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
+    expect(html).not.toContain("/runs/unrelated");
+    expect(html).not.toContain("q=Research");
+  });
   it("keeps human members distinct and forbids viewer invitation and role controls", () => {
     const html = markup(createElement(MembersPanel, { quiet: true, orgId: "org-north", members: [{ userId: "me", name: "Reader", email: "reader@example.test", role: "viewer", joinedAt: "2026-11-22T00:00:00Z" }], invitations: [], me: "me", myRole: "viewer" }));
     expect(html).toContain('aria-label="Role: reader@example.test"');
