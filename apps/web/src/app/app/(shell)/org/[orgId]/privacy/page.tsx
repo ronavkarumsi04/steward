@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { DeleteOrganizationForm } from "@/components/privacy-controls";
 import { OrgHeader } from "@/components/org-header";
-import { requireMe, serverApi } from "@/lib/server";
+import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { activeSubprocessors, legalContactChannel, retentionRules } from "@/lib/legal";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietPageHeading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
 
 export const metadata = { title: "Data & privacy" };
 
@@ -18,16 +20,21 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
   const { orgId } = await params;
   const [me, api] = await Promise.all([requireMe(), serverApi()]);
   const membership = me.memberships.find((m) => m.organizationId === orgId);
-  const suppressions = await api.get<{ suppressions: Suppression[] }>(`/privacy/suppressions?organizationId=${orgId}`).catch(() => ({ suppressions: [] as Suppression[] }));
+  const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";
+  const locale = await getLocale();
+  const suppressions = await api.get<{ suppressions: Suppression[] }>(`/privacy/suppressions?organizationId=${orgId}`).catch(() => quiet ? null : ({ suppressions: [] as Suppression[] }));
   const isOwner = membership?.role === "owner";
   const shortLived = retentionRules().filter((r) => r.sweepDays !== null);
   const subprocessors = activeSubprocessors();
+  const SectionTable = quiet ? QuietTable : ({ children }: { children: React.ReactNode; label: string }) => children;
 
   return (
-    <div>
-      <OrgHeader orgId={orgId} membership={membership} title="Data & privacy" />
+    <div className={quiet ? "q-depth" : undefined}>
+      {quiet ? <QuietPageHeading title="Data & privacy" description="Export your organization's records, inspect opt-outs and understand what is retained." scope={<><strong>{membership?.name ?? "Organization"}</strong><span>{membership?.role ?? "Not available"}</span></>} actions={<Link href={`/app/org/${orgId}/members`} className="btn">Organization members</Link>} /> : <OrgHeader orgId={orgId} membership={membership} title="Data & privacy" />}
 
-      <div className="mt-5 space-y-5">
+      <div className={quiet ? "q-depth-layout" : "contents"}>
+      {quiet && <QuietSectionNav label="Data & privacy sections" items={[["export", "Export data"], ["suppression", "Opt-outs"], ["retention", "Retention"], ["processors", "Subprocessors"], ...(isOwner ? [["danger", "Delete organization"] as const] : [])]} />}
+      <div className={quiet ? "q-depth-content" : "mt-5 space-y-5"}>
         <section className="card p-5" aria-labelledby="export">
           <h2 id="export" className="text-[15px] font-semibold">
             Export this organization's data
@@ -52,10 +59,10 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
           <p className="mt-1 text-sm leading-relaxed text-muted">
             Addresses that have opted out. Sending to them is blocked automatically. These records survive account deletion, because honoring an opt-out is a continuing obligation — see the Retention Policy.
           </p>
-          {suppressions.suppressions.length === 0 ? (
+          {!suppressions ? <QuietUnavailable href={`/app/org/${orgId}/privacy#suppression`} locale={locale} /> : suppressions.suppressions.length === 0 ? (
             <p className="mt-3 text-sm text-muted">Nobody has opted out. An unsubscribe link in a marketing email lands here automatically.</p>
           ) : (
-            <table className="mt-4 w-full border-collapse text-left text-sm">
+            <SectionTable label="Opt-out and suppression records"><table className="mt-4 w-full border-collapse text-left text-sm">
               <caption className="sr-only">Opt-out and suppression records</caption>
               <thead>
                 <tr>
@@ -71,11 +78,11 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
                     <td className="border border-line px-3 py-2 font-mono text-xs">{s.address}</td>
                     <td className="border border-line px-3 py-2">{s.channel}</td>
                     <td className="border border-line px-3 py-2 text-muted">{s.reason}</td>
-                    <td className="border border-line px-3 py-2 text-muted">{new Date(s.createdAt).toLocaleDateString()}</td>
+                    <td className="border border-line px-3 py-2 text-muted">{new Date(s.createdAt).toLocaleDateString(quiet ? locale : undefined)}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></SectionTable>
           )}
         </section>
 
@@ -111,7 +118,7 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
         </section>
 
         {isOwner && (
-          <section className="card border-danger p-5" aria-labelledby="danger">
+          <section className={quiet ? "card q-depth-danger" : "card border-danger p-5"} aria-labelledby="danger">
             <h2 id="danger" className="text-[15px] font-semibold text-danger">
               Delete this organization
             </h2>
@@ -123,6 +130,7 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
             </div>
           </section>
         )}
+      </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { RoutingPolicy } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { ProviderModel } from "@/lib/types";
@@ -10,27 +10,39 @@ import { Card } from "./ui";
 import { useT, useTf } from "./locale-provider";
 import type { MessageKey } from "@/lib/i18n";
 
-export function RoutingPanel({ orgId, companyId, models, routing, isAdmin }: { orgId: string; companyId: string; models: ProviderModel[]; routing: Record<string, RoutingPolicy>; isAdmin: boolean }) {
+export function RoutingPanel({ orgId, companyId, models, routing, isAdmin, quiet = false }: { orgId: string; companyId: string; models: ProviderModel[]; routing: Record<string, RoutingPolicy>; isAdmin: boolean; quiet?: boolean }) {
   const router = useRouter();
   const t = useT();
   const tf = useTf();
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const Group = quiet ? "fieldset" : "div";
 
   async function save(purpose: string, e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (quiet && pending.current) return;
     const fd = new FormData(e.currentTarget);
     const explicit = String(fd.get("explicit") ?? "");
     const [provider, model] = explicit.split("::");
     setError(null);
+    setSaved(false);
+    pending.current = true;
+    setBusy(true);
     try {
       await browserApi.put(`/orgs/${orgId}/routing/${purpose}?companyId=${companyId}`, {
         explicit: explicit && provider && model ? { provider, model } : undefined,
         fallbackChain: [],
         requirements: { preference: String(fd.get("preference") || "balanced"), localOnly: fd.get("localOnly") === "on" },
       });
+      setSaved(true);
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("routing.saveFailed"));
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   }
 
@@ -38,7 +50,8 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin }: { o
     <Card title={t("routing.title")} className="nb-left-purple">
       <p className="mb-3 text-sm text-muted">{t("routing.intro")}</p>
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
-      <div className="space-y-2">
+      {quiet && saved && <p role="status" className="mb-2 text-sm text-ok">{t("routing.saved")}</p>}
+      <Group disabled={quiet ? busy : undefined} className={quiet ? "min-w-0 space-y-2" : "space-y-2"} aria-busy={quiet ? busy : undefined}>
         {ROUTING_PURPOSES.map((purpose) => {
           const pol = routing[purpose];
           const current = pol?.explicit ? `${pol.explicit.provider}::${pol.explicit.model}` : "";
@@ -55,7 +68,7 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin }: { o
             </form>
           );
         })}
-      </div>
+      </Group>
     </Card>
   );
 }

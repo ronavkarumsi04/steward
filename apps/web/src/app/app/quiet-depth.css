@@ -1,0 +1,94 @@
+/* Depth surfaces use the canonical Quiet aliases, only inside the server-selected shell. */
+.quiet-workspace .q-depth { width: 100%; max-width: 1180px; margin-inline: auto; padding: 32px clamp(16px, 3vw, 40px) 64px; overflow-wrap: anywhere; }
+.quiet-workspace .q-depth-heading { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
+.q-depth-heading :is(h1, h2) { font-size: clamp(26px, 3vw, 32px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; }
+.q-depth-heading p { color: var(--muted); max-width: 70ch; margin-top: 10px; font-size: max(14px, .875rem); }
+.q-depth-scope { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; color: var(--muted); font-size: max(12px, .75rem); }
+.q-depth-scope strong { color: var(--fg); font-weight: 600; }
+.q-depth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.q-depth-layout { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 36px; align-items: start; }
+.q-depth-rail { position: sticky; top: calc(var(--workspace-header-height, 72px) + 16px); min-width: 0; }
+.q-depth-rail nav ul { display: grid; gap: 4px; }
+.q-depth-rail nav a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+.q-depth-rail nav a:hover { background: var(--accent-soft); color: var(--accent); }
+.q-depth-rail > p { padding: 20px 12px; color: var(--muted); font-size: max(12px, .75rem); }
+.q-depth-content { min-width: 0; display: grid; gap: 28px; }
+.quiet-workspace .q-depth-content > .card,
+.quiet-workspace .q-depth-content > div > .card,
+.quiet-workspace .q-depth-content > div > form.card,
+.quiet-workspace .q-depth-content > fieldset > .card,
+.quiet-workspace .q-depth-content > fieldset > div > .card,
+.quiet-workspace .q-depth-content > form.card { padding: 0 0 28px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+.q-depth-content h2 { font-size: max(17px, 1.0625rem); font-weight: 650; letter-spacing: -.015em; }
+.q-depth-content > fieldset > :is(.card, div) { margin-top: 28px; }
+.q-depth-content > fieldset > :first-child { margin-top: 0; }
+.q-depth-content > fieldset > #brand-kit > .card { border: 0; padding: 0 0 28px; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.q-depth-content :is(section, form, [id]) { scroll-margin-top: calc(var(--workspace-header-height, 72px) + 24px); }
+.q-depth-content p { max-width: 75ch; }
+.q-depth-content :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+.quiet-workspace .q-depth .label { text-transform: none; letter-spacing: normal; font-size: max(14px, .875rem); font-weight: 500; }
+.quiet-workspace .q-depth :is(.input, .select) { min-height: 44px; }
+.quiet-workspace .q-depth .btn { min-height: 44px; height: auto; }
+.quiet-workspace .q-depth .nb-panel-flat { background: var(--panel-2); border: 1px solid var(--line); }
+.quiet-workspace .q-depth .nb-panel-flat:has(> input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.quiet-workspace .q-depth form[data-dimension], .quiet-workspace .q-depth form[data-purpose] { padding: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.q-depth form[data-dimension] > :first-child, .q-depth form[data-purpose] > :first-child { grid-column: 1 / -1; }
+.q-depth form[data-dimension] > button, .q-depth form[data-purpose] > button { justify-self: end; }
+.q-depth-notice { padding: 16px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--panel-2); color: var(--fg-2); font-size: max(14px, .875rem); }
+.q-depth-notice a { display: inline-block; margin-inline-start: 8px; }
+.q-depth-table { max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 16px; }
+.q-depth-table table { margin: 0; width: 100%; }
+.quiet-workspace .q-depth-table :is(td, th) { border: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; vertical-align: top; }
+.q-depth-table th { background: var(--panel-2); font-weight: 600; }
+.q-depth-table tbody tr:last-child td { border-bottom: 0; }
+.q-depth-account { max-width: 1080px !important; }
+.q-depth-danger { padding: 20px !important; border: 1px solid var(--danger) !important; border-radius: 10px !important; background: var(--danger-soft) !important; }
+.q-depth-danger :is(input, .input, .btn:not(.btn-primary)) { border-color: var(--danger); }
+.q-depth-inbox { max-width: 900px !important; }
+.q-depth-inbox .q-depth-heading { align-items: center; }
+.q-depth-inbox > section, .q-depth-inbox > div > section { margin-top: 28px; }
+.q-depth-empty { border: 1px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 32px; }
+.q-depth-empty h2 { font-size: 20px; font-weight: 650; }
+.q-depth-empty p { margin-top: 8px; color: var(--muted); }
+.q-depth-empty .btn { margin-top: 20px; }
+.q-depth-new { max-width: 820px !important; }
+.quiet-workspace .q-depth-new > .card { max-width: none; border: 0; padding: 0; background: transparent; }
+.q-depth-new ol[aria-label="Progress"] { padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.q-depth-new ol[aria-label="Progress"] li span.hidden { display: inline; }
+.q-depth-new .card-inset { border: 1px solid var(--line); background: var(--panel-2); }
+.q-depth-new .hint { font-size: max(14px, .875rem); }
+.quiet-workspace .q-depth-waitlist table { table-layout: fixed; }
+.q-depth-waitlist th:nth-child(1) { width: 22%; }
+.q-depth-waitlist th:nth-child(2) { width: 25%; }
+.q-depth-waitlist th:nth-child(5) { width: 25%; }
+.quiet-workspace .q-depth-waitlist td { min-width: 0; max-width: none; white-space: normal; }
+.q-gallery-swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.q-gallery-swatches li { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.q-gallery-swatches .q-gallery-color { display: block; height: 64px; border-bottom: 1px solid var(--line); }
+.q-gallery-swatches code { display: block; padding: 10px; }
+.q-gallery-samples { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.q-gallery-field { display: grid; gap: 8px; max-width: 440px; margin-top: 24px; }
+.q-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.q-gallery .q-depth-content > section { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.q-gallery section > h2 { margin-bottom: 16px; }
+.q-gallery section > p { margin-bottom: 20px; color: var(--muted); }
+@media (min-width: 1440px) { .quiet-workspace .q-depth form[data-dimension] { grid-template-columns: minmax(120px, 1.5fr) repeat(5, minmax(0, 1fr)) auto; }.q-depth form[data-dimension] > :first-child { grid-column: auto; } }
+@media (max-width: 767px) {
+  .quiet-workspace .q-depth { padding-top: 24px; padding-bottom: 40px; }
+  .quiet-workspace .q-depth-heading { flex-direction: column; gap: 16px; padding-bottom: 24px; margin-bottom: 24px; }
+  .q-depth-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .q-depth-rail { position: static; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+  .q-depth-rail nav ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .q-depth-rail > p { padding-block: 12px 0; }
+  .q-depth-content { gap: 24px; }
+  .q-depth form[data-dimension], .q-depth form[data-purpose] { grid-template-columns: minmax(0, 1fr) !important; }
+  .q-depth form[data-dimension] > button, .q-depth form[data-purpose] > button { justify-self: stretch; }
+  .q-depth-new ol[aria-label="Progress"] { gap: 12px; }
+  .q-depth-new ol[aria-label="Progress"] li > span:last-child { flex-wrap: wrap; align-items: start; }
+  .q-gallery-grid { grid-template-columns: minmax(0, 1fr); }
+  .q-depth-waitlist :is(table, tbody, tr, td) { display: block; width: 100%; }
+  .q-depth-waitlist thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .quiet-workspace .q-depth-waitlist td { padding: 8px 16px; border: 0; }
+  .quiet-workspace .q-depth-waitlist tr { padding-block: 16px; border-bottom: 1px solid var(--line); }
+  .q-depth-waitlist td::before { content: attr(data-label); display: block; margin-bottom: 4px; font-weight: 600; color: var(--muted); font-size: max(12px, .75rem); }
+}

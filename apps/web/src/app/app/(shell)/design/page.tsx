@@ -4,6 +4,8 @@ import { BANDS, MAX_FLASH_HZ, MOTION_MS, SETTLE_FACTOR, type Band } from "@/lib/
 import { requireMe } from "@/lib/server";
 import { DesignMotionLab } from "@/components/design-motion-lab";
 import { Card, Empty, Pill, RiskPill, Spinner, Stat, StatusPill, type Tone } from "@/components/ui";
+import { QuietDesignGallery } from "@/components/quiet-design-gallery";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export const metadata = { title: "Design system" };
 
@@ -69,6 +71,7 @@ function Plan({ title, note, delays }: { title: string; note: string; delays: nu
 
 export default async function DesignPage() {
   await requireMe("/app/design");
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return <QuietDesignGallery />;
   const landing = landingArrival();
   const workspace = workspaceArrival();
   const timeline = timelineArrival(12);

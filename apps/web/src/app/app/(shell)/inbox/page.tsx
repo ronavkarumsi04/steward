@@ -3,6 +3,8 @@ import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { t } from "@/lib/i18n";
 import type { Approval, Company } from "@/lib/types";
 import { Inbox, type InboxGroup } from "@/components/inbox";
+import { QuietInbox } from "@/components/quiet-inbox";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "inbox.title") };
@@ -18,12 +20,17 @@ const INBOX_PAGE = 200;
 export default async function InboxPage() {
   const me = await requireMe("/app/inbox");
   const api = await serverApi();
+  const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";
+  const locale = await getLocale();
+  const unavailableOrgs: string[] = [];
   const orgs = await Promise.all(
     me.memberships.map(async (m) => {
-      const [{ companies }, { approvals }] = await Promise.all([
+      const data = await Promise.all([
         api.get<{ companies: Company[] }>(`/orgs/${m.organizationId}/companies`),
         api.get<{ approvals: Approval[] }>(`/orgs/${m.organizationId}/approvals?status=pending&limit=${INBOX_PAGE}`),
-      ]);
+      ]).catch((error: unknown) => { if (!quiet) throw error; return null; });
+      if (!data) { unavailableOrgs.push(m.name); return { org: m, companies: [], approvals: [] }; }
+      const [{ companies }, { approvals }] = data;
       return { org: m, companies, approvals };
     }),
   );
@@ -40,5 +47,6 @@ export default async function InboxPage() {
     // Newest request first across companies, not company creation order.
     .sort((a, b) => Date.parse(b.approvals[0]!.createdAt) - Date.parse(a.approvals[0]!.createdAt));
   const truncated = orgs.some((o) => o.approvals.length >= INBOX_PAGE);
+  if (quiet) return <QuietInbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} unavailableOrgs={unavailableOrgs} locale={locale} />;
   return <Inbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} />;
 }

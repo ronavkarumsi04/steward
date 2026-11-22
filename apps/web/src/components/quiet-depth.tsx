@@ -1,0 +1,31 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import type { Locale } from "@/lib/i18n";
+
+/** Same section-local recovery language used by the decision/work screens. No raw API errors. */
+export function QuietUnavailable({ href, locale = "en" }: { href: string; locale?: Locale }) {
+  return <p className="q-depth-notice" role="status">{locale === "es" ? "No se pudo cargar esta sección. El resto del trabajo sigue disponible." : "This section could not be loaded. Other work is still available."} <Link className="q-link" href={href}>{locale === "es" ? "Reintentar" : "Try again"}</Link></p>;
+}
+
+export function QuietPageHeading({ title, description, scope, actions, level = 1 }: { title: string; description?: ReactNode; scope?: ReactNode; actions?: ReactNode; level?: 1 | 2 }) {
+  const Heading = level === 1 ? "h1" : "h2";
+  return <header className="q-depth-heading"><div><Heading>{title}</Heading>{description && <p>{description}</p>}{scope && <div className="q-depth-scope">{scope}</div>}</div>{actions && <div className="q-depth-actions">{actions}</div>}</header>;
+}
+
+export function QuietSectionNav({ label, items, children }: { label: string; items: ReadonlyArray<readonly [string, string]>; children?: ReactNode }) {
+  return <aside className="q-depth-rail"><nav aria-label={label}><ul>{items.map(([id, title]) => <li key={id}><Link href={`#${id}`}>{title}</Link></li>)}</ul></nav>{children}</aside>;
+}
+
+export function QuietTable({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="q-depth-table" role="region" aria-label={label} tabIndex={0}>{children}</div>;
+}
+
+/** No wrapper at all in legacy: incumbent spacing selectors and landmark structure stay intact. */
+export function QuietDepthLayout({ quiet, navigation, children }: { quiet: boolean; navigation: ReactNode; children: ReactNode }) {
+  if (!quiet) return <>{children}</>;
+  return <div className="q-depth-layout">{navigation}<div className="q-depth-content">{children}</div></div>;
+}
+
+export function QuietDepthLoading({ label }: { label: string }) {
+  return <div className="q-depth" role="status" aria-label={label}><div className="q-depth-heading"><div className="skeleton h-8 w-48" /></div><div className="q-depth-layout"><div className="skeleton h-48" /><div className="space-y-6"><div className="skeleton h-64" /><div className="skeleton h-48" /></div></div><span className="sr-only">{label}</span></div>;
+}

@@ -5,6 +5,8 @@ import { DeleteAccountForm, MarketingConsentToggle } from "@/components/privacy-
 import { getLocale, requireMe, serverApi } from "@/lib/server";
 import { t, tf, type MessageKey } from "@/lib/i18n";
 import type { PendingAgreement } from "@/lib/types";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { QuietDepthLayout, QuietPageHeading, QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
 
 export async function generateMetadata() {
   return { title: t(await getLocale(), "account.title") };
@@ -33,24 +35,27 @@ export default async function AccountPage() {
   const [me, api] = await Promise.all([requireMe("/app/account"), serverApi()]);
   const locale = await getLocale();
   const T = (key: MessageKey) => t(locale, key);
+  const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";
   const [agreements, requests, marketing] = await Promise.all([
     api.get<{ accepted: Array<{ document: string; version: string; acceptedAt: string }>; history: AgreementRecord[]; pending: PendingAgreement[]; versions: Record<string, string> }>("/auth/agreements"),
-    api.get<{ requests: PrivacyRequestRecord[] }>("/privacy/requests").catch(() => ({ requests: [] as PrivacyRequestRecord[] })),
-    api.get<{ marketing: { optedIn: boolean | null; updatedAt: string | null } }>("/privacy/marketing-consent").catch(() => ({ marketing: { optedIn: null, updatedAt: null } })),
+    api.get<{ requests: PrivacyRequestRecord[] }>("/privacy/requests").catch(() => quiet ? null : ({ requests: [] as PrivacyRequestRecord[] })),
+    api.get<{ marketing: { optedIn: boolean | null; updatedAt: string | null } }>("/privacy/marketing-consent").catch(() => quiet ? null : ({ marketing: { optedIn: null, updatedAt: null } })),
   ]);
 
   const titles = new Map<string, string>(LEGAL_DOCUMENTS.map((d) => [d.slug, d.title] as const));
   // Never chosen is treated as off, but the copy below says so rather than implying a prior opt-out.
-  const marketingOn = marketing.marketing.optedIn === true;
+  const marketingOn = marketing?.marketing.optedIn === true;
+  const SectionTable = quiet ? QuietTable : ({ children }: { children: React.ReactNode; label: string }) => children;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5">
-      <header>
+    <div className={quiet ? "q-depth q-depth-account" : "mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5"}>
+      {quiet ? <QuietPageHeading title={T("account.title")} description={T("account.intro")} /> : <header>
         <h1 className="text-2xl font-semibold tracking-tight">{T("account.title")}</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted">
           {T("account.intro")}
         </p>
-      </header>
+      </header>}
+      <QuietDepthLayout quiet={quiet} navigation={<QuietSectionNav label={T("account.title")} items={[["agreements", T("account.agreed")], ["preferences", T("account.comms")], ["export", T("account.export")], ["requests", T("account.requests")], ["interface", T("account.interface")], ["danger", T("account.delete")]]} />}>
 
       <section className="card p-5" aria-labelledby="agreements">
         <h2 id="agreements" className="text-[15px] font-semibold">
@@ -64,7 +69,7 @@ export default async function AccountPage() {
               : tf(locale, "account.outstandingMany", { n: agreements.pending.length, titles: agreements.pending.map((p) => p.title).join(", ") })}
           </p>
         )}
-        <table className="mt-4 w-full border-collapse text-left text-sm">
+        <SectionTable label={T("account.historyCaption")}><table className="mt-4 w-full border-collapse text-left text-sm">
           <caption className="sr-only">{T("account.historyCaption")}</caption>
           <thead>
             <tr>
@@ -82,11 +87,11 @@ export default async function AccountPage() {
                   </Link>
                 </td>
                 <td className="border border-line px-3 py-2 font-mono text-xs">{row.version}</td>
-                <td className="border border-line px-3 py-2 text-muted">{new Date(row.acceptedAt).toLocaleString()}</td>
+                <td className="border border-line px-3 py-2 text-muted">{new Date(row.acceptedAt).toLocaleString(quiet ? locale : undefined)}</td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></SectionTable>
       </section>
 
       <section className="card p-5" aria-labelledby="preferences">
@@ -94,8 +99,8 @@ export default async function AccountPage() {
           {T("account.comms")}
         </h2>
         <div className="mt-3">
-          <MarketingConsentToggle optedIn={marketingOn} />
-          {marketing.marketing.optedIn === null && <p className="mt-2 text-xs text-muted">{T("account.marketingUnset")}</p>}
+          {marketing ? <><MarketingConsentToggle optedIn={marketingOn} quiet={quiet} />
+          {marketing.marketing.optedIn === null && <p className="mt-2 text-xs text-muted">{T("account.marketingUnset")}</p>}</> : <QuietUnavailable href="/app/account#preferences" locale={locale} />}
         </div>
       </section>
 
@@ -123,7 +128,7 @@ export default async function AccountPage() {
         <h2 id="requests" className="text-[15px] font-semibold">
           {T("account.requests")}
         </h2>
-        {requests.requests.length === 0 ? (
+        {!requests ? <QuietUnavailable href="/app/account#requests" locale={locale} /> : requests.requests.length === 0 ? (
           <p className="mt-1 text-sm text-muted">{T("account.noRequests")}</p>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -131,7 +136,7 @@ export default async function AccountPage() {
               <li key={r.id} className="nb-panel-flat flex flex-wrap items-baseline justify-between gap-2 px-3 py-2 text-sm">
                 <span className="font-medium capitalize">{r.kind.replace("_", " ")}</span>
                 <span className="text-xs text-muted">
-                  {r.status} · {new Date(r.createdAt).toLocaleDateString()}
+                  {r.status} · {new Date(r.createdAt).toLocaleDateString(quiet ? locale : undefined)}
                 </span>
               </li>
             ))}
@@ -142,7 +147,7 @@ export default async function AccountPage() {
         </p>
       </section>
 
-      <section className="card border-danger p-5" aria-labelledby="danger">
+      <section className={quiet ? "card q-depth-danger" : "card border-danger p-5"} aria-labelledby="danger">
         <h2 id="danger" className="text-[15px] font-semibold text-danger">
           {T("account.delete")}
         </h2>
@@ -173,6 +178,7 @@ export default async function AccountPage() {
           </Link>
         </p>
       </section>
+      </QuietDepthLayout>
     </div>
   );
 }

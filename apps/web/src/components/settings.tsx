@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Budget, Company, Goal, Policy } from "@/lib/types";
@@ -10,6 +10,8 @@ import { BrandKitSettings } from "./brand-kit-settings";
 import { Card, Empty, StatusPill, usd } from "./ui";
 import { useLocale, useT, useTf } from "./locale-provider";
 import { statusLabel, type MessageKey } from "@/lib/i18n";
+import { recordedUsd } from "@/lib/decision-semantics";
+import { decisionCopy } from "@/lib/decision-copy";
 
 const DIMENSIONS: Array<{ id: PolicyDimension }> = [
   { id: "ai_spend" },
@@ -26,12 +28,17 @@ const DIMENSIONS: Array<{ id: PolicyDimension }> = [
 ];
 const BUDGET_CATEGORIES: Budget["category"][] = ["total", "ai", "infra", "ads", "messaging", "payments"];
 
-function useAction() {
+function useAction(quiet: boolean) {
   const router = useRouter();
   const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
   async function run(label: string, fn: () => Promise<unknown>) {
+    if (quiet && pending.current) return;
+    pending.current = true;
+    setBusy(true);
     setError(null);
     setSaved(null);
     try {
@@ -40,17 +47,22 @@ function useAction() {
       router.refresh();
     } catch (e) {
       setError(e instanceof ApiError ? (e.status === 403 ? t("settings.adminOnly") : e.message) : t("settings.requestFailed"));
+    } finally {
+      pending.current = false;
+      setBusy(false);
     }
   }
-  return { run, error, saved };
+  return { run, error, saved, busy };
 }
 
-export function SettingsPanel({ company, profile, policies, budgets, goals, isAdmin }: { company: Company; profile: CompanyProfile | null; policies: Policy[]; budgets: Budget[]; goals: Goal[]; isAdmin: boolean }) {
-  const { run, error, saved } = useAction();
+export function SettingsPanel({ company, profile, policies, budgets, goals, isAdmin, quiet = false, readOnly = false }: { company: Company; profile: CompanyProfile | null; policies: Policy[]; budgets: Budget[]; goals: Goal[]; isAdmin: boolean; quiet?: boolean; readOnly?: boolean }) {
+  const { run, error, saved, busy } = useAction(quiet);
   const t = useT();
   const tf = useTf();
   const locale = useLocale();
+  const amount = (value: string | number | null | undefined) => quiet ? (recordedUsd(value, locale) ?? decisionCopy(locale).unavailable) : usd(value);
   const base = `/companies/${company.id}`;
+  const Group = quiet ? "fieldset" : "div";
   const list = (s: string) => s.split(/\n|,/).map((x) => x.trim()).filter(Boolean);
 
   function saveCompany(e: FormEvent<HTMLFormElement>) {
@@ -131,7 +143,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
   }
 
   return (
-    <div className="space-y-5">
+    <Group disabled={quiet ? busy || readOnly : undefined} aria-busy={quiet ? busy : undefined} className={quiet ? "min-w-0 space-y-5" : "space-y-5"}>
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
       {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
@@ -209,7 +221,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             <tbody>
               {budgets.map((b) => (
                 <tr key={`${b.category}-${b.period}`} className={`border-t border-line ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
-                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{usd(b.limitUsd)}</td><td>{usd(b.spentUsd)}</td><td>{usd(b.reservedUsd)}</td><td>{usd(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
+                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{amount(b.limitUsd)}</td><td>{amount(b.spentUsd)}</td><td>{amount(b.reservedUsd)}</td><td>{amount(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
                 </tr>
               ))}
             </tbody>
@@ -274,6 +286,6 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       <div id="overclock" className="settings-anchor">
         <OverclockToggle companyId={company.id} enabled={company.settings?.overclockEnabled === true} isAdmin={isAdmin} />
       </div>
-    </div>
+    </Group>
   );
 }
