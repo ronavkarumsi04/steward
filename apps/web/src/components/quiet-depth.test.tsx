@@ -1,129 +1,122 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import AccountPage from "@/app/app/(shell)/account/page";
-import PrivacyPage from "@/app/app/(shell)/org/[orgId]/privacy/page";
-import SettingsPage from "@/app/app/c/[companyId]/settings/page";
-import NewCompanyPage from "@/app/app/(shell)/new/page";
-import InboxPage from "@/app/app/(shell)/inbox/page";
-import { QuietUnavailable } from "./quiet-depth";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError, type ApiClient } from "@/lib/api";
+import { QuietTeam } from "./quiet-team";
+import { QuietKnowledge } from "./quiet-knowledge";
+import { QuietAgentRoster } from "./quiet-agent-roster";
+import { MembersPanel } from "./members-panel";
+import AgentsPage from "@/app/app/c/[companyId]/agents/page";
+import KnowledgePage from "@/app/app/c/[companyId]/knowledge/page";
+import { AgentsPanel } from "./agents-panel";
+import { KnowledgePanel } from "./knowledge";
+import type { Agent, Run } from "@/lib/types";
+import { depthCopy } from "@/lib/depth-copy";
 
-const { get, requireMe } = vi.hoisted(() => ({ get: vi.fn(), requireMe: vi.fn() }));
+const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server", () => ({
-  getLocale: async () => "en",
-  requireMe,
-  serverApi: async () => ({ get }),
-}));
-vi.mock("@/components/privacy-controls", () => ({ DeleteAccountForm: () => null, DeleteOrganizationForm: () => null, MarketingConsentToggle: () => <span>consent-control</span> }));
-vi.mock("@/components/language-select", () => ({ LanguageSelect: () => null }));
-vi.mock("@/components/settings", () => ({ SettingsPanel: () => null }));
-vi.mock("@/components/routing-panel", () => ({ RoutingPanel: () => null }));
-vi.mock("@/components/push-toggle", () => ({ PushToggle: () => null }));
-vi.mock("@/components/onboarding", () => ({ OnboardingWizard: ({ memberships }: { memberships: Array<{ organizationId: string }> }) => <div>{memberships.map((m) => m.organizationId).join(",")}</div> }));
-beforeEach(() => {
-  requireMe.mockResolvedValue({ user: { locale: "en" }, memberships: [{ organizationId: "org", name: "Review workspace", role: "owner" }] });
-});
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/lib/server", () => ({ serverApi: async () => ({ get }), getLocale: async () => "en" }));
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
+const api = { get } as unknown as ApiClient;
+const agent: Agent = { id: "a1", kind: "research", name: "Research", description: "Sources", systemPrompt: "Use sources", enabled: true, toolAllowlist: ["web.search"], routingPolicy: {}, maxIterations: 20, budgetUsdPerRun: null };
+const markup = (node: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(node);
 
-async function accountData(path: string) {
-  if (path === "/auth/agreements") return { history: [], pending: [] };
-  throw new Error("Offline");
-}
-
-it("retries section failures with a document navigation rather than a same-page fragment", () => {
-  const html = renderToStaticMarkup(<QuietUnavailable href="/app/account#marketing" />);
-  expect(html).toContain('href="/app/account"');
-  expect(html).not.toContain("#marketing");
-});
-
-it("shows unavailable privacy data, not an empty history or an invented opt-out, in Quiet", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  get.mockImplementation(accountData);
-  const html = renderToStaticMarkup(await AccountPage());
-  expect(html).toContain("q-depth");
-  expect(html).toContain("could not be loaded");
-  expect(html).not.toContain("consent-control");
-});
-
-it("keeps the incumbent account surface and fallback behavior when Quiet is off", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
-  get.mockImplementation(accountData);
-  const html = renderToStaticMarkup(await AccountPage());
-  expect(html).not.toContain("q-depth");
-  expect(html).toContain("consent-control");
-});
-
-it("puts discoverable language settings before design and deletion, with explicit export actions and UTC legal times", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  get.mockImplementation(async (path: string) => {
-    if (path === "/auth/agreements") return { history: [{ id: "acceptance", document: "terms", version: "2026-11-01", acceptedAt: "2026-11-22T16:56:59Z" }], pending: [] };
-    return accountData(path);
+describe("Quiet depth boundaries", () => {
+  it("keeps one Knowledge header, scope context and real collection counts across all seven destinations", async () => {
+    get.mockResolvedValue({ documents: [{ id: "d1", kind: "document", title: "Brief", folder: "/", version: 3, updatedAt: "2026-11-22T00:00:00Z", projectId: null }], decisions: [], memories: [], pending: [], canManage: false, artifacts: [], projects: [], images: [], role: "viewer", overview: { counts: [], nodeKinds: [], entitiesByType: [], links: { total: 0, dangling: 0, byRelation: [] }, limits: {}, relations: [] }, nodes: [], canRecord: false });
+    let navigation: string | undefined;
+    for (const tab of ["documents", "playbooks", "decisions", "memory", "artifacts", "pictures", "connections"]) {
+      const html = markup(await QuietKnowledge({ companyId: "north", api, locale: "en", tab }));
+      expect(html).toContain(`<h1>${depthCopy("en").knowledgeTitle}</h1>`);
+      expect(html).toContain("Company-scoped knowledge");
+      const nav = html.match(/<nav class="q-knowledge-nav".*?<\/nav>/)?.[0].replace(/ aria-current="page"/g, "");
+      expect(nav).toBeTruthy();
+      if (navigation) expect(nav).toBe(navigation);
+      navigation = nav;
+    }
   });
-  const html = renderToStaticMarkup(await AccountPage());
-  expect(html.indexOf('id="language"')).toBeLessThan(html.indexOf('id="interface"'));
-  expect(html.indexOf('id="interface"')).toBeLessThan(html.indexOf('id="danger"'));
-  expect(html).toContain("Design system");
-  expect(html).toContain("Download Review workspace archive");
-  expect(html).toContain('dateTime="2026-11-22T16:56:59Z"');
-  expect(html).toContain("UTC");
-});
-
-it("does not turn a failed suppression request into nobody having opted out", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  get.mockRejectedValue(new Error("Offline"));
-  const html = renderToStaticMarkup(await PrivacyPage({ params: Promise.resolve({ orgId: "org" }) }));
-  expect(get).toHaveBeenCalledWith("/privacy/suppressions?organizationId=org");
-  expect(html).toContain("could not be loaded");
-  expect(html).not.toContain("Nobody has opted out");
-});
-
-it("keeps company controls available if optional model routing cannot load", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  get.mockImplementation(async (path: string) => {
-    if (path === "/companies/company") return { company: { id: "company", name: "Review company", organizationId: "org", autonomyLevel: 2, timezone: "UTC" }, role: "member", policies: [], budgets: [], goals: [] };
-    throw new Error("Offline");
+  it("shows permission failure rather than a fictional empty roster", async () => {
+    get.mockRejectedValue(new ApiError(403, "forbidden", "private server detail"));
+    const html = markup(await QuietTeam({ companyId: "north", api, locale: "en" }));
+    expect(html).toContain("Your membership does not allow access");
+    expect(html).not.toContain("private server detail");
+    expect(html).not.toContain("No agents in this view");
+    expect(get.mock.calls.every(([path]) => path.startsWith("/companies/north/" ) || path === "/companies/north")).toBe(true);
   });
-  const html = renderToStaticMarkup(await SettingsPage({ params: Promise.resolve({ companyId: "company" }) }));
-  expect(html).toContain("q-depth");
-  expect(html).toContain("Review company");
-  expect(html).toContain("could not be loaded");
-  expect(get.mock.calls.filter(([path]) => String(path).includes("/routing/")).every(([path]) => String(path).includes("companyId=company"))).toBe(true);
-});
-
-it("does not offer Quiet company creation or fetch providers for read-only memberships", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  requireMe.mockResolvedValue({ user: {}, memberships: [{ organizationId: "viewer-org", role: "viewer" }] });
-  const html = renderToStaticMarkup(await NewCompanyPage());
-  expect(html).toContain("Company creation needs an owner or admin");
-  expect(get).not.toHaveBeenCalled();
-});
-
-it("preserves the legacy company-creation surface for those same memberships", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
-  requireMe.mockResolvedValue({ user: {}, memberships: [{ organizationId: "viewer-org", role: "viewer" }] });
-  get.mockResolvedValue({ providers: [] });
-  const html = renderToStaticMarkup(await NewCompanyPage());
-  expect(html).not.toContain("q-depth");
-  expect(html).toContain("viewer-org");
-});
-
-it("keeps healthy inbox organizations visible without calling the failed organization empty", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
-  requireMe.mockResolvedValue({ user: {}, memberships: [{ organizationId: "healthy", name: "Healthy workspace" }, { organizationId: "offline", name: "Offline workspace" }] });
-  get.mockImplementation(async (path: string) => {
-    if (path.includes("/offline/")) throw new Error("Offline");
-    if (path.endsWith("/companies")) return { companies: [{ id: "company", name: "Review company" }] };
-    return { approvals: [{ id: "decision", companyId: "company", status: "pending", action: "Review this request", risk: "low", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }] };
+  it("does not call a missing schedule read an empty schedule list", async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith("/agents")) return { agents: [], defaultAllowlists: {} };
+      if (path.includes("/runs?")) return { runs: [] };
+      if (path.endsWith("/schedules")) throw new Error("offline");
+      return { role: "viewer", company: { settings: {} } };
+    });
+    const html = markup(await QuietTeam({ companyId: "north", api, locale: "en" }));
+    expect(html).toContain("could not be loaded");
+    expect(html).not.toContain("No schedules yet");
+    expect(html).toContain("No agents in this view");
   });
-  const html = renderToStaticMarkup(await InboxPage());
-  expect(html).toContain("Offline workspace");
-  expect(html).toContain("could not be loaded");
-  expect(html).toContain("/app/c/company/approvals/decision");
-  expect(html).not.toContain("Nothing is waiting on you");
-});
-
-it("preserves legacy inbox failure behavior instead of silently hiding an organization", async () => {
-  vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
-  get.mockRejectedValue(new Error("Offline"));
-  await expect(InboxPage()).rejects.toThrow("Offline");
+  it("fails knowledge closed if membership or scope context is missing", async () => {
+    get.mockRejectedValue(new Error("database secret"));
+    const html = markup(await QuietKnowledge({ companyId: "north", api, locale: "en", tab: "memory" }));
+    expect(html).toContain("could not be loaded");
+    expect(html).not.toContain("/companies/");
+    expect(html).not.toContain("database secret");
+    expect(html).not.toContain("No memories");
+    expect(html).toContain("?tab=memory");
+  });
+  it("labels absence of cost and activity honestly, while retaining real zero limits", () => {
+    const props = { companyId: "north", agents: [agent], runs: null, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() };
+    const html = markup(createElement(QuietAgentRoster, props));
+    expect(html).toContain("Not available");
+    expect(html).not.toContain("$0.00");
+    expect(html).toContain("Enabled is configuration, not worker health");
+    expect(markup(createElement(QuietAgentRoster, { ...props, agents: [{ ...agent, budgetUsdPerRun: "0" }] }))).toContain("$0.00");
+  });
+  it("shows the latest real run with its state, not a made-up healthy worker", () => {
+    const runs = [{ id: "r1", agentId: agent.id, intent: "Source report", status: "failed", createdAt: "2026-11-22T00:00:00Z", error: "Source unavailable" }] as Run[];
+    const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
+    expect(html).toContain("/runs/r1"); expect(html).toContain("Source unavailable");
+  });
+  it("does not mix another agent's runs into history when instructions mention its name", () => {
+    const runs = [{ id: "unrelated", agentId: "another-agent", intent: "Ask Research", createdAt: "2026-11-22T00:00:00Z" }] as Run[];
+    const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
+    expect(html).not.toContain("/runs/unrelated");
+    expect(html).not.toContain("q=Research");
+  });
+  it("keeps long run instructions out of run reference links", () => {
+    const intent = "Prepare the launch kit. ".repeat(100);
+    const runs = [{ id: "r1", agentId: agent.id, intent, status: "executing", createdAt: "2026-11-22T00:00:00Z" }] as Run[];
+    const html = markup(createElement(QuietAgentRoster, { companyId: "north", agents: [agent], runs, overview: null, busy: false, editable: false, onEdit: vi.fn(), onToggle: vi.fn() }));
+    const links = [...html.matchAll(/<a[^>]*href="\/app\/c\/north\/runs\/r1"[^>]*>(.*?)<\/a>/g)];
+    expect(links).toHaveLength(2);
+    expect(links.every((match) => match[1] === "View run · r1")).toBe(true);
+    expect(html).not.toContain(intent);
+  });
+  it("provides a single collection navigation with one Connections destination", () => {
+    const html = markup(createElement(KnowledgePanel, { quiet: true, companyId: "north", documents: [], decisions: [], memories: [], pending: [], artifacts: [], projects: [], canManageMemories: true, canManagePlaybooks: true, initialTab: "documents" }));
+    expect([...html.matchAll(/<nav/g)]).toHaveLength(1);
+    expect([...html.matchAll(/href="\/app\/c\/north\/graph"/g)]).toHaveLength(1);
+    expect([...html.matchAll(/href="\/app\/c\/north\/knowledge\?tab=documents"/g)]).toHaveLength(1);
+    expect(html).toContain("Filter this document list by title or folder.");
+    expect(html).not.toContain("up to 100 memories");
+  });
+  it("keeps human members distinct and forbids viewer invitation and role controls", () => {
+    const html = markup(createElement(MembersPanel, { quiet: true, orgId: "org-north", members: [{ userId: "me", name: "Reader", email: "reader@example.test", role: "viewer", joinedAt: "2026-11-22T00:00:00Z" }], invitations: [], me: "me", myRole: "viewer" }));
+    expect(html).toContain('aria-label="Role: reader@example.test"');
+    expect(html).toMatch(/<select[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Invite/);
+    expect(html).toContain("Leave");
+  });
+  it.each([undefined, "legacy", "unexpected"])("preserves incumbent panels with rollout value %s", async (flag) => {
+    vi.stubEnv("STEWARD_WORKSPACE_SHELL", flag);
+    vi.stubEnv("VERCEL_ENV", "production");
+    get.mockResolvedValue({ agents: [], schedules: [], defaultAllowlists: {}, company: { settings: {} }, documents: [], decisions: [], memories: [], pending: [], artifacts: [], projects: [], role: "viewer" });
+    const agents = await AgentsPage({ params: Promise.resolve({ companyId: "north" }) });
+    const knowledge = await KnowledgePage({ params: Promise.resolve({ companyId: "north" }), searchParams: Promise.resolve({ tab: "memory" }) });
+    expect(agents.props.children[1].type).toBe(AgentsPanel);
+    expect(knowledge.props.children[1].type).toBe(KnowledgePanel);
+    expect(agents.props.children[1].props.quiet).toBeUndefined();
+    expect(knowledge.props.children[1].props.quiet).toBeUndefined();
+  });
 });

@@ -14,7 +14,7 @@ export function QuietInbox({ groups, manyOrgs, truncated, unavailableOrgs, local
   const now = Date.now();
   const open = groups.map((group) => ({ ...group, approvals: group.approvals.filter((approval) => isDecisionOpen(approval, now)) })).filter((group) => group.approvals.length > 0);
   const waiting = open.reduce((count, group) => count + group.approvals.length, 0);
-  return <main className="q-depth q-depth-inbox">
+  return <main className="q-depth q-depth-page q-depth-inbox">
     <QuietPageHeading title={t(locale, "inbox.title")} description={c.approvalsIntro} scope={<span>{waiting === 0 ? (unavailableOrgs.length ? c.unavailable : t(locale, "inbox.nothingPending")) : waiting === 1 ? t(locale, "inbox.oneRequest") : tf(locale, "inbox.nRequests", { n: waiting })}</span>} actions={<PushToggle />} />
     {unavailableOrgs.map((name, index) => <section key={index} className="mb-6"><h2 className="mb-2 font-semibold">{name}</h2><QuietUnavailable href="/app/inbox" locale={locale} /></section>)}
     {open.length === 0 && unavailableOrgs.length === 0 && <section className="q-depth-empty"><Icon.Check size={24} /><h2 className="mt-4">{t(locale, "inbox.emptyTitle")}</h2><p>{locale === "es" ? "Cuando un agente necesite una decisión, la solicitud aparecerá aquí. Ábrela para revisar los detalles antes de responder." : "When an agent needs a decision, the request appears here. Open it to review the exact details before you respond."}</p><Link href="/app" className="btn">{t(locale, "inbox.yourCompanies")}<Icon.ChevronRight size={16} /></Link></section>}

@@ -24,7 +24,7 @@ export default async function NewCompanyPage() {
       }
     }),
   );
-  if (quiet) return <main className="q-depth q-depth-new">
+  if (quiet) return <main className="q-depth q-depth-page q-depth-new">
     <QuietPageHeading title="New company" description="Give your team context. Set the boundaries before work begins." />
     {memberships.length ? <OnboardingWizard memberships={memberships} providersByOrg={providersByOrg} providerErrors={providerErrors} quiet /> : <section className="q-depth-empty"><h2>Company creation needs an owner or admin.</h2><p>Your current human membership does not allow creating companies. Ask an organization owner to update your access.</p><Link className="btn" href="/app">Your companies</Link></section>}
   </main>;

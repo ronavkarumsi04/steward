@@ -1,4 +1,6 @@
 /* Slice A: scoped compatibility theme. Public/access pages and the legacy shell retain their identity. */
+/* Keep centered workspace chrome fixed when a collection gains a native scrollbar. */
+html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 /* Depth routes also paint the root canvas from these same tokens, including the scrollbar gutter. */
 .quiet-workspace, :root:has(.quiet-workspace .q-depth) {
   color-scheme: light;

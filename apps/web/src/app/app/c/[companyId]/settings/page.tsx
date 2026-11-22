@@ -39,7 +39,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ compa
   const [{ models }, ...policies] = routingData ?? [{ models: [] }];
   const routing = Object.fromEntries(policies.map((r, i) => [ROUTING_PURPOSES[i] ?? "default", r.policy]));
   const isAdmin = o.role === "owner" || o.role === "admin";
-  if (quiet) return <div className="q-depth q-depth-settings">
+  if (quiet) return <div className="q-depth q-depth-page q-depth-settings">
     <QuietPageHeading title={t(locale, "settings.title")} description={t(locale, "settings.description")} scope={<><strong>{o.company.name}</strong><span>{o.role} · L{o.company.autonomyLevel}</span><span>{o.company.timezone}</span></>} />
     <div className="q-depth-layout">
       <QuietSectionNav label={t(locale, "settings.onThisPage")} items={SECTIONS.map(([id]) => [id, t(locale, `settings.sec.${id}` as MessageKey)] as const)}>{!isAdmin && <p>{t(locale, "settings.adminOnly")}</p>}</QuietSectionNav>

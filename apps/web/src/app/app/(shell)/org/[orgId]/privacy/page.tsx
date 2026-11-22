@@ -7,7 +7,9 @@ import { workspaceShell } from "@/lib/workspace-theme";
 import { QuietSectionNav, QuietTable, QuietUnavailable } from "@/components/quiet-depth";
 import { QuietOrganizationFrame } from "@/components/quiet-organization";
 
-export const metadata = { title: "Data & privacy" };
+export function generateMetadata() {
+  return { title: workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet" ? "Data and privacy" : "Data & privacy" };
+}
 
 interface Suppression {
   id: string;
@@ -31,7 +33,7 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
 
   const content = (
       <div className={quiet ? "q-depth-layout" : "contents"}>
-      {quiet && <QuietSectionNav label="Data & privacy sections" items={[["export", "Export data"], ["suppression", "Opt-outs"], ["retention", "Retention"], ["processors", "Subprocessors"], ...(isOwner ? [["danger", "Delete organization"] as const] : [])]} />}
+      {quiet && <QuietSectionNav label="Data and privacy sections" items={[["export", "Export data"], ["suppression", "Opt-outs"], ["retention", "Retention"], ["processors", "Subprocessors"], ...(isOwner ? [["danger", "Delete organization"] as const] : [])]} />}
       <div className={quiet ? "q-depth-content" : "mt-5 space-y-5"}>
         <section className="card p-5" aria-labelledby="export">
           <h2 id="export" className="text-[15px] font-semibold">
@@ -133,12 +135,13 @@ export default async function OrgPrivacyPage({ params }: { params: Promise<{ org
   );
 
   return quiet ? (
-    <div className="q-depth q-depth-organization">
+    <div className="q-depth q-depth-page q-depth-organization">
       <QuietOrganizationFrame
         orgId={orgId}
-        title="Data & privacy"
+        title="Data and privacy"
         description="Export your organization's records, inspect opt-outs and understand what is retained."
         scope={`${membership?.name ?? "Organization"} · ${membership?.role ?? "Not available"}`}
+        active="privacy"
       >
         {content}
       </QuietOrganizationFrame>

@@ -55,8 +55,8 @@ export default async function AccountPage() {
   </section>;
 
   return (
-    <div className={quiet ? "q-depth q-depth-account" : "mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5"}>
-      {quiet ? <QuietPageHeading title={T("account.title")} description={T("account.intro")} /> : <header>
+    <div className={quiet ? "q-depth q-depth-page q-depth-account" : "mx-auto w-full max-w-3xl space-y-6 px-3 py-6 sm:px-5"}>
+      {quiet ? <QuietPageHeading title={T("account.title")} description={T("quiet.accountIntro")} /> : <header>
         <h1 className="text-2xl font-semibold tracking-tight">{T("account.title")}</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted">
           {T("account.intro")}

@@ -48,7 +48,7 @@ export function QuietSectionNav({ label, items, children }: { label: string; ite
 
   return <aside ref={rail} className="q-depth-rail">
     <nav aria-label={label}><ul>{items.map(([id, title]) => <li key={id}><a href={`#${id}`} aria-current={active === id ? "location" : undefined} onClick={() => setActive(id)}>{title}</a></li>)}</ul></nav>
-    <label className="q-depth-section-select"><span>{label}</span><select className="select" value={active} onChange={(event) => { const id = event.currentTarget.value; setActive(id); window.location.hash = id; }}>{items.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>
+    <label className="q-depth-section-select"><span>{label}</span><select className="input" value={active} onChange={(event) => { const id = event.currentTarget.value; setActive(id); window.location.hash = id; }}>{items.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label>
     {children}
   </aside>;
 }

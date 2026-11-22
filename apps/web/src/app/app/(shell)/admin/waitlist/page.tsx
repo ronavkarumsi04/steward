@@ -14,7 +14,7 @@ export default async function AdminWaitlistPage() {
   const quiet = workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet";
   const data = await api.get<{ entries: WaitlistEntry[] }>("/admin/waitlist").catch((error: unknown) => { if (!quiet) throw error; return null; });
   const entries = data?.entries ?? [];
-  if (quiet) return <main className="q-depth q-depth-admin">
+  if (quiet) return <main className="q-depth q-depth-page q-depth-admin">
     <QuietPageHeading title="Signup waitlist" description="Instance operators only. Admit founders to their own workspace, even when public signup is closed or full." scope={<span>{data ? `${entries.length} ${entries.length === 1 ? "entry" : "entries"}` : "Not available"}</span>} />
     <p className="mb-6 max-w-3xl text-sm text-muted">Admission links expire after 14 days and work once. Admitting a founder does not grant operator access. Share links securely; reissuing replaces the previous link.</p>
     {data ? <AdminWaitlist entries={entries} quiet /> : <QuietUnavailable href="/app/admin/waitlist" />}
