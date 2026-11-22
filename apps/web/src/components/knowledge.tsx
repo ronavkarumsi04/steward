@@ -280,7 +280,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
           )}
           {playbooks.length === 0 ? <Empty>{quiet && query.trim() ? c.noMatches : t("knowledge.noPlaybooks")}</Empty> : (
             <ul className="divide-y divide-line">
-              {playbooks.map((d) => <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><button className="min-w-0 flex-1 text-left" disabled={busy === d.id} onClick={() => openDocument(d)}><div className="font-medium hover:text-accent">{d.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="pill">{projectName(d.projectId)}</span><span>{d.agentKinds.length ? d.agentKinds.map((k) => { const role = AGENT_ROLES.find(([v]) => v === k); return role ? t(role[1]) : k; }).join(", ") : t("knowledge.allAgentRoles")}</span></div></button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}
+              {playbooks.map((d) => <li key={d.id} className={`flex flex-wrap items-center justify-between gap-3 py-3${quiet ? " q-document-row" : ""}`}><button className="min-w-0 flex-1 text-left" disabled={busy === d.id} onClick={() => openDocument(d)}><div className="font-medium hover:text-accent">{d.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted"><span className="pill">{projectName(d.projectId)}</span><span>{d.agentKinds.length ? d.agentKinds.map((k) => { const role = AGENT_ROLES.find(([v]) => v === k); return role ? t(role[1]) : k; }).join(", ") : t("knowledge.allAgentRoles")}</span></div></button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}
             </ul>
           )}
         </Card>
