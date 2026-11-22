@@ -60,7 +60,12 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
   const t = useT();
   const tf = useTf();
   const locale = useLocale();
-  const amount = (value: string | number | null | undefined) => quiet ? (recordedUsd(value, locale) ?? decisionCopy(locale).unavailable) : usd(value);
+  const amount = (value: string | number | null | undefined, signed = false) => {
+    if (!quiet) return usd(value);
+    // Remaining capacity is signed; costs and limits remain nonnegative ledger amounts.
+    const deficit = signed && Number(value) < 0 ? recordedUsd(-Number(value), locale) : null;
+    return deficit ? `-${deficit}` : (recordedUsd(value, locale) ?? decisionCopy(locale).unavailable);
+  };
   const base = `/companies/${company.id}`;
   const Group = quiet ? "fieldset" : "div";
   const list = (s: string) => s.split(/\n|,/).map((x) => x.trim()).filter(Boolean);
@@ -221,7 +226,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             <tbody>
               {budgets.map((b) => (
                 <tr key={`${b.category}-${b.period}`} className={`border-t border-line ${b.exhausted ? "text-danger" : b.overSoftThreshold ? "text-warn" : ""}`}>
-                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{amount(b.limitUsd)}</td><td>{amount(b.spentUsd)}</td><td>{amount(b.reservedUsd)}</td><td>{amount(b.remainingUsd)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
+                  <td className="py-1">{t(`budgetCategory.${b.category}` as MessageKey)}</td><td>{t(`settings.${b.period}` as MessageKey)}</td><td>{amount(b.limitUsd)}</td><td>{amount(b.spentUsd)}</td><td>{amount(b.reservedUsd)}</td><td>{amount(b.remainingUsd, true)}</td><td>{b.hardStop ? t("settings.yes") : t("settings.soft")}</td>
                 </tr>
               ))}
             </tbody>
