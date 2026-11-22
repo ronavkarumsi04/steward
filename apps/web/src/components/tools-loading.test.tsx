@@ -18,7 +18,10 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers({ host: "local
 vi.mock("@/lib/server", () => ({
   serverApi: async () => ({ get }),
   tryApi: (read: () => Promise<unknown>) => read(),
-  requireMe: async () => ({ memberships: [{ organizationId: "org", role: "owner" }] }),
+  requireMe: async () => ({ memberships: [
+    { organizationId: "other-org", name: "Other organization", role: "owner" },
+    { organizationId: "org", name: "Active organization", role: "owner" },
+  ] }),
 }));
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
 
@@ -90,5 +93,19 @@ describe.each(routes)("Tools loading: $path", ({ path, page }) => {
     expect(loadingChrome.length).toBeGreaterThan(0);
     expect(loadingChrome).toEqual(chrome(content));
     expect(renderToStaticMarkup(fallback)).not.toContain(">Loading tools</h1>");
+  });
+});
+
+describe.each(routes.filter(route => route.path.startsWith("(shell)/org/")))("Organization identity: $path", ({ page }) => {
+  it.each([false, true])("names the active organization before Tools resolve and retains it in loaded/error chrome (unavailable: %s)", async unavailable => {
+    vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
+    if (unavailable) get.mockRejectedValue(new Error("upstream unavailable"));
+    else get.mockImplementation(async (url: string) => response(url));
+    const boundary = await page();
+    expect(get).not.toHaveBeenCalled();
+    const loadingChrome = chrome(boundary.props.fallback);
+    expect(loadingChrome.join("")).toContain("Active organization · Shared across");
+    expect(loadingChrome.join("")).not.toContain("Other organization");
+    expect(loadingChrome).toEqual(chrome(await loadedContent(boundary.props.children)));
   });
 });

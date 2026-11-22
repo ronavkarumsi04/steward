@@ -13,7 +13,7 @@ export async function QuietConnections({ api, orgId, companyId, membership, over
   ]);
   const role = overview?.role ?? membership?.role;
   const canManage = role === "owner" || role === "admin";
-  return <QuietToolsFrame page={companyId ? "connections" : "organizationConnections"} orgId={companyId ? undefined : orgId}>
+  return <QuietToolsFrame page={companyId ? "connections" : "organizationConnections"} orgId={companyId ? undefined : orgId} orgName={membership?.name}>
     <ToolsPermission allowed={canManage} />
     {oauth?.error && <p role="alert" className="quiet-tools-permission">Authorization did not complete. No new connection is confirmed. Try connecting again.</p>}
     {oauth?.connected && !oauth.error && <p role="status" className="quiet-tools-permission">Authorization returned. Check the connection’s current status below.</p>}
@@ -32,7 +32,7 @@ export async function QuietProviders({ api, orgId, membership, serverUrl }: { ap
     api.get<{ devices: CompanionDevice[] }>(`/orgs/${orgId}/companion/devices`),
   ]);
   const isAdmin = membership?.role === "owner" || membership?.role === "admin";
-  return <QuietToolsFrame page="providers" orgId={orgId}>
+  return <QuietToolsFrame page="providers" orgId={orgId} orgName={membership?.name}>
     <ToolsPermission allowed={isAdmin} action="manage providers and companions" />
     {[[types, "Provider catalog"], [providers, "Configured providers"], [models, "Available models"], [usage, "Usage"], [devices, "Companions"]].map(([result, subject]) => {
       const read = result as PromiseSettledResult<unknown>;

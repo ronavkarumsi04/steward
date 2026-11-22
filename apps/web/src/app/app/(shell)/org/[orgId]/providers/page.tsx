@@ -15,7 +15,10 @@ export const metadata: Metadata = { title: "Providers" };
 export default async function ProvidersPage(props: Parameters<typeof ProvidersContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const { orgId } = await props.params;
-    return <Suspense fallback={<QuietToolsLoading page="providers" orgId={orgId} />}><ProvidersContent {...props} /></Suspense>;
+    // requireMe reuses the shell's request-cached identity, before slow Tools reads.
+    const me = await requireMe();
+    const orgName = me.memberships.find(m => m.organizationId === orgId)?.name;
+    return <Suspense fallback={<QuietToolsLoading page="providers" orgId={orgId} orgName={orgName} />}><ProvidersContent {...props} /></Suspense>;
   }
   return ProvidersContent(props);
 }

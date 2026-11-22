@@ -8,7 +8,7 @@ export async function readTools<T>(read: () => Promise<T>): Promise<{ data: T; e
   try { return { data: await read() }; } catch (error) { return { error }; }
 }
 
-/** Route chrome is data-independent so it has the same geometry before and after reads. */
+/** Destination chrome uses only the route and authenticated identity, never Tools reads. */
 const toolsPages = {
   connections: { title: "Connections", description: "Connect the services your team needs. Every action still follows your approval policies.", scope: "Organization connections are inherited and read-only here." },
   organizationConnections: { title: "Connections", description: "Connect the services your team needs. Every action still follows your approval policies.", scope: "Shared across this organization’s companies." },
@@ -18,11 +18,11 @@ const toolsPages = {
   code: { title: "Code", description: "Read repositories and propose changes through an agent run.", scope: "This company only." },
 } as const;
 
-type ToolsFrameProps = { page: keyof typeof toolsPages; orgId?: string; children: ReactNode };
+type ToolsFrameProps = { page: keyof typeof toolsPages; orgId?: string; orgName?: string; children: ReactNode };
 
-export function QuietToolsFrame({ page, orgId, children }: ToolsFrameProps) {
+export function QuietToolsFrame({ page, orgId, orgName, children }: ToolsFrameProps) {
   const { title, description, scope } = toolsPages[page];
-  if (orgId) return <QuietOrganizationFrame orgId={orgId} title={title} description={description} scope={scope} active={page === "providers" ? "providers" : "integrations"}><div className="quiet-tools">{children}</div></QuietOrganizationFrame>;
+  if (orgId) return <QuietOrganizationFrame orgId={orgId} title={title} description={description} scope={`${orgName ?? "Organization"} · ${scope}`} active={page === "providers" ? "providers" : "integrations"}><div className="quiet-tools">{children}</div></QuietOrganizationFrame>;
   return <div className="quiet-tools">
     <QuietPageHeader title={title} description={description} scope={scope} />
     {children}
