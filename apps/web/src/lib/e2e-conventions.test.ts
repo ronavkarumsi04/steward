@@ -51,6 +51,7 @@ const SUITE_FILES = [
   "motion.spec.ts",
   "overclock.spec.ts",
   "palette-keyboard.spec.ts",
+  "quiet-desktop-rail.spec.ts",
   "quiet-mobile-nav.spec.ts",
   SEAM,
   "session.ts",
