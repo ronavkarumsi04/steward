@@ -2,7 +2,7 @@
 
 ## Quiet momentum workspace (redesign slice A)
 
-The authenticated `/app` family now uses Quiet momentum by default: Manrope with system/script fallbacks,
+The authenticated `/app` family can preview Quiet momentum: Manrope with system/script fallbacks,
 white canvas, fog rail, pine ink, forest actions and sage selection. Light/dark semantic colors and the
 compatibility adapters for current components live in `src/app/app/quiet-workspace.css`; the navigation
 inventory lives in `src/lib/workspace-navigation.ts`. Preserve status words/icons as well as color.
@@ -28,10 +28,13 @@ actions retain semantic outlines; controls inside tinted panels use the stronger
 alias and both dark branches. Shadows are disabled; the canonical themed scrim separates modals.
 The prototype is not normative for links, current-page semantics, focus or modal behavior.
 
-Set the **web process** environment variable `STEWARD_WORKSPACE_SHELL=legacy` and restart/redeploy that
-process to restore the incumbent shell, colors and typography. Unset it (or use `quiet`) to return to the
-new shell. This is server-resolved per authenticated request, not a client-controlled auth/policy flag.
-No production environment is changed by this PR; any production configuration change needs owner approval.
+The incumbent shell remains the **production and local default**. Vercel preview deployments
+(`VERCEL_ENV=preview`) opt in automatically when `STEWARD_WORKSPACE_SHELL` is unset; this lets the owner
+review an isolated preview without changing production settings. Set `STEWARD_WORKSPACE_SHELL=quiet`
+on a local/preview **web process** to opt in explicitly, or `legacy` to force rollback in any environment.
+Restart/redeploy that web process after changing it. Unknown values fail closed to legacy.
+This is server-resolved per authenticated request, not a client-controlled auth/policy flag.
+No production environment is changed by this PR; enabling production still requires owner approval.
 
 This is an intentional staged transition: current screen components get compatibility tokens/controls,
 not fictional prototype data. Decision/work/public/depth redesigns follow separately. The public/access

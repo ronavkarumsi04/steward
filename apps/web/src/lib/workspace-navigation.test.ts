@@ -56,8 +56,12 @@ describe("workspace navigation compatibility", () => {
     for (const d of scoped) expect(t("es", d.label)).toBeTruthy();
   });
 
-  it("has a server-only legacy fallback without changing route or auth contracts", () => {
-    expect(workspaceShell(undefined)).toBe("quiet");
+  it("keeps production dark and supports an isolated preview opt-in", () => {
+    expect(workspaceShell(undefined)).toBe("legacy");
+    expect(workspaceShell(undefined, "production")).toBe("legacy");
+    expect(workspaceShell(undefined, "preview")).toBe("quiet");
+    expect(workspaceShell("legacy", "preview")).toBe("legacy");
+    expect(workspaceShell("typo", "production")).toBe("legacy");
     expect(workspaceShell("quiet")).toBe("quiet");
     expect(workspaceShell("legacy")).toBe("legacy");
   });

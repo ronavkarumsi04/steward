@@ -9,5 +9,5 @@ const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", displa
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const me = await requireMe("/app");
-  return <LocaleProvider locale={me.user.locale}><div className={workspaceShell(process.env.STEWARD_WORKSPACE_SHELL) === "quiet" ? `quiet-workspace ${manrope.variable}` : undefined}>{children}</div></LocaleProvider>;
+  return <LocaleProvider locale={me.user.locale}><div className={workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet" ? `quiet-workspace ${manrope.variable}` : undefined}>{children}</div></LocaleProvider>;
 }

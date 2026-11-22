@@ -24,7 +24,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
   ]);
   if (!overview) notFound();
   const { company, pendingApprovals } = overview;
-  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL) === "quiet") return (
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return (
     <div className="flex min-h-screen flex-col">
       <a href="#workspace-content" className="workspace-skip">{t(locale, "shell.skipContent")}</a>
       <TopNav me={me} orgId={company.organizationId} quiet />
