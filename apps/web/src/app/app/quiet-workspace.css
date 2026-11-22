@@ -121,7 +121,7 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-dialog h2 { font-size: 18px; font-weight: 700; }
 .quiet-dialog h3 { margin-top: 20px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .quiet-dialog nav { display: grid; gap: 4px; }
-.quiet-dialog .nav-item { overflow-wrap: anywhere; }
+.quiet-dialog .nav-item { overflow-wrap: normal; }
 .quiet-dialog-email { overflow-wrap: anywhere; margin-bottom: 12px; color: var(--muted); }
 .quiet-logout { width: 100%; margin-top: 16px; }
 

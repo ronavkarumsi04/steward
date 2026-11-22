@@ -36,13 +36,15 @@
 .q-depth .q-depth-panel > .card { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .q-depth .q-depth-panel > .card > div:first-child { margin-bottom: 24px; }
 .q-depth .q-depth-panel > .card li { padding-block: 18px; }
-.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; }
 .q-depth .q-depth-panel nav { margin-bottom: 30px; }
 .q-depth .q-depth-panel nav .btn { border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px; }
 .q-depth .q-depth-panel nav .btn[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 .q-depth .q-depth-panel .card-inset { margin-block: 20px; }
 .q-depth .q-depth-panel input, .q-depth .q-depth-panel textarea, .q-depth .q-depth-panel select { max-width: 100%; }
 .q-depth .q-source-meta { display: block; color: var(--muted); font-size: 12px; margin-top: 7px; }
+.q-document-row { flex-wrap: wrap; }
+.q-document-row > button { flex-basis: 240px; }
 .q-depth .q-member-list > li { padding-block: 22px; gap: 18px; }
 .q-member-identity { display: flex; gap: 14px; align-items: start; min-width: 0; flex: 1 1 260px; }
 .q-member-identity > div { min-width: 0; }
