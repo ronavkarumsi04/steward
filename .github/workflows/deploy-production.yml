@@ -13,12 +13,8 @@ name: Deploy to production
 # Which one runs is the repository variable DEPLOY_MODE (`create` when unset) — a setting rather than a code
 # path, because that answer changes when a person connects the project, not when a commit lands.
 #
-# Both modes end in the same verification, and that is the part worth having: scripts/hosted-check.mjs asks
-# the deployment itself which commit it is running and compares that with the commit that was pushed,
-# retrying while Vercel builds. A merge that changes nothing a build reads (docs, workflows, scripts) passes
-# on the first attempt — Vercel ignores those builds by design — and one that production never picks up fails
-# the run in minutes, instead of being found by the daily check the next morning. The daily run stays
-# single-shot; only this one waits.
+# Both modes verify the web build, API compatibility and execution readiness from the public origin.
+# Docs-only merges can leave the web build unchanged; web-only merges need not deploy a new API.
 on:
   push:
     branches: [main]
@@ -62,21 +58,21 @@ jobs:
           REQUIRE_TOKEN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: node scripts/deploy-production.mjs
 
-      # No install and no build: the deployment is Vercel's to make. This waits for it to exist and be
-      # serving this commit, and says what production was serving instead if it never does.
-      - name: Wait for production to serve this commit
+      # No install or build: Vercel deploys the web build; the checker verifies the public origin.
+      - name: Wait for the web release and verify the backend
         env:
           SHA: ${{ inputs.sha || github.sha }}
           ATTEMPTS: "24"
-          REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '0' }}
+          EXPECT_API: ${{ vars.EXPECT_API }}
+          REQUIRE_EXECUTIONS: ${{ vars.REQUIRE_EXECUTIONS || '1' }}
         run: |
           for attempt in $(seq 1 "$ATTEMPTS"); do
             if EXPECT="$SHA" node scripts/hosted-check.mjs; then
-              echo "production is current for $SHA (attempt $attempt)"
+              echo "production passed release checks for $SHA (attempt $attempt)"
               exit 0
             fi
             echo "::notice::retrying in 30s (attempt $attempt of $ATTEMPTS): production may still be building $SHA, or the failure above is a real one"
             sleep 30
           done
-          echo "::error::production is still not current for $SHA after 12 minutes of waiting; the last report above says what it was serving instead"
+          echo "::error::production release checks did not pass for $SHA; see the last report above"
           exit 1

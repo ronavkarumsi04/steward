@@ -16,8 +16,10 @@ const apiUrl = (process.env.API_INTERNAL_URL?.trim() || process.env.API_URL?.tri
  * watcher and the worker stay hot.
  */
 const embeddedApi = process.env.EMBEDDED_API === "true";
+const commit = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || "").trim().toLowerCase();
 
 const nextConfig: NextConfig = {
+  env: { STEWARD_WEB_BUILD_COMMIT: /^[0-9a-f]{40}$/.test(commit) ? commit : "unknown" },
   agentRules: false,
   reactStrictMode: true,
   poweredByHeader: false,
