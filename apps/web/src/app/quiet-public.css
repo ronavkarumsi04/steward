@@ -193,7 +193,7 @@
   [data-public-design="quiet"] .workflow-decision { padding: 16px; }
   [data-public-design="quiet"] .workflow-steps li > span:last-child { display: none; }
   [data-public-design="quiet"] .public-pilot > div:last-child { padding: 24px; }
-  [data-public-design="quiet"] .public-closing [class*="signRow"] input { flex-basis: auto; }
+  [data-public-design="quiet"] .public-family [class*="signRow"] input { flex-basis: auto; }
   [data-public-design="quiet"] .public-footer { padding: 32px 20px; }
   [data-public-design="quiet"] .public-family .access-main { padding-block: 32px; }
   [data-public-design="quiet"] .public-recovery > section { padding: 24px; }
