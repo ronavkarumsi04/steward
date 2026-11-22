@@ -41,6 +41,7 @@ const SEAM = "seed.ts";
 
 /** The suite is exactly these files: a new one is a deliberate addition, not a copy of its neighbour. */
 const SUITE_FILES = [
+  "account-security.spec.ts",
   "browser-live.spec.ts",
   "browser.spec.ts",
   "code.spec.ts",
