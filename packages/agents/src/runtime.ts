@@ -1,4 +1,4 @@
-import { ProviderError, parseStructured, type ChatMessage, type ContentPart, type ToolCall } from "@steward/ai";
+import { ProviderError, parseStructured, type AIGateway, type ChatMessage, type ContentPart, type ToolCall } from "@steward/ai";
 import { BudgetExhaustedError } from "@steward/core";
 import { earningRule, expiryFor } from "@steward/memory";
 import { assessApprovalPayload, evaluate, isQuietHours, needsFreshApproval, type PolicyContext } from "@steward/policy";
@@ -103,8 +103,19 @@ export type IterationOutcome =
   | { kind: "continue" }
   | { kind: "done"; finalText: string }
   | { kind: "needs_approval"; approvalId: string; toolCallId: string; toolName: string }
-  | { kind: "budget_exhausted"; detail: string }
+  | { kind: "budget_exhausted"; detail: string; finalText?: string }
   | { kind: "failed"; error: string; retryable: boolean };
+
+export class RunBudgetExhaustedError extends Error {
+  constructor(limitUsd: number) {
+    super(`Run budget of $${limitUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} reached`);
+    this.name = "RunBudgetExhaustedError";
+  }
+}
+
+function runBudgetStop(costUsd: string, limitUsd: number | null) {
+  return limitUsd !== null && Number(costUsd) >= limitUsd ? new RunBudgetExhaustedError(limitUsd) : undefined;
+}
 
 export interface ApprovalResumption {
   approvalId: string;
@@ -224,6 +235,28 @@ export class AgentRuntime {
     return { run, agent };
   }
 
+  private async currentBudgetStop(runId: string, ctx: RunContextBundle) {
+    if (ctx.budgetUsdPerRun === null) return;
+    const run = await this.s.runs.get(this.scope, runId);
+    if (!run) throw new Error(`Run ${runId} not found in scope`);
+    return runBudgetStop(run.costUsd, ctx.budgetUsdPerRun);
+  }
+
+  private async chatWithinRunBudget(runId: string, ctx: RunContextBundle, ...[request, options]: Parameters<AIGateway["chat"]>) {
+    if (ctx.budgetUsdPerRun === null) return this.s.gateway.chat(request, options);
+    const check = async () => {
+      const stop = await this.currentBudgetStop(runId, ctx);
+      if (stop) throw stop;
+    };
+    await check();
+    try {
+      return await this.s.gateway.chat(request, { ...options, beforeChatAttempt: check });
+    } catch (e) {
+      if (!request.signal?.aborted && !(e instanceof RunBudgetExhaustedError)) await check();
+      throw e;
+    }
+  }
+
   // ---------- 1. Context ----------
 
   async buildContext(runId: string): Promise<RunContextBundle> {
@@ -248,7 +281,8 @@ export class AgentRuntime {
       ]);
       const trigger = run.trigger as { kind: string; instruction: string; conversationId?: string };
       const instruction = trigger.instruction || task?.title || "Review the company state and propose the next most valuable work.";
-      const memoryBlock = tuning.memoryLimit && tuning.memoryMaxChars ? await this.s.memory.contextBlock(`${instruction}\n${task?.description ?? ""}`, { limit: tuning.memoryLimit, maxChars: tuning.memoryMaxChars }) : "";
+      const budgetUsdPerRun = agent.budgetUsdPerRun === null ? null : Number(agent.budgetUsdPerRun);
+      const memoryBlock = tuning.memoryLimit && tuning.memoryMaxChars && !runBudgetStop(run.costUsd, budgetUsdPerRun) ? await this.s.memory.contextBlock(`${instruction}\n${task?.description ?? ""}`, { limit: tuning.memoryLimit, maxChars: tuning.memoryMaxChars }) : "";
       const conversation = trigger.conversationId && tuning.conversationLimit ? await this.s.conversations.messages(this.scope, trigger.conversationId, tuning.conversationLimit) : [];
 
       const allow = agent.toolAllowlist.length ? agent.toolAllowlist : (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!);
@@ -291,7 +325,7 @@ export class AgentRuntime {
       if (conversation.length) userParts.push(`Conversation so far:\n${conversation.map((m) => `${m.role}: ${m.content}`).join("\n")}`);
       userParts.push(`Instruction: ${instruction}`);
       const routingPolicy = Object.keys(agent.routingPolicy).length ? RoutingPolicy.parse(agent.routingPolicy) : await this.s.providers.routingPolicy(this.scope, agent.kind === "engineering" ? "coding" : agent.kind === "orchestrator" ? "planning" : "default");
-      const bundle: RunContextBundle = { systemPrompt, userPrompt: userParts.join("\n\n"), toolNames, routingPolicy, maxIterations: agent.maxIterations, budgetUsdPerRun: agent.budgetUsdPerRun ? Number(agent.budgetUsdPerRun) : null, overclock: tuning, overclockRevision: Number(agent.config.overclockRevision ?? 0), overclockEnabled: company.settings.overclockEnabled === true };
+      const bundle: RunContextBundle = { systemPrompt, userPrompt: userParts.join("\n\n"), toolNames, routingPolicy, maxIterations: agent.maxIterations, budgetUsdPerRun, overclock: tuning, overclockRevision: Number(agent.config.overclockRevision ?? 0), overclockEnabled: company.settings.overclockEnabled === true };
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: bundle });
       return bundle;
     } catch (e) {
@@ -308,8 +342,9 @@ export class AgentRuntime {
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "planning");
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "plan", title: "Plan the work" });
+    let plan: Plan;
     try {
-      const res = await this.s.gateway.chat(
+      const res = await this.chatWithinRunBudget(runId, ctx,
         {
           messages: [
             { role: "system", content: ctx.systemPrompt },
@@ -323,14 +358,20 @@ export class AgentRuntime {
         },
         { policy: ctx.routingPolicy, purpose: "planning", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
-      const plan = parseStructured(res, Plan);
+      plan = parseStructured(res, Plan);
       await this.s.runs.setStatus({ ...this.scope, actor }, runId, "executing", { plan });
       await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: { plan, model: `${res.provider}/${res.model}` } });
-      return plan;
     } catch (e) {
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: errMsg(e) });
+      if (!signal?.aborted && !(e instanceof RunBudgetExhaustedError)) {
+        const stop = await this.currentBudgetStop(runId, ctx);
+        if (stop) throw stop;
+      }
       throw e;
     }
+    const stop = await this.currentBudgetStop(runId, ctx);
+    if (stop) throw stop;
+    return plan;
   }
 
   // ---------- 3. Iterate (one model call + tool executions) ----------
@@ -378,6 +419,11 @@ export class AgentRuntime {
     if (run.status === "cancelled") return { kind: "done", finalText: "Run was cancelled." };
 
     const { messages, iterations, pending } = await this.transcript(runId, ctx, agent.id);
+    const initialStop = runBudgetStop(run.costUsd, ctx.budgetUsdPerRun);
+    if (initialStop) {
+      if (pending) await this.s.runs.finishStep(this.scope, pending.stepId, { status: "skipped", error: initialStop.message });
+      return { kind: "budget_exhausted", detail: initialStop.message };
+    }
 
     // Resume a tool that was waiting for approval.
     if (pending) {
@@ -431,12 +477,13 @@ export class AgentRuntime {
 
       // The human's yes is the authority; the record keeps both that fact and the policy reasoning behind it.
       const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: pending.stepId, toolCallId: pending.toolCallId, approvalId: pending.approvalId, decision: { decision: "allow", reason: `approved by user (${assessment.detail}); policy: ${decision.reason}`, dimension: decision.dimension, risk: decision.risk } }, signal);
+      const stop = await this.currentBudgetStop(runId, ctx);
+      if (stop) return { kind: "budget_exhausted", detail: stop.message };
       if (!result.ok && result.fatal) return { kind: "failed", error: result.content, retryable: false };
       return { kind: "continue" };
     }
 
     if (iterations >= ctx.maxIterations) return { kind: "done", finalText: `Stopped after ${iterations} iterations (agent limit). Work so far is recorded in the run steps.` };
-    if (ctx.budgetUsdPerRun !== null && Number(run.costUsd) >= ctx.budgetUsdPerRun) return { kind: "budget_exhausted", detail: `Run budget of $${ctx.budgetUsdPerRun.toFixed(2)} reached` };
     try {
       await this.s.budgets.assertAvailable(this.scope, "ai", 0.01);
     } catch (e) {
@@ -449,7 +496,7 @@ export class AgentRuntime {
     let text = "";
     let toolCalls: ToolCall[] = [];
     try {
-      const res = await this.s.gateway.chat(
+      const res = await this.chatWithinRunBudget(runId, ctx,
         { ...(ctx.overclockEnabled ? { metadata: { steward_overclock: "required" } } : {}), messages, tools: tools.map((t) => ({ name: t.manifest.name, description: t.manifest.description, parameters: t.manifest.inputSchema })), toolChoice: "auto", ...(ctx.overclock ? phaseRequest(ctx.overclock.acting) : { temperature: 0.3, maxTokens: 4000 }), ...(signal ? { signal } : {}), ...(deadline ? { deadline } : {}) },
         { policy: ctx.routingPolicy, purpose: agent.kind === "engineering" ? "coding" : "chat", context: { runId, stepId: step.id, agentId: agent.id, companyId: this.scope.companyId } },
       );
@@ -461,12 +508,15 @@ export class AgentRuntime {
     } catch (e) {
       const msg = errMsg(e);
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: msg });
+      if (e instanceof RunBudgetExhaustedError) return { kind: "budget_exhausted", detail: msg };
       if (signal?.aborted) throw e;
       const retryable = e instanceof ProviderError ? e.retryable || e.code === "rate_limit" || e.code === "server" : false;
       if (e instanceof ProviderError && e.code === "unsupported") return { kind: "failed", error: `${msg}. Connect an AI provider in Settings → AI providers.`, retryable: false };
       return { kind: "failed", error: msg, retryable };
     }
 
+    const modelStop = await this.currentBudgetStop(runId, ctx);
+    if (modelStop) return { kind: "budget_exhausted", detail: modelStop.message, ...(!toolCalls.length && text ? { finalText: text } : {}) };
     if (!toolCalls.length) return { kind: "done", finalText: text || "(no output)" };
 
     for (const tc of toolCalls) {
@@ -506,6 +556,8 @@ export class AgentRuntime {
 
       const st = await this.s.runs.beginStep(this.scope, runId, { kind: "tool_call", title: pre?.summary ?? tc.name, input: { toolCallId: tc.id, toolName: tc.name, args } });
       const result = await this.executeTool(tool, args, { runId, agentId: agent.id, taskId: run.taskId ?? undefined, stepId: st.id, toolCallId: tc.id, decision }, signal);
+      const stop = await this.currentBudgetStop(runId, ctx);
+      if (stop) return { kind: "budget_exhausted", detail: stop.message };
       if (!result.ok && result.fatal) return { kind: "failed", error: result.content, retryable: false };
     }
     return { kind: "continue" };
@@ -595,11 +647,12 @@ export class AgentRuntime {
     const actor = this.actor(agent.id, runId);
     await this.s.runs.setStatus({ ...this.scope, actor }, runId, "verifying");
     const step = await this.s.runs.beginStep(this.scope, runId, { kind: "verification", title: "Verify against success criteria" });
+    let verification: Verification;
     try {
       const plan = run.plan ? Plan.safeParse(run.plan) : null;
       const [steps, calls] = await Promise.all([this.s.runs.steps(this.scope, runId), this.s.runs.toolCallsFor(this.scope, runId)]);
       const evidence = verificationEvidence(steps, calls);
-      const res = await this.s.gateway.chat(
+      const res = await this.chatWithinRunBudget(runId, ctx,
         {
           messages: [
             { role: "system", content: "You are a strict reviewer verifying an autonomous agent's work for a founder. Judge only from the evidence; unverified claims count as unmet. The tool ledger below is the system of record: a tool call marked succeeded really happened with exactly the input shown, and its output is what the system returned. Judge criteria about created artefacts (documents, decisions, tasks, emails) from that ledger, not from whether the agent's report repeats the details. A request to draft, review, queue or Outbox a post, email or text is met only by an email.send, social.publish or sms.send call in the ledger (succeeded or awaiting approval), or by a succeeded delegate.run that handed that work to a specialist; a document that merely contains the copy leaves it unmet. Judge a delegating agent on its delegations, not on the specialists' eventual output: a succeeded delegate.run meets the criterion it hands off even though the specialist's run is still queued or waiting for approval; that run is verified on its own." },
@@ -613,14 +666,18 @@ export class AgentRuntime {
         },
         { policy: { ...ctx.routingPolicy, requirements: { ...ctx.routingPolicy.requirements, preference: "cost" } }, purpose: "verification", context: { runId, agentId: agent.id, companyId: this.scope.companyId } },
       );
-      const v = settleDelegation(parseStructured(res, Verification), calls);
-      await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: v });
-      return v;
+      verification = settleDelegation(parseStructured(res, Verification), calls);
+      await this.s.runs.finishStep(this.scope, step.id, { status: "succeeded", output: verification });
     } catch (e) {
       // A verifier that crashes has verified nothing. Reporting `passed: true` here would let an unreviewed
       // run reach `succeeded` — the exact failure mode `unverified` exists to prevent.
       const message = errMsg(e);
       await this.s.runs.finishStep(this.scope, step.id, { status: "failed", error: message });
+      if (e instanceof RunBudgetExhaustedError) throw e;
+      if (!signal?.aborted) {
+        const stop = await this.currentBudgetStop(runId, ctx);
+        if (stop) throw stop;
+      }
       return {
         passed: false,
         verdict: "unverified",
@@ -630,11 +687,14 @@ export class AgentRuntime {
         followUps: [],
       };
     }
+    const stop = await this.currentBudgetStop(runId, ctx);
+    if (stop) throw stop;
+    return verification;
   }
 
   // ---------- 5. Finalize ----------
 
-  async finalize(runId: string, outcome: { status: "succeeded" | "failed" | "needs_review" | "cancelled"; finalText?: string; verification?: Verification; error?: string }): Promise<{ status: string; result: { summary: string; finalText?: string; verification?: Verification } }> {
+  async finalize(runId: string, outcome: { status: "succeeded" | "failed" | "needs_review" | "cancelled"; finalText?: string; verification?: Verification; error?: string; budgetExhausted?: boolean }): Promise<{ status: string; result: { summary: string; finalText?: string; verification?: Verification } }> {
     const { run, agent } = await this.loadRun(runId);
     const actor = this.actor(agent.id, runId);
     const scope = { ...this.scope, actor };
@@ -664,7 +724,7 @@ export class AgentRuntime {
       const summary = outcome.verification?.summary ?? outcome.error ?? outcome.finalText?.slice(0, 2000) ?? "";
       if (summary.trim()) {
         await this.s.memory
-          .save({ kind: decision.kind, title: `${agent.name}: ${run.intent.slice(0, 80)}`, content: summary, importance: decision.importance, confidence: decision.confidence, source: { type: "auto", component: "agent-runtime" }, createdByRunId: runId, tags: [agent.kind], expiresAt: expiryFor("auto") })
+          .save({ kind: decision.kind, title: `${agent.name}: ${run.intent.slice(0, 80)}`, content: summary, importance: decision.importance, confidence: decision.confidence, source: { type: "auto", component: "agent-runtime" }, createdByRunId: runId, tags: [agent.kind], expiresAt: expiryFor("auto") }, { skipEmbedding: outcome.budgetExhausted })
           .catch(() => undefined);
       }
     }

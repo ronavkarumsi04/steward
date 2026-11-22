@@ -77,6 +77,12 @@ export interface GatewayCallOptions {
   policy: RoutingPolicy;
   purpose?: string;
   context?: Record<string, string | undefined>;
+  /** Rejects a chat attempt after any reported usage from previous attempts has been recorded. */
+  beforeChatAttempt?: () => Promise<void>;
+}
+
+class ChatAttemptBlocked {
+  constructor(readonly cause: unknown) {}
 }
 
 /**
@@ -235,7 +241,7 @@ export class AIGateway {
   private async execute<T>(
     req: { model?: string; signal?: AbortSignal; deadline?: number },
     opts: GatewayCallOptions,
-    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined, attempt: { signal?: AbortSignal }) => Promise<ExecutionResult<T>>,
+    fn: (adapter: ProviderAdapter, route: RouteChoice, model: ModelInfo | undefined, attempt: { signal?: AbortSignal; beforeRetry?: (previous: UsageAttempt) => Promise<void> }) => Promise<ExecutionResult<T>>,
   ): Promise<T & { route: RouteChoice }> {
     const { routes, creds, candidates } = await this.plan(opts.policy);
     if (!routes.length) {
@@ -243,6 +249,7 @@ export class AIGateway {
       throw new ProviderError("unsupported", detail, "gateway", false);
     }
     const maxAttempts = this.opts.maxAttemptsPerRoute ?? 2;
+    const checkAttempt = opts.beforeChatAttempt;
     let lastErr: ProviderError | undefined;
     const deadCreds = new Set<string>();
     routes: for (const [routeIndex, route] of routes.entries()) {
@@ -253,6 +260,7 @@ export class AIGateway {
       const adapter = this.adapterFor(cred);
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         if (req.signal?.aborted) throw new ProviderError("unknown", "aborted", route.provider, false);
+        await checkAttempt?.();
         const budget = this.attemptBudget(req.deadline, routesLeft);
         if (budget && budget.timeoutMs === 0) {
           lastErr = new ProviderError(
@@ -267,26 +275,38 @@ export class AIGateway {
         const attemptTimer = attemptController && budget ? setTimeout(() => attemptController.abort(new Error(`timeout after ${budget.timeoutMs}ms of a ${Math.round((req.deadline! - this.now()) / 1000)}s budget`)), budget.timeoutMs) : undefined;
         const attemptSignal = attemptController ? (req.signal ? AbortSignal.any([req.signal, attemptController.signal]) : attemptController.signal) : req.signal;
         const started = this.now();
+        let recordedAttempts = 0;
+        const beforeRetry = checkAttempt ? async (previous: UsageAttempt) => {
+          const { costUsd, estimated } = estimateCost(model, previous.usage);
+          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: "ok", retries: attempt, routingReason: route.reason, context: opts.context });
+          recordedAttempts++;
+          try {
+            await checkAttempt();
+          } catch (e) {
+            throw new ChatAttemptBlocked(e);
+          }
+        } : undefined;
         try {
-          const { result, usage, previousAttempts = [], latencyMs: resultLatencyMs } = await fn(adapter, route, model, { signal: attemptSignal });
+          const { result, usage, previousAttempts = [], latencyMs: resultLatencyMs } = await fn(adapter, route, model, { signal: attemptSignal, beforeRetry });
           for (const [index, previous] of previousAttempts.entries()) {
             const { costUsd, estimated } = estimateCost(model, previous.usage);
             await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: "ok", retries: attempt + index, routingReason: route.reason, context: opts.context });
           }
           const { costUsd, estimated } = estimateCost(model, usage);
-          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: resultLatencyMs ?? this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt + previousAttempts.length, routingReason: route.reason, context: opts.context });
+          await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage, latencyMs: resultLatencyMs ?? this.now() - started, costUsd, costEstimated: estimated, status: "ok", retries: attempt + previousAttempts.length + recordedAttempts, routingReason: route.reason, context: opts.context });
           this.markSuccess(cred.id);
           return Object.assign(result as object, { route }) as T & { route: RouteChoice };
         } catch (e) {
+          if (e instanceof ChatAttemptBlocked) throw e.cause;
           const err = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
           lastErr = err;
           const executionError = err as GatewayExecutionError;
           for (const [index, previous] of (executionError.usageAttempts ?? []).entries()) {
             const { costUsd, estimated } = estimateCost(model, previous.usage);
-            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: previous.status ?? "ok", ...(previous.errorCode ? { errorCode: previous.errorCode } : {}), retries: attempt + index, routingReason: route.reason, context: opts.context });
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: previous.usage, latencyMs: previous.latencyMs, costUsd, costEstimated: estimated, status: previous.status ?? "ok", ...(previous.errorCode ? { errorCode: previous.errorCode } : {}), retries: attempt + index + recordedAttempts, routingReason: route.reason, context: opts.context });
           }
           if (!executionError.usageAttemptsComplete) {
-            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt + (executionError.usageAttempts?.length ?? 0), routingReason: route.reason, context: opts.context });
+            await recordUsageSafely(this.opts, { credentialId: cred.id, provider: route.provider, model: route.model, purpose: opts.purpose ?? "chat", usage: { inputTokens: 0, outputTokens: 0 }, latencyMs: this.now() - started, costUsd: 0, costEstimated: true, status: "error", errorCode: err.code, retries: attempt + (executionError.usageAttempts?.length ?? 0) + recordedAttempts, routingReason: route.reason, context: opts.context });
           }
           if (err.code === "invalid_request" || err.code === "content_filter" || err.code === "context_length") {
             // Not a provider health problem; move to the next route without penalizing.
@@ -333,6 +353,9 @@ export class AIGateway {
         error.usageAttemptsComplete = true;
         throw error;
       }
+      const previous = { usage: first.usage, latencyMs: firstLatencyMs };
+      await attempt.beforeRetry?.(previous);
+      const unrecorded = attempt.beforeRetry ? [] : [previous];
       const retryStarted = this.now();
       let retry: ChatResponse;
       try {
@@ -340,7 +363,7 @@ export class AIGateway {
       } catch (e) {
         const error = e instanceof ProviderError ? e : new ProviderError("unknown", e instanceof Error ? e.message : String(e), route.provider, false);
         const executionError = error as GatewayExecutionError;
-        executionError.usageAttempts = [{ usage: first.usage, latencyMs: firstLatencyMs }];
+        executionError.usageAttempts = unrecorded;
         throw executionError;
       }
       const retryLatencyMs = this.now() - retryStarted;
@@ -348,7 +371,7 @@ export class AIGateway {
       if (retry.finishReason === "content_filter") {
         const error = new ProviderError("content_filter", "Model response was blocked by content policy", route.provider, false) as GatewayExecutionError;
         error.usageAttempts = [
-          { usage: first.usage, latencyMs: firstLatencyMs },
+          ...unrecorded,
           { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
         ];
         error.usageAttemptsComplete = true;
@@ -358,14 +381,14 @@ export class AIGateway {
       if (retry.text.trim() === "" && retry.toolCalls.length === 0) {
         const error = new ProviderError("invalid_request", `Model used its entire ${retryMaxTokens}-token output budget on reasoning and returned no answer`, route.provider, false) as GatewayExecutionError;
         error.usageAttempts = [
-          { usage: first.usage, latencyMs: firstLatencyMs },
+          ...unrecorded,
           { usage: retry.usage, latencyMs: retryLatencyMs, status: "error", errorCode: error.code },
         ];
         error.usageAttemptsComplete = true;
         throw error;
       }
 
-      return { result: retry, usage: retry.usage, previousAttempts: [{ usage: first.usage, latencyMs: firstLatencyMs }], latencyMs: retryLatencyMs };
+      return { result: retry, usage: retry.usage, previousAttempts: unrecorded, latencyMs: retryLatencyMs };
     });
   }
 

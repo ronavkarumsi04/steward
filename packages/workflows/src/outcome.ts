@@ -7,12 +7,12 @@
  * the one thing this product must never get wrong. `endingFor` is that agreement.
  */
 import { verificationVerdict } from "@steward/schema";
-import type { IterationOutcome, Verification } from "./types.js";
+import type { FinalizeInput, IterationOutcome, Verification } from "./types.js";
 
-export type RunFinalStatus = "succeeded" | "needs_review" | "failed" | "cancelled";
+export type RunFinalStatus = FinalizeInput["status"];
 
 export type RunEnding =
-  | { action: "finish"; status: RunFinalStatus; finalText?: string; error?: string; verification?: Verification | null }
+  | ({ action: "finish"; verification?: Verification | null } & Omit<FinalizeInput, "verification">)
   /** Worth trying again: a provider outage, a rate limit. The workflow retries; a driver retries it too. */
   | { action: "retry"; error: string }
   /** The run is not finished — it paused for an approval, or it has more work to do. */
@@ -29,6 +29,10 @@ export function statusForVerification(verification: Verification | null | undefi
 /** How many times a retryable provider failure may be retried before the run is reported as failed. */
 export const MAX_PROVIDER_RETRIES = 4;
 
+export function budgetEnding(detail: string, finalText?: string): FinalizeInput {
+  return { status: "needs_review", finalText: finalText ?? `Stopped: ${detail}`, error: detail, budgetExhausted: true };
+}
+
 /**
  * Maps an iteration outcome — together with the review, when the iteration was the last one — to what the run
  * should do next. `needs_approval` is reported as `continue` because pausing is handled by the caller, which
@@ -39,7 +43,7 @@ export function endingFor(outcome: IterationOutcome, verification?: Verification
     case "done":
       return { action: "finish", status: statusForVerification(verification), finalText: outcome.finalText, verification };
     case "budget_exhausted":
-      return { action: "finish", status: "needs_review", finalText: `Stopped: ${outcome.detail}`, error: outcome.detail };
+      return { action: "finish", ...budgetEnding(outcome.detail, outcome.finalText) };
     case "failed":
       return outcome.retryable ? { action: "retry", error: outcome.error } : { action: "finish", status: "failed", error: outcome.error };
     case "needs_approval":

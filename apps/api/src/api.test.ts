@@ -14,7 +14,7 @@ import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
 import type { TenantScope } from "@steward/schema";
-import type { WorkflowClient } from "@steward/workflows";
+import { endingFor, type WorkflowClient } from "@steward/workflows";
 import { createApp } from "./app.js";
 import { CompanionHub } from "./companion-hub.js";
 import { runEvalSuite, SCRIPT_FOR_BACKEND } from "./test/eval-harness.js";
@@ -1072,6 +1072,44 @@ describe("growth pipeline", () => {
 });
 
 describe("durable run pipeline (stub provider, in-process runtime)", () => {
+  d("hard-stops at the founder's explicit run budget before executing the model's requested tool", async () => {
+    const paid = await startStubProvider({ pricing: { prompt: "0.0001", completion: "0.0001" } });
+    try {
+      const { api, orgId } = await register();
+      await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: paid.apiKey, baseUrl: paid.baseUrl });
+      const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Budget Co" });
+      const companyId = co.body.company.id;
+      const base = `/companies/${companyId}`;
+      const { body: { agents } } = await api.json<{ agents: Array<{ id: string; kind: string }> }>("GET", `${base}/agents`);
+      const agentId = agents.find((agent) => agent.kind === "orchestrator")!.id;
+      // The fixture returns 160 tokens per call: planning and the first iteration each cost $0.016.
+      expect((await api.json("PATCH", `${base}/agents/${agentId}`, { budgetUsdPerRun: 0.032 })).status).toBe(200);
+      const { body: { run: { id: runId } } } = await api.json<{ run: { id: string } }>("POST", `${base}/runs`, { agentId, instruction: "Write positioning." });
+      const scope: TenantScope = { organizationId: orgId, companyId, actor: { type: "system", component: "test" } };
+      const rt = new AgentRuntime(services.forScope(scope), buildToolRegistry());
+      await services.runs.setStatus(scope, runId, "building_context");
+      const ctx = await rt.buildContext(runId);
+      expect(ctx.budgetUsdPerRun).toBe(0.032);
+      await rt.plan(runId, ctx);
+      expect(Number((await services.runs.get(scope, runId))?.costUsd)).toBe(0.016);
+      const outcome = await rt.iterate(runId, ctx);
+      expect(Number((await services.runs.get(scope, runId))?.costUsd)).toBe(0.032);
+      expect((await services.runs.steps(scope, runId)).find((step) => step.kind === "model_call")).toMatchObject({
+        status: "succeeded",
+        output: { toolCalls: [expect.objectContaining({ name: "document.write" })] },
+      });
+      expect(await services.runs.toolCallsFor(scope, runId)).toEqual([]);
+      expect(outcome).toMatchObject({ kind: "budget_exhausted" });
+      const ending = endingFor(outcome);
+      if (ending.action !== "finish") throw new Error("Expected the run to stop");
+      await rt.finalize(runId, { ...ending, verification: ending.verification ?? undefined });
+      expect(await services.runs.get(scope, runId)).toMatchObject({ status: "needs_review", error: expect.stringContaining("Run budget") });
+      expect(paid.requests).toHaveLength(2);
+    } finally {
+      await paid.close();
+    }
+  });
+
   d("chat message → run → plan → tool calls → verify → artifacts, usage, events", async () => {
     const { api, orgId } = await register();
     await api.json("POST", `/orgs/${orgId}/providers`, { providerType: "openai_compatible", secret: stub.apiKey, baseUrl: stub.baseUrl });

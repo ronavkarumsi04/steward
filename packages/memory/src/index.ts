@@ -147,11 +147,11 @@ export class MemoryService {
     if (!row) throw new MemoryError("invalid", "That is not something this company knows about, so a memory cannot be filed against it.", { problems: [{ code: "about_unknown", field: "aboutEntityId", message: "This is not a thing this company has recorded." }] as MemoryProblem[] });
   }
 
-  async save(input: SaveMemoryInput): Promise<MemoryRecord> {
+  async save(input: SaveMemoryInput, opts?: { skipEmbedding?: boolean }): Promise<MemoryRecord> {
     const source = input.source ?? sourceForScope(this.o.scope);
     const sourceType = sourceTypeOf(source);
     if (input.aboutEntityId) await this.assertAbout(input.aboutEntityId);
-    const emb = await this.embed(`${input.title ?? ""}\n${input.content}`);
+    const emb = opts?.skipEmbedding ? null : await this.embed(`${input.title ?? ""}\n${input.content}`);
     const [row] = await this.o.db
       .insert(memories)
       .values({

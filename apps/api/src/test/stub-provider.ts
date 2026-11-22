@@ -37,6 +37,7 @@ export type StubScript =
 
 export interface StubOptions {
   apiKey?: string;
+  pricing?: { prompt: string; completion: string };
   /** Fail the first chat completion, to exercise retryable provider failures. */
   failFirstChat?: boolean;
   script?: StubScript;
@@ -124,7 +125,7 @@ export async function startStubProvider(opts: StubOptions = {}): Promise<StubPro
         res.end(JSON.stringify(body));
       };
       if (req.headers.authorization !== `Bearer ${apiKey}`) return json(401, { error: { message: "Incorrect API key provided", type: "invalid_request_error", code: "invalid_api_key" } });
-      if (path.endsWith("/models")) return json(200, { object: "list", data: [{ id: "stub-1", object: "model", owned_by: "stub" }] });
+      if (path.endsWith("/models")) return json(200, { object: "list", data: [{ id: "stub-1", object: "model", owned_by: "stub", pricing: opts.pricing }] });
       if (!path.endsWith("/chat/completions")) return json(404, { error: { message: "not found" } });
 
       const body = JSON.parse(raw || "{}") as Record<string, unknown>;

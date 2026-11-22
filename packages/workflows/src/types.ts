@@ -35,7 +35,7 @@ export type IterationOutcome =
   | { kind: "continue" }
   | { kind: "done"; finalText: string }
   | { kind: "needs_approval"; approvalId: string; toolCallId: string; toolName: string }
-  | { kind: "budget_exhausted"; detail: string }
+  | { kind: "budget_exhausted"; detail: string; finalText?: string }
   | { kind: "failed"; error: string; retryable: boolean };
 
 export interface ApprovalResumption {
@@ -65,6 +65,7 @@ export interface FinalizeInput {
   finalText?: string;
   verification?: Verification;
   error?: string;
+  budgetExhausted?: boolean;
 }
 
 /** Contract implemented by the worker's activities. */
@@ -84,6 +85,7 @@ export interface AgentActivities {
 }
 
 export const TASK_QUEUE_DEFAULT = "steward-main";
+export const RUN_BUDGET_EXHAUSTED = "RunBudgetExhausted";
 export const APPROVAL_SIGNAL = "approvalDecision";
 export const CANCEL_SIGNAL = "cancelRun";
 export const STATUS_QUERY = "runStatus";

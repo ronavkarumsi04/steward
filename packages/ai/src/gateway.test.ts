@@ -90,6 +90,22 @@ const request = (maxTokens?: number): Omit<ChatRequest, "model"> => ({
 });
 
 describe("AIGateway reasoning-budget recovery", () => {
+  it("records the first attempt's usage before checking whether a retry may spend more", async () => {
+    const secondary = credential("credential-2", 20);
+    const { gateway, records, adapters } = setup(new Map([["credential-1", [response({})]]]), [credential("credential-1", 10), secondary]);
+    const budgetStop = new Error("Run budget reached");
+    await expect(gateway.chat(request(1_000), {
+      policy,
+      beforeChatAttempt: async () => {
+        if (records.length) throw budgetStop;
+      },
+    })).rejects.toBe(budgetStop);
+    expect(adapters.get("credential-1")!.chat).toHaveBeenCalledOnce();
+    expect(adapters.get(secondary.id)!.chat).not.toHaveBeenCalled();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.usage.outputTokens).toBe(800);
+  });
+
   it("retries reasoning-only length responses with a raised maxTokens and records both attempts", async () => {
     const { gateway, records, adapters } = setup(
       new Map([

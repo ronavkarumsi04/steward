@@ -1,6 +1,6 @@
-import { ApplicationFailure, condition, defineQuery, defineSignal, executeChild, patched, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
-import { endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
-import { APPROVAL_SIGNAL, CANCEL_SIGNAL, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
+import { ActivityFailure, ApplicationFailure, condition, defineQuery, defineSignal, executeChild, patched, proxyActivities, setHandler, workflowInfo, isCancellation, CancellationScope } from "@temporalio/workflow";
+import { budgetEnding, endingFor, MAX_PROVIDER_RETRIES } from "./outcome.js";
+import { APPROVAL_SIGNAL, CANCEL_SIGNAL, RUN_BUDGET_EXHAUSTED, STATUS_QUERY, type AgentActivities, type AgentRunInput, type ApprovalDecisionSignal, type ApprovalResumption, type IterationOutcome, type ScheduledRunInput } from "./types.js";
 
 const APPROVAL_TIMEOUT = "3 days";
 
@@ -36,6 +36,7 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
   let iterations = 0;
   let waitingApprovalId: string | null = null;
   let cancelRequested: string | null = null;
+  let answer: string | undefined;
   let activeScope: CancellationScope | undefined;
   const decisions = new Map<string, ApprovalDecisionSignal>();
 
@@ -113,7 +114,10 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
       // Everything that ends a run — the review verdict, an exhausted budget, an unrecoverable failure — is
       // decided in `endingFor`, which the in-process drivers share so that none of them can disagree with the
       // workflow about whether work was reviewed.
-      if (outcome.kind === "done") phase = "verifying";
+      if (outcome.kind === "done") {
+        phase = "verifying";
+        answer = outcome.finalText;
+      }
       const verificationResult = outcome.kind === "done"
         ? await runCancellableActivity(() => model.verify({ ...input, ctx, finalText: outcome.finalText }))
         : undefined;
@@ -127,13 +131,16 @@ export async function agentRunWorkflow(input: AgentRunInput): Promise<{ status: 
         case "retry":
           throw ApplicationFailure.retryable(ending.error, "ProviderFailure");
         case "finish":
-          return finish({ status: ending.status, finalText: ending.finalText, error: ending.error, verification: ending.verification ?? undefined });
+          return finish({ status: ending.status, finalText: ending.finalText, error: ending.error, verification: ending.verification ?? undefined, budgetExhausted: ending.budgetExhausted });
       }
     }
   } catch (e) {
     if (isCancellation(e)) {
       await CancellationScope.nonCancellable(() => bookkeeping.finalize({ ...input, outcome: { status: "cancelled", error: "workflow cancelled" } }));
       throw e;
+    }
+    if (e instanceof ActivityFailure && e.cause instanceof ApplicationFailure && e.cause.type === RUN_BUDGET_EXHAUSTED) {
+      return cancelRequested ? finishCancelled() : finish(budgetEnding(e.cause.message, answer));
     }
     await bookkeeping.finalize({ ...input, outcome: { status: "failed", error: failureMessage(e) } });
     return { status: "failed" };
