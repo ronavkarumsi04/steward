@@ -29,7 +29,7 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
   const attention = budgets.filter((b) => b.exhausted || b.overSoftThreshold);
   const { usage, neverAnswered } = splitUsage(aiUsage);
   const monthlyAvailable = !!total || categoryRows.length > 0;
-  const amount = (value: number, available = true) => quiet && (!available || !Number.isFinite(value)) ? t("quiet.notAvailable") : usd(value);
+  const amount = (value: Parameters<typeof usd>[0], available = true) => quiet && (!available || value == null || value === "" || !Number.isFinite(Number(value))) ? t("quiet.notAvailable") : usd(value);
 
   return (
     <div className="space-y-5">
