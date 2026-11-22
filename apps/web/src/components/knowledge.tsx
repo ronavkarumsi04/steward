@@ -11,6 +11,7 @@ import { Card, Empty, Json, Ago } from "./ui";
 import { DeckView, SheetView } from "./deliverables";
 import { PicturesPanel, imageSrc } from "./pictures";
 import { IMPORTANCE_OPTIONS, MEMORY_KIND_CHOICES, confidenceLabel, describeProvenance, expirySentence, importanceLabel } from "@/lib/memory";
+import { depthCopy } from "@/lib/depth-copy";
 
 const TAB_IDS = ["playbooks", "documents", "decisions", "memory", "artifacts", "pictures"] as const;
 type Tab = (typeof TAB_IDS)[number];
@@ -40,8 +41,10 @@ const blankDocument = (kind: Document["kind"]): Document => ({
   updatedAt: "",
 });
 
-export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks, initialTab }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean; initialTab?: string }) {
+export function KnowledgePanel({ companyId, documents, decisions, memories, pending, canManageMemories, artifacts, projects, canManagePlaybooks, initialTab, quiet = false }: { companyId: string; documents: Document[]; decisions: Decision[]; memories: Memory[]; pending: Memory[]; canManageMemories: boolean; artifacts: Artifact[]; projects: Project[]; canManagePlaybooks: boolean; initialTab?: string; quiet?: boolean }) {
   const locale = useLocale();
+  const c = depthCopy(locale);
+  const [query, setQuery] = useState("");
   const t = useT();
   const tf = useTf();
   const router = useRouter();
@@ -61,8 +64,9 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
   const [selected, setSelected] = useState<string[]>([]);
   const [revisions, setRevisions] = useState<MemoryRevision[] | null>(null);
   const [revisionsFor, setRevisionsFor] = useState<string | null>(null);
-  const playbooks = documents.filter((d) => d.kind === "playbook");
-  const regularDocuments = documents.filter((d) => d.kind !== "playbook");
+  const matches = (d: Document) => !quiet || `${d.title} ${d.folder}`.toLocaleLowerCase(locale).includes(query.toLocaleLowerCase(locale));
+  const playbooks = documents.filter((d) => d.kind === "playbook" && matches(d));
+  const regularDocuments = documents.filter((d) => d.kind !== "playbook" && matches(d));
   const projectName = (id: string | null) => id ? projects.find((p) => p.id === id)?.name ?? t("knowledge.unknownProject") : t("knowledge.companyWide");
 
   function beginNew(kind: Document["kind"]) {
@@ -243,12 +247,14 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
   ) : null;
 
   return (
-    <div className="space-y-5">
+    <div className={quiet ? "q-depth-panel space-y-5" : "space-y-5"}>
       <nav className="flex flex-wrap gap-1" aria-label={t("knowledge.title")}>
         {tabs.map(([id, label, n]) => (
-          <Link key={id} href={`/app/c/${companyId}/knowledge?tab=${id}`} scroll={false} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-current={tab === id ? "page" : undefined}>{t(label)} <span className="text-muted">{n}</span></Link>
+          <Link key={id} href={`/app/c/${companyId}/knowledge?tab=${id}`} scroll={false} className={`btn ${tab === id ? "border-accent text-accent" : ""}`} aria-current={tab === id ? "page" : undefined}>{t(label)} <span className="text-muted">{quiet && id === "pictures" && pictures === null ? "" : n}</span></Link>
         ))}
       </nav>
+      {quiet && <p className="q-caption">{c.sourcesHint}</p>}
+      {quiet && ["documents", "playbooks"].includes(tab) && <><div className="q-depth-search"><label>{c.searchSources}<input type="search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} /></label>{query && <button className="btn" onClick={() => setQuery("")}>{c.clear}</button>}</div>{query && !(tab === "playbooks" ? playbooks : regularDocuments).length && <p role="status">{c.noMatches}</p>}</>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {tab === "playbooks" && (
@@ -303,7 +309,7 @@ export function KnowledgePanel({ companyId, documents, decisions, memories, pend
             </div>
           )}
           {regularDocuments.length === 0 ? <Empty>{t("knowledge.noDocuments")}</Empty> : (
-            <ul className="divide-y divide-line text-sm">{regularDocuments.map((d) => <li key={d.id} className="flex items-center justify-between gap-2 py-2"><button className="min-w-0 flex-1 truncate text-left hover:text-accent" disabled={busy === d.id} onClick={() => openDocument(d)}><span className="mono text-xs text-muted">{d.folder}</span> {d.title}{d.kind === "deck" || d.kind === "sheet" ? <span className="pill ml-2 text-muted">{d.kind === "deck" ? "Deck" : "Sheet"}</span> : null}</button><span className="text-xs text-muted">v{d.version} · <Ago iso={d.updatedAt} /></span></li>)}</ul>
+            <ul className="divide-y divide-line text-sm">{regularDocuments.map((d) => <li key={d.id} className="flex items-center justify-between gap-2 py-2"><button className="min-w-0 flex-1 truncate text-left hover:text-accent" disabled={busy === d.id} onClick={() => openDocument(d)}><span className="mono text-xs text-muted">{d.folder}</span> {d.title}{d.kind === "deck" || d.kind === "sheet" ? <span className="pill ml-2 text-muted">{d.kind === "deck" ? "Deck" : "Sheet"}</span> : null}{quiet && <span className="q-source-meta">{c.source}: {d.folder} · {projectName(d.projectId)} · {c.author}: {c.unavailable}</span>}</button><span className="text-xs text-muted">v{d.version} · {quiet && c.updated} <Ago iso={d.updatedAt} locale={locale} /></span></li>)}</ul>
           )}
         </Card>
       )}

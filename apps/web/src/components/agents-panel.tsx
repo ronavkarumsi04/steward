@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useT, useTf } from "./locale-provider";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { Agent } from "@/lib/types";
+import type { Agent, CompanyOverview, Run } from "@/lib/types";
+import { QuietAgentRoster } from "./quiet-agent-roster";
 import { AgentOverclock } from "./overclock";
 import Link from "next/link";
 import { RoutingPolicy } from "@steward/schema";
@@ -22,7 +23,7 @@ export interface Schedule {
   temporalScheduleId: string | null;
 }
 
-export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, overclockEnabled = false, isAdmin = false }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]>; overclockEnabled?: boolean; isAdmin?: boolean }) {
+export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, overclockEnabled = false, isAdmin = false, quiet = false, runs = null, overview = null, schedulesAvailable = true }: { companyId: string; agents: Agent[]; schedules: Schedule[]; defaultAllowlists: Record<string, string[]>; overclockEnabled?: boolean; isAdmin?: boolean; quiet?: boolean; runs?: Run[] | null; overview?: CompanyOverview | null; schedulesAvailable?: boolean }) {
   const router = useRouter();
   const t = useT();
   const tf = useTf();
@@ -30,6 +31,14 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
   useEffect(() => { setHydrated(true); }, []);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+
+  async function change(action: () => Promise<unknown>) {
+    if (quiet && (lock.current || !isAdmin)) return;
+    lock.current = true; setBusy(true); setError(null);
+    try { await action(); } finally { lock.current = false; setBusy(false); }
+  }
 
   const editingId = editing?.id;
   useEffect(() => {
@@ -106,7 +115,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
     <div className="space-y-5">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">{overclockEnabled ? t("agents.overclockOn") : t("agents.overclockOff")}</p><Link className="btn" href={`/app/c/${companyId}/settings`}>Workspace settings ↗</Link></div>
-      <Card title={t("agents.agents")} className="nb-left-purple">
+      {quiet ? <QuietAgentRoster companyId={companyId} agents={agents} runs={runs} overview={overview} busy={busy} editable={isAdmin && hydrated} onEdit={(agent) => { setEditing(agent); setError(null); }} onToggle={(agent) => { void change(() => toggle(agent)); }} /> : <Card title={t("agents.agents")} className="nb-left-purple">
         <ul className="divide-y divide-line">
           {agents.map((a) => (
             <li key={a.id} className="flex flex-wrap items-start justify-between gap-3 py-3" data-agent-kind={a.kind}>
@@ -123,10 +132,10 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
             </li>
           ))}
         </ul>
-      </Card>
+      </Card>}
 
       {editing && (
-        <form key={editing.id} onSubmit={save} className="card nb-left-blue space-y-3">
+        <form key={editing.id} onSubmit={(e) => { if (!quiet) return save(e); e.preventDefault(); void change(() => save(e)); }} className="card nb-left-blue space-y-3">
           <h3 id="agent-editor-title" tabIndex={-1} className="scroll-mt-24 font-semibold">Edit {editing.name}</h3>
           <div className="grid gap-3 md:grid-cols-2">
             <div><label className="block"><span className="label">{t("agents.name")}</span><input name="name" className="input" defaultValue={editing.name} required /></label></div>
@@ -141,14 +150,14 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
             <div className="md:col-span-2"><label className="block"><span className="label">{t("agents.systemPrompt")}</span><textarea name="systemPrompt" className="input min-h-32" defaultValue={editing.systemPrompt} placeholder={t("agents.systemPromptPlaceholder")} /></label></div>
           </div>
           {overclockEnabled && <label className="block text-xs text-muted">{t("agents.routingPolicy")}<textarea name="routing" aria-label={t("agents.routingPolicyLabel")} className="input mono mt-1 min-h-36" defaultValue={JSON.stringify(editing.routingPolicy, null, 2)} /><span className="hint">Explicit provider/model, ordered fallback chain and capability requirements. Credentials remain in Providers.</span></label>}
-          <div className="flex justify-end gap-2"><button type="button" className="btn" onClick={() => setEditing(null)}>{t("agents.cancel")}</button><button className="btn btn-primary">{t("agents.save")}</button></div>
+          <div className="flex justify-end gap-2"><button type="button" className="btn" disabled={quiet && busy} onClick={() => setEditing(null)}>{t("agents.cancel")}</button><button className="btn btn-primary" disabled={quiet && (busy || !isAdmin)}>{t("agents.save")}</button></div>
         </form>
       )}
 
       {editing && overclockEnabled && <AgentOverclock key={editing.id} companyId={companyId} agent={editing} isAdmin={isAdmin} />}
-      <Card title={t("agents.schedules")} className="nb-left-orange">
+      {schedulesAvailable && <Card title={t("agents.schedules")} className="nb-left-orange">
         <p className="mb-3 text-sm text-muted">{t("agents.schedulesHelp")}</p>
-        <form onSubmit={addSchedule} className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+        <fieldset disabled={quiet && (!isAdmin || !hydrated || busy)}><form onSubmit={(e) => { if (!quiet) return addSchedule(e); e.preventDefault(); void change(() => addSchedule(e)); }} className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
           <select name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
           <input name="name" className="input" placeholder={t("agents.scheduleNamePlaceholder")} required aria-label={t("agents.scheduleName")} />
           <input name="cron" className="input mono" placeholder="0 9 * * MON" required aria-label={t("agents.cron")} />
@@ -165,15 +174,16 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
                   <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} /></div>
                 </div>
                 <div className="flex gap-1">
-                  <button className="btn" onClick={() => scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
-                  <button className="btn" onClick={() => scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
-                  <button className="btn btn-danger" onClick={() => scheduleAction(s, "delete")}>{t("agents.delete")}</button>
+                  <button className="btn" onClick={() => quiet ? change(() => scheduleAction(s, "trigger")) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
+                  <button className="btn" onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
+                  <button className="btn btn-danger" onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>
                 </div>
               </li>
             ))}
           </ul>
         )}
-      </Card>
+        </fieldset>
+      </Card>}
     </div>
   );
 }

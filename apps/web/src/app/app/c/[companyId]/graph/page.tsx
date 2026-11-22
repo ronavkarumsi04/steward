@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { serverApi, tryApi } from "@/lib/server";
+import { getLocale, serverApi, tryApi } from "@/lib/server";
 import type { GraphRead } from "@/lib/types";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { PageHeader } from "@/components/ui";
+import Link from "next/link";
+import { workspaceShell } from "@/lib/workspace-theme";
+import { depthCopy } from "@/lib/depth-copy";
+import { DepthFailure, QuietDepth } from "@/components/quiet-depth";
 
 export const metadata: Metadata = { title: "Graph" };
 
@@ -20,6 +24,14 @@ export const metadata: Metadata = { title: "Graph" };
 export default async function GraphPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params;
   const api = await serverApi();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
+    const locale = await getLocale();
+    const c = depthCopy(locale);
+    let records: GraphRead;
+    try { records = await api.get<GraphRead>(`/companies/${companyId}/graph`); }
+    catch (error) { return <QuietDepth title={c.graphTitle} description={c.graphIntro}><DepthFailure error={error} href={`/app/c/${companyId}/graph`} locale={locale} /></QuietDepth>; }
+    return <QuietDepth title={c.graphTitle} description={c.graphIntro} action={<Link className="btn" href={`/app/c/${companyId}/knowledge`}>{c.documents}</Link>}><div className="q-depth-panel"><KnowledgeGraph companyId={companyId} initial={records} /></div></QuietDepth>;
+  }
   const graph = await tryApi(() => api.get<GraphRead>(`/companies/${companyId}/graph`));
   if (!graph) notFound();
 
