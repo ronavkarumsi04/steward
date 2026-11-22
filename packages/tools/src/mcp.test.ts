@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { describe, expect, it } from "vitest";
-import type { ToolContext } from "./registry.js";
+import { EXPLICIT_NO_TOOLS, explicitToolAllowlist, matchTool, type ToolContext } from "./registry.js";
 import {
   callMcpTool,
   describeMcpFailure,
@@ -9,6 +9,7 @@ import {
   mcpToolDefinitions,
   mcpToolName,
   mcpToolPattern,
+  canonicalizeMcpAllowlistEntry,
   mcpTarget,
   riskForMcpTool,
   type McpInstall,
@@ -46,6 +47,62 @@ const install = (over: Partial<McpInstall> = {}): McpInstall => ({
 const spec = (over: Partial<McpToolSpec> = {}): McpToolSpec => ({ name: "do_thing", description: "", inputSchema: { type: "object", properties: {} }, annotations: {}, ...over });
 
 describe("mcp names", () => {
+  it("keeps every possible reading of a legacy deny, even without recorded tools or with namespace aliases", () => {
+    const entry = "!mcp.a-b.mcp.a_b.x";
+    for (const tools of [[], ["mcp.a_b.x"], ["mcp.a_b.x", "mcp.a_b.mcp.a_b.x"]]) {
+      expect(canonicalizeMcpAllowlistEntry(entry, tools, ["mcp.a_b"])).toEqual(["!mcp.a_b.mcp.a_b.x", "!mcp.a_b.x"]);
+    }
+    expect(canonicalizeMcpAllowlistEntry("!mcp.a-b.billing.*")).toEqual(["!mcp.a_b.billing.*"]);
+    expect(canonicalizeMcpAllowlistEntry("!web.*")).toEqual(["!web.*"]);
+  });
+  it("never matches the explicit no-tools marker, even as an exact name", () => {
+    for (const name of ["web.search", "mcp.a_b.x", EXPLICIT_NO_TOOLS, ""]) expect(matchTool(EXPLICIT_NO_TOOLS, name)).toBe(false);
+    expect(explicitToolAllowlist([])).toEqual([EXPLICIT_NO_TOOLS]);
+    expect(explicitToolAllowlist([EXPLICIT_NO_TOOLS, "web.*"])).toEqual(["web.*"]);
+  });
+  it("uses one namespace for hyphenated names and grants and repairs legacy entries", () => {
+    expect(mcpToolPattern("local-protocol-check")).toBe("mcp.local_protocol_check.*");
+    for (const [before, after] of [
+      ["web.*", "web.*"],
+      ["", ""],
+      ["mcp.local-protocol-check.*", "mcp.local_protocol_check.*"],
+      ["mcp.local-protocol-check.delete_customer", null],
+      ["mcp.local-protocol-check.mcp.local_protocol_check.delete_customer", null],
+      ["mcp.local_protocol_check.delete_customer", "mcp.local_protocol_check.delete_customer"],
+      ["mcp.a-b.mcp.other.tool", null],
+      ["mcp.a_b.mcp.a_b.tool", "mcp.a_b.mcp.a_b.tool"],
+    ]) {
+      expect(canonicalizeMcpAllowlistEntry(before!)).toEqual(after === null ? [] : [after]);
+      if (after !== null) expect(canonicalizeMcpAllowlistEntry(after!)).toEqual(after === null ? [] : [after]);
+    }
+  });
+  it("resolves exactly one recorded interpretation and never strips repeatedly", () => {
+    const legacy = "mcp.a-b.mcp.a_b.x";
+    const collapsed = "mcp.a_b.x";
+    const literal = "mcp.a_b.mcp.a_b.x";
+    expect(canonicalizeMcpAllowlistEntry(legacy, [collapsed])).toEqual([collapsed]);
+    expect(canonicalizeMcpAllowlistEntry(legacy, [literal])).toEqual([literal]);
+    expect(canonicalizeMcpAllowlistEntry(legacy, [collapsed, literal])).toEqual([]);
+    expect(canonicalizeMcpAllowlistEntry(legacy, [])).toEqual([]);
+    expect(canonicalizeMcpAllowlistEntry("mcp.a-b.mcp.a_b.mcp.a_b.x", [collapsed])).toEqual([]);
+    expect(canonicalizeMcpAllowlistEntry("mcp.a-b.*", [], ["mcp.a_b"])).toEqual([]);
+  });
+  it("preserves nested wildcard scopes and resolves wrapped patterns using tool matching", () => {
+    for (const suffix of ["billing.*", "billing.invoices.*"]) {
+      const repaired = canonicalizeMcpAllowlistEntry(`mcp.a-b.${suffix}`);
+      expect(repaired).toEqual([`mcp.a_b.${suffix}`]);
+      expect(matchTool(repaired[0]!, "mcp.a_b.billing.invoices.read")).toBe(true);
+      expect(matchTool(repaired[0]!, "mcp.a_b.billing_extra.read")).toBe(false);
+      expect(canonicalizeMcpAllowlistEntry(`mcp.a-b.${suffix}`, [], ["mcp.a_b"])).toEqual([]);
+    }
+    const wrapped = "mcp.a-b.mcp.a_b.billing.*";
+    const collapsed = ["mcp.a_b.billing.read", "mcp.a_b.billing.write"];
+    const literal = ["mcp.a_b.mcp.a_b.billing.read"];
+    expect(canonicalizeMcpAllowlistEntry(wrapped, collapsed)).toEqual(["mcp.a_b.billing.*"]);
+    expect(canonicalizeMcpAllowlistEntry(wrapped, literal)).toEqual(["mcp.a_b.mcp.a_b.billing.*"]);
+    expect(canonicalizeMcpAllowlistEntry(wrapped, [...collapsed, ...literal])).toEqual([]);
+    expect(canonicalizeMcpAllowlistEntry(wrapped, [])).toEqual([]);
+  });
   it("names a tool after its install, so two servers cannot mean the same thing", () => {
     expect(mcpToolName("ledger", "lookup_invoice")).toBe("mcp.ledger.lookup_invoice");
     // A server is free to call a tool something a model provider would refuse as a function name.

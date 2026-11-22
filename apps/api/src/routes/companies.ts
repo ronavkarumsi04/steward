@@ -9,6 +9,7 @@ import { HttpError, companyScope, orgScope, type AppEnv, param } from "../contex
 import { defineRoute, type RouteRegistry } from "../route.js";
 
 const BudgetCategory = z.enum(["ai", "infra", "ads", "messaging", "payments", "total"]);
+const ToolAllowlist = z.array(z.string());
 const Budget = z.object({ category: BudgetCategory, period: z.enum(["monthly", "daily"]).optional(), limitUsd: z.number().min(0).max(1_000_000), softThresholdPct: z.number().min(1).max(100).optional(), hardStop: z.boolean().optional() });
 
 export function registerCompanyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
@@ -110,11 +111,11 @@ export function registerCompanyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ agents: await c.get("deps").services.agents.list(scope), defaultAllowlists: DEFAULT_TOOL_ALLOWLIST });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/agents", tag: "agents", summary: "Create an agent", body: z.object({ kind: AgentKind, name: z.string().min(1).max(120), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), toolAllowlist: z.array(z.string()).max(200).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/agents", tag: "agents", summary: "Create an agent", body: z.object({ kind: AgentKind, name: z.string().min(1).max(120), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), toolAllowlist: ToolAllowlist.optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "admin");
     return c.json({ agent: await c.get("deps").services.agents.create(scope, body) }, 201);
   });
-  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/agents/:id", tag: "agents", summary: "Update an agent (prompt, tools, routing, budget, enabled)", body: z.object({ name: z.string().min(1).max(120).optional(), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), enabled: z.boolean().optional(), toolAllowlist: z.array(z.string()).max(200).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).nullable().optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/agents/:id", tag: "agents", summary: "Update an agent (prompt, tools, routing, budget, enabled)", body: z.object({ name: z.string().min(1).max(120).optional(), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), enabled: z.boolean().optional(), toolAllowlist: ToolAllowlist.optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).nullable().optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "admin");
     const agent = await c.get("deps").services.agents.update(scope, param(c, "id"), body);
     if (!agent) throw new HttpError(404, "not_found");

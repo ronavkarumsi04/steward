@@ -152,7 +152,7 @@ export function registerMcpRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const base = usedDefaults ? (DEFAULT_TOOL_ALLOWLIST[agent.kind] ?? DEFAULT_TOOL_ALLOWLIST.custom!) : agent.toolAllowlist;
     const recorded = await deps.services.mcp.toolsOf(scope, server.id);
     const next = applyGrant({ allowlist: base, slug: server.slug, toolNames: input.toolNames ?? null, serverTools: recorded.map((tool) => tool.toolName), granted: input.granted });
-    await deps.services.agents.update(scope, agent.id, { toolAllowlist: next });
+    await deps.services.agents.update(scope, agent.id, { toolAllowlist: next }, { generatedToolDenies: true });
 
     const notices: string[] = [];
     if (usedDefaults && input.granted) notices.push(`“${agent.name}” had no tools of its own and was using the defaults for a ${agent.kind} agent, so those defaults are now written out beside the grant.`);

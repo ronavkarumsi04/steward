@@ -36,15 +36,20 @@
  */
 
 import { isIP } from "node:net";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { agents, emitEvent, mcpServers, mcpTools, scoped, type Db, type McpToolAnnotationsShape } from "@steward/db";
 import type { RiskLevel, TenantScope, ToolManifest } from "@steward/schema";
 import {
   MCP_TRANSPORTS,
+  EXPLICIT_NO_TOOLS,
+  canonicalizeMcpAllowlistEntry,
+  allowlistPermits,
+  explicitToolAllowlist,
   isPrivateAddress,
   listMcpTools,
   matchTool,
   mcpFailureSentence,
+  mcpNamespace,
   mcpTarget,
   mcpToolName,
   mcpToolPattern,
@@ -170,7 +175,7 @@ export function validateMcpInstall(input: McpInstallInput, ctx: McpInstallContex
   const slug = input.slug?.trim().toLowerCase() ?? "";
   if (!slug) bad("slug_required", "slug", "A slug is needed: it is the part of every tool name this server contributes.");
   else if (!MCP_SLUG_RE.test(slug)) bad("slug_invalid", "slug", "Use lowercase letters, digits, dashes and underscores, starting with a letter or digit.");
-  else if (ctx.takenSlugs.includes(slug)) bad("slug_taken", "slug", `Another server already uses the slug “${slug}”. Tool names would collide, so this one needs its own.`);
+  else if (ctx.takenSlugs.some((taken) => mcpNamespace(taken) === mcpNamespace(slug))) bad("slug_taken", "slug", `Another server already uses the tool namespace “${mcpNamespace(slug)}”. Tool names would collide: dashes and underscores share a namespace. Choose a different slug.`);
 
   if (ctx.existing >= MCP_LIMITS.serversPerCompany) bad("too_many_servers", "server", `This company already has ${MCP_LIMITS.serversPerCompany} servers installed, which is the limit.`);
   if ((input.purpose ?? "").length > MCP_LIMITS.purposeChars) bad("purpose_too_long", "purpose", `Keep the note to ${MCP_LIMITS.purposeChars} characters.`);
@@ -284,7 +289,7 @@ export interface McpInspection {
 }
 
 export class McpError extends Error {
-  constructor(readonly code: "not_found" | "invalid", message: string, readonly details: Record<string, unknown> = {}) {
+  constructor(readonly code: "not_found" | "invalid" | "invalid_tool", message: string, readonly details: Record<string, unknown> = {}) {
     super(message);
     this.name = "McpError";
   }
@@ -349,7 +354,8 @@ export class McpService {
   private async validate(scope: TenantScope, input: McpInstallInput, excludeId?: string): Promise<void> {
     const rows = await this.list(scope);
     const others = rows.filter((row) => row.id !== excludeId);
-    const problems = validateMcpInstall(input, { takenSlugs: others.map((row) => row.slug), existing: others.length, stdio: this.policy.stdio, privateTargets: this.policy.allowPrivate });
+    const unchangedSlug = rows.some((row) => row.id === excludeId && row.slug === input.slug.trim().toLowerCase());
+    const problems = validateMcpInstall(input, { takenSlugs: unchangedSlug ? [] : others.map((row) => row.slug), existing: others.length, stdio: this.policy.stdio, privateTargets: this.policy.allowPrivate });
     if (problems.length) throw new McpError("invalid", "This server cannot be installed as it stands.", { problems });
   }
 
@@ -540,14 +546,19 @@ export class McpService {
     return row as unknown as McpToolRow;
   }
 
-  /**
-   * Removing an install removes its tools with it, because a tool whose server is gone is a grant to nothing.
-   * The rest of the product is deliberately untouched: an agent's allowlist still names patterns, and a pattern
-   * for a server that is not installed simply matches nothing, which is a state the runtime already has to handle.
-   */
+  /** Removing an install also removes its namespace grants, so another install cannot inherit them. */
   async remove(scope: TenantScope, id: string): Promise<{ slug: string; tools: number }> {
     const existing = await this.required(scope, id);
     return this.db.transaction(async (tx) => {
+      await tx.update(agents).set({ toolAllowlist: sql`(
+        SELECT CASE WHEN jsonb_array_length(${agents.toolAllowlist}) > 0
+          AND count(*) FILTER (WHERE entry NOT LIKE '!%' AND entry <> ${EXPLICIT_NO_TOOLS}) = 0
+          THEN jsonb_build_array(${EXPLICIT_NO_TOOLS}::text) ELSE '[]'::jsonb END
+          || coalesce(jsonb_agg(entry ORDER BY position) FILTER (WHERE entry <> ${EXPLICIT_NO_TOOLS}), '[]'::jsonb)
+        FROM jsonb_array_elements_text(${agents.toolAllowlist}) WITH ORDINALITY AS grants(entry, position)
+        WHERE NOT (entry ~ '^mcp\\.[^.]+\\..+$' AND
+          'mcp.' || regexp_replace(lower(split_part(entry, '.', 2)), '[^a-z0-9_]', '_', 'g') = ${mcpNamespace(existing.slug)})
+      )`, updatedAt: this.now() }).where(scoped(scope, { organizationId: agents.organizationId, companyId: agents.companyId }));
       const removed = await tx.delete(mcpTools).where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, eq(mcpTools.serverId, id))).returning({ id: mcpTools.id });
       await tx.delete(mcpServers).where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }, eq(mcpServers.id, id)));
       await emitEvent(tx, {
@@ -705,16 +716,32 @@ export class McpService {
     const servers = (await this.db
       .select()
       .from(mcpServers)
-      .where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }, eq(mcpServers.enabled, true)))) as unknown as McpServerRow[];
+      .where(scoped(scope, { organizationId: mcpServers.organizationId, companyId: mcpServers.companyId }))) as unknown as McpServerRow[];
     if (!servers.length) return [];
     const rows = (await this.db
       .select()
       .from(mcpTools)
       .where(scoped(scope, { organizationId: mcpTools.organizationId, companyId: mcpTools.companyId }, inArray(mcpTools.serverId, servers.map((server) => server.id))))) as unknown as McpToolRow[];
-    return servers.map((server) => ({
+    const owners = new Map<string, Set<string>>();
+    for (const server of servers) {
+      const namespace = mcpNamespace(server.slug);
+      const ids = owners.get(namespace) ?? new Set<string>();
+      ids.add(server.id);
+      owners.set(namespace, ids);
+    }
+    for (const tool of rows) {
+      const namespace = tool.toolName.split(".").slice(0, 2).join(".");
+      const ids = owners.get(namespace) ?? new Set<string>();
+      ids.add(tool.serverId);
+      owners.set(namespace, ids);
+    }
+    const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([namespace]) => namespace));
+    const collisions = new Set(rows.filter((tool) => ambiguous.has(tool.toolName.split(".").slice(0, 2).join("."))).map((tool) => tool.toolName));
+    if (collisions.size) console.warn("MCP tools omitted because multiple servers offer the same name", [...collisions]);
+    return servers.filter((server) => server.enabled).map((server) => ({
       install: installOf(server),
       tools: rows
-        .filter((tool) => tool.serverId === server.id && tool.enabled)
+        .filter((tool) => server.enabled && !ambiguous.has(mcpNamespace(server.slug)) && tool.serverId === server.id && tool.enabled && !collisions.has(tool.toolName))
         .map((tool) => ({
           serverId: server.id,
           serverName: server.name,
@@ -737,39 +764,54 @@ export class McpService {
 /**
  * Whether an agent may call a tool, and what says so.
  *
- * The same `matchTool` the runtime uses, so the surface's answer and a run's answer are the same answer: an
- * exact name, a server wildcard, or nothing.
+ * Uses the runtime's deny-aware matcher, so the surface and a run agree.
  */
 export function grantedBy(allowlist: readonly string[], toolName: string): string | null {
-  return allowlist.find((pattern) => matchTool(pattern, toolName)) ?? null;
+  return allowlistPermits(allowlist, toolName) ? allowlist.find((pattern) => matchTool(pattern, toolName)) ?? null : null;
 }
 
 /**
  * The allowlist after a grant or a revocation. Pure, so the API can hand it to the agent update it already has
  * rather than inventing a second place where permissions live.
  *
- * `toolNames: null` means the whole server. Revoking one tool from an agent that holds the server wildcard has to
- * *materialise* the wildcard — the remaining tools are written out by name — because otherwise "revoke this one"
- * would either do nothing or take the other five away too, and both are worse than a longer list.
+ * `toolNames: null` means the whole server. Explicit denies narrow wildcard grants without expanding them.
  */
 export function applyGrant(input: { allowlist: readonly string[]; slug: string; toolNames: string[] | null; serverTools: readonly string[]; granted: boolean }): string[] {
-  const { allowlist, slug, toolNames, serverTools, granted } = input;
-  const prefix = `mcp.${slug}.`;
+  const { slug, toolNames, serverTools, granted } = input;
+  const prefix = `${mcpNamespace(slug)}.`;
   const wildcard = mcpToolPattern(slug);
-  const unique = (patterns: string[]) => [...new Set(patterns)];
-
+  const inNamespace = (entry: string) => entry.replace(/^!/, "").startsWith(prefix);
+  const allowlist = [...new Set(input.allowlist.flatMap((entry) => {
+    const match = /^!?mcp\.([^.]+)\./.exec(entry);
+    return match && `${mcpNamespace(match[1]!)}.` === prefix ? canonicalizeMcpAllowlistEntry(entry, serverTools) : [entry];
+  }))];
+  const unique = explicitToolAllowlist;
+  const requested = toolNames?.map((name) => {
+    const tool = serverTools.includes(name) ? name : mcpToolName(slug, name);
+    if (!serverTools.includes(tool)) throw new McpError("invalid_tool", `Tool “${name}” is not a recorded tool of this server.`);
+    return tool;
+  });
   if (granted) {
+    const outsideDeny = allowlist.find((entry) => entry.startsWith("!") && !inNamespace(entry) && (requested ?? serverTools).some((tool) => matchTool(entry.slice(1), tool)));
+    if (outsideDeny) throw new McpError("invalid_tool", `Remove the outside deny “${outsideDeny}” before granting this server's tools.`);
     if (toolNames === null) {
-      // Everything, and so nothing narrower that it already covers.
-      return unique([...allowlist.filter((pattern) => !(pattern.startsWith(prefix) && pattern !== wildcard)), wildcard]);
+      return unique([...allowlist.filter((pattern) => !inNamespace(pattern)), wildcard]);
     }
-    const added = toolNames.map((tool) => (tool.startsWith(prefix) ? tool : `${prefix}${tool}`)).filter((tool) => !grantedBy(allowlist, tool));
-    return unique([...allowlist, ...added]);
+    const removedDenies = allowlist.filter((entry) => entry.startsWith("!") && inNamespace(entry) && requested!.some((tool) => matchTool(entry.slice(1), tool)));
+    const remaining = allowlist.filter((entry) => !removedDenies.includes(entry));
+    const otherDenies = serverTools.filter((tool) => !requested!.includes(tool) && removedDenies.some((entry) => matchTool(entry.slice(1), tool))).map((tool) => `!${tool}`);
+    const next = [...remaining, ...otherDenies];
+    return unique([...next, ...requested!.filter((tool) => !allowlistPermits(next, tool))]);
   }
 
-  if (toolNames === null) return allowlist.filter((pattern) => !pattern.startsWith(prefix));
+  const revokeAll = (patterns: readonly string[] = allowlist) => {
+    const remaining = patterns.filter((pattern) => pattern.startsWith("!") || !inNamespace(pattern));
+    return unique([...remaining, ...(serverTools.some((tool) => allowlistPermits(remaining, tool)) || allowlistPermits(remaining, wildcard) ? [`!${wildcard}`] : [])]);
+  };
+  if (toolNames === null) return revokeAll();
 
-  const revoked = new Set(toolNames.map((tool) => (tool.startsWith(prefix) ? tool : `${prefix}${tool}`)));
-  if (!allowlist.includes(wildcard)) return allowlist.filter((pattern) => !revoked.has(pattern));
-  return unique([...allowlist.filter((pattern) => pattern !== wildcard), ...serverTools.filter((tool) => !revoked.has(tool))]);
+  const revoked = new Set(requested!);
+  const remaining = allowlist.filter((pattern) => !revoked.has(pattern));
+  const next = unique([...remaining, ...requested!.filter((tool) => allowlistPermits(remaining, tool)).map((tool) => `!${tool}`)]);
+  return requested!.length && !serverTools.some((tool) => allowlistPermits(next, tool)) ? revokeAll(next) : next;
 }

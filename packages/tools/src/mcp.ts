@@ -26,7 +26,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { RiskLevel, ToolManifest } from "@steward/schema";
 import { z } from "zod";
-import { untrusted, type ToolDefinition } from "./registry.js";
+import { matchTool, untrusted, type ToolDefinition } from "./registry.js";
 import { assertPublicUrl } from "./web.js";
 
 export const MCP_TRANSPORTS = ["stdio", "http", "sse"] as const;
@@ -104,19 +104,40 @@ const READ_ONLY_NAME = /^(get|list|read|search|find|fetch|describe|query|show|vi
 /** The same, for a name that reads as a change. Deliberately narrower than "anything not a read". */
 const DESTRUCTIVE_NAME = /(delete|remove|drop|destroy|purge|revoke|terminate|overwrite|reset)/i;
 
+export function mcpNamespace(slug: string): string {
+  return `mcp.${slug.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+}
+
+export function canonicalizeMcpAllowlistEntry(entry: string, recordedTools: readonly string[] = [], ambiguousNamespaces: readonly string[] = []): string[] {
+  const deny = entry.startsWith("!");
+  const pattern = deny ? entry.slice(1) : entry;
+  const match = /^mcp\.([^.]+)\.(.+)$/.exec(pattern);
+  if (!match) return [entry];
+  const namespace = mcpNamespace(match[1]!);
+  if (`mcp.${match[1]}` === namespace) return [entry];
+  const rest = match[2]!;
+  const canonical = `${namespace}.${rest}`;
+  const wrapped = rest.startsWith(`${namespace}.`);
+  if (deny) return [...new Set([`!${canonical}`, ...(wrapped ? [`!${rest}`] : [])])];
+  if (ambiguousNamespaces.includes(namespace)) return [];
+  if (rest === "*" || (rest.endsWith(".*") && !wrapped)) return [canonical];
+  const candidates = [...new Set([canonical, ...(wrapped ? [rest] : [])])].filter((candidate) => recordedTools.some((tool) => matchTool(candidate, tool)));
+  return candidates.length === 1 ? candidates : [];
+}
+
 /**
  * The name Steward knows a tool by: `mcp.<slug>.<tool>`, lowercased and reduced to characters a tool pattern
  * can hold, and never starting with a digit — ChatGPT-style tool names have to be identifier-shaped, and a
  * server is free to call its tool `2fa verify`.
  */
 export function mcpToolName(slug: string, toolName: string): string {
-  const raw = `mcp.${slug}.${toolName}`.toLowerCase().replace(/[^a-z0-9_.]/g, "_").slice(0, 120);
+  const raw = `${mcpNamespace(slug)}.${toolName}`.toLowerCase().replace(/[^a-z0-9_.]/g, "_").slice(0, 120);
   return raw.replace(/^[^a-z]+/, "m");
 }
 
 /** The pattern that grants every tool of a server, written the way the allowlist matches: `mcp.<slug>.*`. */
 export function mcpToolPattern(slug: string): string {
-  return `mcp.${slug}.*`;
+  return `${mcpNamespace(slug)}.*`;
 }
 
 /** Where this install points, in the words a founder would use. */
