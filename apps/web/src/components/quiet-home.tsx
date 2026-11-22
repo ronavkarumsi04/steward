@@ -29,7 +29,7 @@ const CAPABILITIES = [
 export function QuietHome({ entry, label, note, story }: { entry: string; label: string; note: string; story: boolean }) {
   return (
     <QuietPublicFrame>
-      {story ? <div className="quiet-story"><LandingStory entryForm={<EntryForm id="hero-email" action={entry} label={label} note={note} />} /></div> : <section className="public-hero" aria-labelledby="hero-title">
+      {story ? <div className="quiet-story"><LandingStory inspectLabel="Inspect the workflow" entryForm={<EntryForm id="hero-email" action={entry} label={label} note={note} />} /></div> : <section className="public-hero" aria-labelledby="hero-title">
         <div><h1 id="hero-title">Your company,<br /><span>moving forward.</span><br />You, in control.</h1><p className="public-lede">Give AI agents the work. Keep the decisions that matter. Steward brings your team, tools and company context into one accountable workspace.</p><div className="public-hero-actions"><Link href="/pilot/waitlist" className="btn btn-primary">Request access <Icon.ArrowRight size={18} /></Link><Link href="#how" className="public-text-link">See how it works <Icon.ArrowRight size={16} /></Link></div><p className="public-access-note">Invitation-only assisted setup. No account is created by joining the waitlist.</p></div>
         <WorkflowIllustration />
       </section>}

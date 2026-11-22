@@ -34,6 +34,8 @@ describe("landing story handoff", () => {
     expect(html).toContain("Story chapters");
     expect(html).toContain('id="how"');
     expect(html).toContain("public-family quiet-site");
+    expect(html).toContain("Inspect the workflow");
+    expect(html).not.toContain("Inspect the three copies");
   });
   it("keeps the incumbent page by default, including on preview deployments", async () => {
     vi.stubEnv("VERCEL_ENV", "preview");
