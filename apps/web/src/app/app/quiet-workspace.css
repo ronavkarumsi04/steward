@@ -123,6 +123,7 @@
   .quiet-topbar { position: sticky; top: 0; z-index: var(--z-nav); background: var(--bg); }
   .quiet-rail { position: sticky; top: var(--workspace-header-height, 64px); align-self: start; height: calc(100dvh - var(--workspace-header-height, 64px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scroll-padding-block: 12px; }
   .quiet-rail > * { flex-shrink: 0; }
+  .quiet-rail .nav-item { flex-wrap: wrap; }
 }
 
 @media (max-width: 1023px) {

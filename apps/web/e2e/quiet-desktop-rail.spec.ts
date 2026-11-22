@@ -5,10 +5,14 @@ async function expectPinnedRail(page: Page) {
   await expect.poll(() => page.locator(".quiet-rail").evaluate((rail) => {
     const box = rail.getBoundingClientRect();
     const header = document.querySelector(".quiet-topbar")!.getBoundingClientRect();
-    return Math.abs(header.top) < 1 && Math.abs(box.top - header.bottom) <= 1
-      && Math.abs(box.bottom - window.innerHeight) <= 1 && box.width === 224
-      && rail.scrollWidth <= rail.clientWidth;
-  })).toBe(true);
+    return {
+      headerVisible: Math.abs(header.top) < 1,
+      railBelowHeader: Math.abs(box.top - header.bottom) <= 1,
+      railFitsViewport: Math.abs(box.bottom - window.innerHeight) <= 1,
+      railWidthPreserved: box.width === 224,
+      noHorizontalRailOverflow: rail.scrollWidth <= rail.clientWidth,
+    };
+  })).toEqual({ headerVisible: true, railBelowHeader: true, railFitsViewport: true, railWidthPreserved: true, noHorizontalRailOverflow: true });
 }
 
 async function expectRailContentsReachable(page: Page) {
