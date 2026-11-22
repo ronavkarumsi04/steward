@@ -17,6 +17,7 @@
 .q-agent-list .q-agent-task { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .q-agent-run-reference { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 12px; }
 .q-agent-run-reference .q-link { min-width: 0; overflow-wrap: anywhere; }
+.q-agent-run-reference .pill, .q-schedule-list .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
 .q-agent-history { display: grid; gap: 12px; margin-top: 12px; }
 .q-agent-history li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .q-team-settings { padding-block: 16px; border-block: 1px solid var(--line); }

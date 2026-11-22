@@ -192,7 +192,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
         </form></fieldset>
         {quiet && scheduleFeedback?.id === null && <p id="schedule-error" tabIndex={-1} role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (
-          <ul className="divide-y divide-line text-sm">
+          <ul className={`divide-y divide-line text-sm${quiet ? " q-schedule-list" : ""}`}>
             {schedules.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>

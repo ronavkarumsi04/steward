@@ -77,5 +77,6 @@
   .q-work-row { flex-wrap: wrap; }
   .q-work-row .q-row-end { width: 100%; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding-inline-start: 32px; }
   .q-work-row .q-row-end > * { min-width: 0; max-width: 100%; }
+  .q-work-row .q-row-end .pill { white-space: normal; overflow-wrap: normal; }
   .q-detail-aside { border-top: 1px solid var(--line); padding-top: 24px; }
 }
