@@ -23,12 +23,14 @@ describe("Quiet decision surfaces", () => {
   it("labels cancelled requests in approval history", async () => {
     const get = vi.fn(async () => ({ approvals: [{ ...approval, status: "cancelled" }] }));
     const html = renderToStaticMarkup(await QuietApprovals({ companyId: "company-1", status: "cancelled", api: { get } as never, locale: "en" }));
-    expect(html).toContain("Cancelled — the run was cancelled before a decision");
+    expect(html).toMatch(/class="pill[^"]*">Withdrawn<\/span>/);
+    expect(html).not.toContain("Cancelled — the run was cancelled before a decision");
     expect(html).not.toContain(">Approve action</button>");
   });
   it("renders a cancelled approval as closed", () => {
     const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, status: "cancelled" }, overview, run: null }));
     expect(html).toContain("the run was cancelled before a decision");
+    expect(html).toMatch(/class="pill[^"]*">Withdrawn<\/span>/);
     expect(html).not.toContain('data-persistent="true"');
     expect(html).not.toContain(">Approve action</button>");
   });

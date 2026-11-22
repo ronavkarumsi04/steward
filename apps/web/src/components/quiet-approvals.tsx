@@ -12,7 +12,7 @@ export async function QuietApprovals({ companyId, status, api, locale }: { compa
   const filters = ["pending", "history", "approved", "denied", "expired", "cancelled"] as const;
   const selected = filters.find((s) => s === status) ?? "pending";
   const label = (s: typeof filters[number]) => s === "expired" ? c.expiredStatus : c[s];
-  const requestLabel = (a: Approval) => a.status === "cancelled" ? c.runCancelled : a.status === "pending" && !isDecisionOpen(a) ? c.expiredStatus : label(a.status);
+  const requestLabel = (a: Approval) => a.status === "pending" && !isDecisionOpen(a) ? c.expiredStatus : label(a.status);
   const statuses = selected === "history" ? ["approved", "denied", "expired", "cancelled"] : [selected];
   const results = await Promise.allSettled(statuses.map((s) => api.get<{ approvals: Approval[] }>(`/companies/${companyId}/approvals?status=${s}&limit=100`)));
   const approvals = results.flatMap((result) => result.status === "fulfilled" ? result.value.approvals : [])

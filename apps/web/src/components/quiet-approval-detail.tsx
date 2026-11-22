@@ -122,12 +122,13 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
 
   const statusText = cancelled ? c.runCancelled : state.status === "pending" && runClosed ? c.runClosed : state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
   const terminalRunMessage = run?.status === "failed" ? c.executionFailed : run?.status === "succeeded" ? c.executionSucceeded : run?.status === "cancelled" ? c.executionCancelled : null;
+  const shortStatus = cancelled ? c.cancelled : state.status === "pending" && runClosed ? c.closed : statusText;
   const decided = !pending;
   const decider = members.find((member) => member.userId === state.resolvedBy);
   const deciderLabel = decider ? `${decider.name} (${decider.email})` : state.resolvedBy ? c.memberUnavailable : c.notRecorded;
   return <div className="q-decision-page">
     <Link href={`/app/c/${companyId}/approvals`} className="q-link"><Icon.ChevronRight size={14} className="rotate-180" />{c.back}</Link>
-    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{statusText}</span></header>
+    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{shortStatus}</span></header>
     {(decided || error || !canDecide || !open) && <section className="q-outcome" aria-labelledby="q-outcome-heading">
       <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? cancelled || (runClosed && state.status === "pending") ? statusText : `${c.recorded} · ${statusText}` : c.review}</h2>
       {decided && <>{!cancelled && !(runClosed && state.status === "pending") && <p>{c.outcome}</p>}<dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
