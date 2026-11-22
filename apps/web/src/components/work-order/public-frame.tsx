@@ -5,6 +5,8 @@ import { Masthead } from "./masthead";
 import { Icon } from "@/components/icons";
 import { Pad } from "@/components/work-order/pad";
 import s from "@/components/work-order/work-order.module.css";
+import { quietPublicEnabled } from "@/lib/public-design";
+import { QuietPublicFrame } from "@/components/quiet-public";
 
 /** Where a visitor can go from a public page: the sign-up form while sign-up is open, otherwise the workspace door. */
 export async function publicEntry(): Promise<{ href: string; label: string; open: boolean; state: "open" | "closed" | "unknown" }> {
@@ -16,6 +18,7 @@ export async function publicEntry(): Promise<{ href: string; label: string; open
 
 /** The pad's binding and footer around any public page that is not the landing itself. */
 export async function PublicFrame({ current, children }: { current: "pricing" | "compare" | "pilot"; children: ReactNode }) {
+  if (quietPublicEnabled(process.env)) return <QuietPublicFrame current={current}>{children}</QuietPublicFrame>;
   const entry = current === "pilot" ? { href: "/login", label: "Sign in" } : await publicEntry();
   return (
     <Pad className={`paper ${s.home}`}>

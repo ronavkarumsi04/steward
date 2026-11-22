@@ -2,12 +2,15 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ToastProvider } from "@/components/feedback";
 import { NavigationTransitions } from "@/components/navigation-transitions";
-import { Archivo, IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
+import { Archivo, IBM_Plex_Mono, Source_Serif_4, Manrope } from "next/font/google";
+import { quietPublicEnabled } from "@/lib/public-design";
 import "./globals.css";
+import "./quiet-public.css";
 
 const editorial = Source_Serif_4({ subsets: ["latin"], weight: "500", variable: "--font-editorial", display: "swap", preload: false });
 const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
 const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex-mono", display: "swap" });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });
 
 /** Applies the persisted light/dark choice before first paint to avoid a flash of the wrong theme. */
 const THEME_INIT = `(function(){try{var t=localStorage.getItem("steward-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t;}catch(e){}})();`;
@@ -39,7 +42,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // THEME_INIT can set the root data-theme before hydration. Descendant content still hydrates normally.
-    <html lang="en" suppressHydrationWarning className={`${archivo.variable} ${plexMono.variable} ${editorial.variable}`}>
+    <html lang="en" suppressHydrationWarning data-public-design={quietPublicEnabled(process.env) ? "quiet" : undefined} className={`${archivo.variable} ${plexMono.variable} ${editorial.variable} ${manrope.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
