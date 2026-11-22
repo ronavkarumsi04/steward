@@ -16,6 +16,18 @@ const base: Approval = {
 };
 
 describe("ApprovalCard for an outbox action", () => {
+  it("does not promise to record decisions on closed requests", () => {
+    for (const props of [
+      { approval: { ...base, status: "cancelled" as const } },
+      ...(["cancelled", "failed", "succeeded"] as const).map((status) => ({ approval: base, run: { id: "r1", status } })),
+    ]) {
+      const html = renderToStaticMarkup(createElement(ApprovalCard, { companyId: "c1", ...props }));
+      expect(html).toContain("This request is closed. No decision can be recorded");
+      expect(html).not.toContain("A decision is still recorded");
+      expect(html).not.toContain("record your answer");
+      expect(html).not.toContain('aria-label="If you decide"');
+    }
+  });
   it("localizes closed approval copy in Spanish", () => {
     for (const status of ["cancelled", "succeeded"] as const) {
       const html = renderToStaticMarkup(createElement(LocaleProvider, { locale: "es", children: createElement(ApprovalCard, { companyId: "c1", approval: base, run: { id: "r1", status } }) }));

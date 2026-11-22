@@ -50,6 +50,7 @@ export function ApprovalCard({
   const runClosed = !!run && ["cancelled", "failed", "succeeded"].includes(run.status);
   const cancelled = state.status === "cancelled" || (state.status === "pending" && run?.status === "cancelled");
   const pending = state.status === "pending" && !runClosed;
+  const closedRequest = cancelled || (state.status === "pending" && runClosed);
   const requestedJson = useMemo(() => JSON.stringify(state.payload ?? {}, null, 2), [state.payload]);
   /** An email, post or text reads as the message it is; the JSON stays one disclosure away. */
   const message = useMemo(() => (isOutboxAction(state.action) ? outboxItem(state) : null), [state]);
@@ -303,16 +304,16 @@ export function ApprovalCard({
         </dl>
       </details>
 
-      <section aria-label="If you decide" className="mt-4 space-y-1.5 text-xs leading-relaxed">
+      {closedRequest ? <p className="mt-4 text-xs leading-relaxed">{t("approvals.noDecision")}</p> : <section aria-label="If you decide" className="mt-4 space-y-1.5 text-xs leading-relaxed">
         <p>
           <Pill tone="ok">{t("approvals.approve")}</Pill> <span className="text-fg-2">{brief.effect.approve}</span>
         </p>
         <p>
           <Pill tone="danger">{t("approvals.deny")}</Pill> <span className="text-fg-2">{brief.effect.deny}</span>
         </p>
-      </section>
+      </section>}
 
-      {brief.cautions.length > 0 && (
+      {!closedRequest && brief.cautions.length > 0 && (
         <ul role="note" className="nb-panel-flat nb-left-orange mt-3 space-y-1 px-3 py-2 text-xs leading-relaxed text-fg-2">
           {brief.cautions.map((caution) => (
             <li key={caution} className="flex gap-2">
