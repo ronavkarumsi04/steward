@@ -19,9 +19,31 @@ Steward API ──(HTTPS long-poll)──▶ steward-companion run ──▶ cod
 
 ## Install
 
+The companion is not published to npm yet. Use Node.js 22+ (for the monorepo
+build), Git, and pnpm 10.32.1. Build and install a standalone tarball from source:
+
 ```sh
-npm i -g @openai/codex @steward/companion
+npm i -g @openai/codex
+git clone https://github.com/ronavkarumsi04/steward.git
+cd steward
+pnpm install --frozen-lockfile --filter @steward/companion...
+pnpm --filter @steward/companion build
+cd apps/companion
+npm pack
+npm i -g ./steward-companion-0.1.0.tgz
+steward-companion --help
 codex login                                   # opens the ChatGPT login in your browser
+```
+
+If the repository is private, your GitHub account needs access. The tarball has
+no runtime dependencies and does not link back to the checkout. If your global
+npm prefix is not writable, use a user-owned prefix (`npm i -g --prefix "$HOME/.local" ./steward-companion-0.1.0.tgz`)
+and add `$HOME/.local/bin` to `PATH`.
+
+After installation, generate a fresh pairing code in Steward (codes expire after
+10 minutes), then run the commands shown there:
+
+```sh
 steward-companion pair --server https://steward.example.com/api --code 123456
 steward-companion run
 ```
@@ -39,3 +61,14 @@ Then add a provider of type **OpenAI Codex (ChatGPT subscription via Local Compa
 | `unpair` | Delete the local device key |
 
 Environment: `STEWARD_COMPANION_CONFIG` (config file path), `STEWARD_HOME` (defaults to `~/.steward`).
+
+## Publishing (maintainers)
+
+The package remains `UNLICENSED`, consistent with the repository's proprietary
+license; public npm access does not grant an open-source license.
+Set the repository's `NPM_TOKEN` Actions secret to a token with publish access to
+the `@steward` scope. Run **Publish companion** manually, or push a
+`companion-v<version>` tag matching `apps/companion/package.json`. The workflow
+builds, checks, packs, smoke-tests the installed tarball, and publishes that same
+tarball with provenance. To inspect locally without publishing, run `npm pack
+--dry-run` from this directory after installing build dependencies.
