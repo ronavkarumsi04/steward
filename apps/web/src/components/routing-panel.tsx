@@ -51,7 +51,7 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin, quiet
       <p className="mb-3 text-sm text-muted">{t("routing.intro")}</p>
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
       {quiet && saved && <p role="status" className="mb-2 text-sm text-ok">{t("routing.saved")}</p>}
-      <Group disabled={quiet ? busy : undefined} className={quiet ? "min-w-0 space-y-2" : "space-y-2"} aria-busy={quiet ? busy : undefined}>
+      <Group disabled={quiet ? busy || !isAdmin : undefined} className={quiet ? "min-w-0 space-y-2" : "space-y-2"} aria-busy={quiet ? busy : undefined}>
         {ROUTING_PURPOSES.map((purpose) => {
           const pol = routing[purpose];
           const current = pol?.explicit ? `${pol.explicit.provider}::${pol.explicit.model}` : "";
