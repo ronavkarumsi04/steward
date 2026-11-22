@@ -1,5 +1,9 @@
 /* Slice E: scoped to server-selected Quiet specialist pages. No incumbent styles change. */
-.q-specialist { min-width: 0; }
+.q-specialist { min-width: 0; overflow-wrap: anywhere; }
+.q-specialist :is(.grid, .flex) > * { min-width: 0; }
+.q-specialist fieldset { min-inline-size: 0; }
+.q-specialist .pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.q-specialist a.pill { min-height: 44px; }
 .q-specialist > :first-child { margin-top: 0; }
 .q-specialist .desk-heading { margin-bottom: 28px; padding-bottom: 0; border: 0; }
 .q-specialist .desk-description { max-width: 72ch; margin-top: 12px; line-height: 1.65; }
