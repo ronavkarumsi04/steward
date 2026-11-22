@@ -38,7 +38,10 @@ function buildTaskEnv(): Set<string> {
     tasks?: { build?: { env?: string[] } };
     globalEnv?: string[];
   };
-  const declared = turbo.tasks?.build?.env ?? [];
+  const webTurbo = JSON.parse(readFileSync(path.join(repoRoot, "apps/web/turbo.json"), "utf8")) as typeof turbo;
+  const declared = webTurbo.tasks?.build?.env?.flatMap((name) =>
+    name === "$TURBO_EXTENDS$" ? turbo.tasks?.build?.env ?? [] : [name],
+  ) ?? turbo.tasks?.build?.env ?? [];
   return new Set([...declared, ...(turbo.globalEnv ?? [])]);
 }
 

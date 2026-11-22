@@ -77,10 +77,9 @@ Provider settings, create a fresh company task, confirm actual worker/model/tool
 then exercise cancellation, rejection, worker restart and Temporal outage. No provider key belongs in chat,
 source, logs or test fixtures. No platform-funded inference fallback is allowed.
 
-After the first real hosted task passes, enable the repository's `REQUIRE_EXECUTIONS=1` variable so hosted
-CI cannot stay green on UI-only availability. Keep it disabled until provisioning rather than manufacture
-a passing execution result. Complete the website/source/visual/browser/approval/deployment loop and the
-launch-plan stability/capacity gates before announcing the beta.
+Hosted CI requires readiness by default. Reserve `REQUIRE_EXECUTIONS=0` for an explicitly UI-only
+deployment; remove that override when the worker is provisioned. Complete the website/source/visual/
+browser/approval/deployment loop and the launch-plan stability/capacity gates before announcing the beta.
 
 ## Recovery and limits
 
