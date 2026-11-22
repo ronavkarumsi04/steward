@@ -2,6 +2,6 @@
   "$schema": "https://turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": { "env": ["$TURBO_EXTENDS$", "VERCEL_GIT_COMMIT_SHA", "GIT_COMMIT_SHA", "VERCEL_ENV", "STEWARD_LANDING_STORY_PREVIEW"] }
+    "build": { "env": ["$TURBO_EXTENDS$", "VERCEL_GIT_COMMIT_SHA", "GIT_COMMIT_SHA", "VERCEL_ENV", "STEWARD_LANDING_STORY_PREVIEW", "STEWARD_PUBLIC_DESIGN", "STEWARD_PUBLIC_PREVIEW"] }
   }
 }

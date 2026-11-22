@@ -17,6 +17,7 @@ export function useStoryController() {
     const surface = canvas.current;
     if (!element || !surface) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const finePointer = window.matchMedia("(pointer: fine)");
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
     const chapters = Array.from(element.querySelectorAll<HTMLElement>("section[id^='story-']"));
@@ -100,6 +101,20 @@ export function useStoryController() {
       sync();
     });
     observer.observe(surface);
+    // Quiet textures are authored from the current CSS tokens. Rebuild only when
+    // a theme changes, never on scroll, so the 3D and HTML stay in the same theme.
+    const refreshTheme = () => {
+      if (document.documentElement.dataset.publicDesign !== "quiet") return;
+      attempt++;
+      clearTimeout(timeout);
+      app?.dispose();
+      app = null;
+      if (!failed) { setSceneState("illustration"); void load(); }
+      schedule();
+    };
+    const themeObserver = new MutationObserver(refreshTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    systemTheme.addEventListener("change", refreshTheme);
     const contextLost = (event: Event) => { event.preventDefault(); fail(); };
     const move = (event: PointerEvent) => {
       if (!app || !finePointer.matches || reduced.matches || !visible) return;
@@ -128,6 +143,8 @@ export function useStoryController() {
       cancelAnimationFrame(frame);
       clearTimeout(timeout);
       observer.disconnect();
+      themeObserver.disconnect();
+      systemTheme.removeEventListener("change", refreshTheme);
       resize.disconnect();
       stage.removeEventListener("pointermove", move);
       stage.removeEventListener("pointerleave", leave);

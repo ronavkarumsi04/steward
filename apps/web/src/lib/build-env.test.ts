@@ -57,6 +57,12 @@ function envReads(file: string): string[] {
 }
 
 describe("build environment", () => {
+  it("hashes both public design preview flags so static pages use the requested design", () => {
+    const declared = buildTaskEnv();
+    expect(declared.has("STEWARD_PUBLIC_DESIGN")).toBe(true);
+    expect(declared.has("STEWARD_PUBLIC_PREVIEW")).toBe(true);
+  });
+
   it("declares every variable the build-critical files read in turbo.json's build task", () => {
     const declared = buildTaskEnv();
     const missing: string[] = [];

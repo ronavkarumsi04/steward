@@ -15,7 +15,7 @@ const CHAPTERS = [
 ] as const;
 
 /** The page's copy and entry form are real HTML; the 3D layer is never an access requirement. */
-export function LandingStory({ entryForm }: { entryForm: ReactNode }) {
+export function LandingStory({ entryForm, inspectLabel = "Inspect the three copies" }: { entryForm: ReactNode; inspectLabel?: string }) {
   const { root, canvas, sceneState } = useStoryController();
   return (
     <div ref={root} className={s.story} data-chapter="0" data-story-motion="false" data-scene-state={sceneState}>
@@ -74,7 +74,7 @@ export function LandingStory({ entryForm }: { entryForm: ReactNode }) {
         <span className={s.sequence}>03 → 04</span>
         <h2 id="story-evidence-title">The work moves on.<br /><span>The evidence stays.</span></h2>
         <p>Inspect the plan, every model and tool call, the cost and the approval that allowed each step. Cancel a run and the remaining side effects stop.</p>
-        <Link href="#how" className={s.follow}>Inspect the three copies <Icon.ArrowRight size={18} /></Link>
+        <Link href="#how" className={s.follow}>{inspectLabel} <Icon.ArrowRight size={18} /></Link>
         <a href="/pilot" className={s.pilot}>Explore the assisted pilot</a>
       </section>
     </div>
