@@ -9,6 +9,8 @@ import { OrderSpecimen } from "@/components/work-order/order-specimen";
 import { Icon } from "@/components/icons";
 import { Pad } from "@/components/work-order/pad";
 import { EntryForm } from "@/components/work-order/entry-form";
+import { LandingStory } from "@/components/work-order/landing-story";
+import { landingStoryEnabled } from "@/lib/landing-story";
 import s from "@/components/work-order/work-order.module.css";
 
 export const metadata: Metadata = {
@@ -81,7 +83,7 @@ const CONDITIONS = [
   ["Work survives restarts.", "Runs execute as durable Temporal workflows with retries, so a crash resumes the order."],
 ] as const;
 
-export default async function Landing() {
+export default async function Landing({ searchParams }: { searchParams?: Promise<{ experience?: string | string[] }> } = {}) {
   const [me, auth] = await Promise.all([getMeOptional(), getAuthConfig()]);
   if (me.user) redirect("/app");
   const open = auth?.signupOpen === true;
@@ -92,6 +94,7 @@ export default async function Landing() {
     : auth
       ? "Hosted access is by invitation. Invited? Your link creates your account."
       : "We couldn't check hosted access right now. Sign in still works.";
+  const story = landingStoryEnabled((await searchParams)?.experience, process.env);
 
   return (
     <Pad className={`paper ${s.home}`}>
@@ -101,7 +104,7 @@ export default async function Landing() {
       <Masthead current="home" href={entry} label={entryLabel} />
 
       <main id="main" className={s.pad}>
-        <section className={s.spread} aria-labelledby="hero-title" data-hero>
+        {story ? <LandingStory entryForm={<EntryForm id="hero-email" action={entry} label={entryLabel} note={entryNote} />} /> : <section className={s.spread} aria-labelledby="hero-title" data-hero>
           <div className={s.leadColumn}>
             <h1 id="hero-title" className={`${s.h1} rise-in`}>
               Agents do the work. <span>You keep the record.</span>
@@ -112,7 +115,7 @@ export default async function Landing() {
             <EntryForm id="hero-email" action={entry} label={entryLabel} note={entryNote} />
           </div>
           <div className="rise-in" style={delay(1)}><OrderSpecimen /></div>
-        </section>
+        </section>}
 
         <section id="how" className={s.leaf} aria-labelledby="how-title">
           <div className={s.leafHead}>
