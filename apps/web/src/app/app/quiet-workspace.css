@@ -1,7 +1,8 @@
 /* Slice A: scoped compatibility theme. Public/access pages and the legacy shell retain their identity. */
 /* Keep centered workspace chrome fixed when a collection gains a native scrollbar. */
 html:has(.quiet-workspace) { scrollbar-gutter: stable; }
-.quiet-workspace {
+/* Depth routes also paint the root canvas from these same tokens, including the scrollbar gutter. */
+.quiet-workspace, :root:has(.quiet-workspace .q-depth) {
   color-scheme: light;
   --bg: #ffffff; --bg-tint: #f7f8f7; --panel: #ffffff; --panel-2: #f8faf9; --panel-3: #eef2ef;
   --rail: #f7f8f7; --fg: #19271f; --fg-2: #5e6b63; --muted: #5e6b63; --faint: #5e6b63;
@@ -16,9 +17,9 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
   --body-leading: 1.55;
   --text-xs: max(12px, 0.75rem); --text-sm: max(14px, 0.875rem);
   --font-sans: var(--font-manrope), "Noto Sans", Arial, system-ui, sans-serif;
-  min-height: 100svh; background: var(--bg); color: var(--fg); font: 400 14px/1.55 var(--font-sans);
 }
-:root[data-theme="dark"] .quiet-workspace {
+.quiet-workspace { min-height: 100svh; background: var(--bg); color: var(--fg); font: 400 14px/1.55 var(--font-sans); }
+:root[data-theme="dark"] .quiet-workspace, :root[data-theme="dark"]:has(.quiet-workspace .q-depth) {
   color-scheme: dark;
   --scrim: #00000066;
   --bg: #141b17; --bg-tint: #18211b; --panel: #141b17; --panel-2: #1d2821; --panel-3: #243028;
@@ -31,7 +32,7 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
   --yellow: #263e2e; --purple: #263e2e; --lime: #263e2e; --blue: #233345; --orange: #3c3020; --red: #f0a3a3; --pink: #3d2628;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .quiet-workspace {
+  :root:not([data-theme="light"]) .quiet-workspace, :root:not([data-theme="light"]):has(.quiet-workspace .q-depth) {
     color-scheme: dark;
     --scrim: #00000066;
     --bg: #141b17; --bg-tint: #18211b; --panel: #141b17; --panel-2: #1d2821; --panel-3: #243028;
