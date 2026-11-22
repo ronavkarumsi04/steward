@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { decisionCopy } from "@/lib/decision-copy";
-import { isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
+import { recordedUsd } from "@/lib/decision-semantics";
 import { mostUrgent } from "@/lib/approval-review";
-import { approvalActionLabel, approvalWorkLabel, approvalContextUnavailable } from "@/lib/approval-row";
+import { approvalActionLabel, approvalWorkLabel, approvalContextUnavailable, approvalRowState } from "@/lib/approval-row";
 import { loadApprovalContext } from "@/lib/quiet-record-context";
 import { runCostValue, runCostCompatibility } from "@/lib/work-loop";
 import { statusLabel, t, type Locale, type MessageKey } from "@/lib/i18n";
@@ -22,8 +22,9 @@ export async function QuietOverview({ overview, api, locale }: { overview: Compa
     api.get<{ usage: UsageRow[] }>(`/orgs/${company.organizationId}/providers/usage?companyId=${company.id}&days=30`),
   ]);
   const now = Date.now();
-  const decision = queue.status === "fulfilled" ? mostUrgent(queue.value.approvals.filter((approval) => isDecisionOpen(approval, now))) : null;
-  const contexts = await loadApprovalContext(api, company.id, decision ? [decision] : []);
+  const requests = queue.status === "fulfilled" ? queue.value.approvals : [];
+  const contexts = await loadApprovalContext(api, company.id, requests);
+  const decision = mostUrgent(requests.filter((approval) => approvalRowState(approval, contexts[approval.id], locale, now).open));
   const spend = usage.status === "fulfilled" ? usage.value.usage.reduce((sum, row) => sum + row.costUsd, 0) : null;
   const budget = budgets.find((b) => b.category === "ai") ?? budgets.find((b) => b.category === "total");
   const profile = overview.profile?.profile;

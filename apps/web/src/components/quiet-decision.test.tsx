@@ -12,6 +12,12 @@ const approval: Approval = { id: "approval-1", action: "email.send", reason: "Pl
 const overview = { company: { id: "company-1", name: "Test workspace", organizationId: "org-1", autonomyLevel: 1, timezone: "UTC" }, role: "owner", agents: [], budgets: [], pendingApprovals: 1 } as unknown as CompanyOverview;
 
 describe("Quiet decision surfaces", () => {
+  it("leads with a plain action title while preserving exact recorded action and policy details", () => {
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, action: "browser.act", payload: { kind: "wait", ms: 500 }, reason: "external_write actions require approval" }, overview, run: null }));
+    expect(html).toMatch(/<h1[^>]*>Wait 0.5 seconds in the browser<\/h1>/);
+    expect(html).toContain("browser.act");
+    expect(html).toContain("external_write actions require approval");
+  });
   it("distinguishes pending rows by recorded task and browser action without exposing a policy reason", async () => {
     const requests = [500, 1000].map((ms) => ({ ...approval, id: `approval-${ms}`, taskId: `task-${ms}`, runId: `run-${ms}`, action: "browser.act", reason: "external_write", affectedSystem: "the open page", payload: { kind: "wait", ms } }));
     const get = vi.fn(async (path: string) => {

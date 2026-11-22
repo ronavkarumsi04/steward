@@ -27,7 +27,7 @@ describe("Quiet approval row context", () => {
       throw new Error("task unavailable");
     });
     const contexts = await loadApprovalContext({ get } as never, "company-1", [request, { ...request, id: "b", taskId: null }]);
-    expect(contexts.a).toEqual({ taskTitle: null, runIntent: "Check the browser", unavailable: true });
+    expect(contexts.a).toEqual({ taskTitle: null, runIntent: "Check the browser", runStatus: null, unavailable: true });
     expect(contexts.b).toEqual(contexts.a);
     expect(get.mock.calls.map(([path]) => path).sort()).toEqual(["/companies/company-1/runs?limit=200", "/companies/company-1/tasks?limit=200"]);
   });

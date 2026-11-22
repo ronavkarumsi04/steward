@@ -15,6 +15,13 @@ const run = { id: "run", agentId: "agent", taskId: null, status: "waiting_approv
 const approval: Approval = { id: "a", runId: run.id, taskId: null, agentId: run.agentId, action: "browser.act", reason: "external_write", risk: "LOW", dimension: "external_write", payload: { kind: "wait", ms: 500 }, status: "pending", expiresAt: "2099-01-01T00:00:00Z", createdAt: run.createdAt, affectedSystem: "browser", alternatives: [], estimatedCostUsd: null, resolution: null, resolvedAt: null, resolvedBy: null, workContext: { taskTitle: "Check draft", runIntent: null } };
 
 describe("bounded Quiet page API reads (shell/auth reads excluded)", () => {
+  for (const status of ["succeeded", "failed", "cancelled"] as const) for (const oldApi of [false, true]) it(`shows ${status} run requests as closed on ${oldApi ? "old" : "new"} API without detail reads`, async () => {
+    const get = vi.fn(async (path: string) => path.includes("/approvals?") ? { approvals: [{ ...approval, workContext: oldApi ? undefined : { ...approval.workContext, runStatus: status } }] } : path.includes("/runs?") ? { runs: [{ ...run, status }] } : { tasks: [] });
+    const html = renderToStaticMarkup(await QuietApprovals({ companyId: "company", status: "pending", locale: "en", api: { get } as never }));
+    expect(html).toMatch(status === "cancelled" ? /class="pill[^"]*">Withdrawn<\/span>/ : /class="pill[^"]*">Closed<\/span>/);
+    expect(html).not.toMatch(/class="pill[^"]*">Pending<\/span>/);
+    expect(get).toHaveBeenCalledTimes(oldApi ? 3 : 1);
+  });
   for (const count of [1, 100]) {
     it(`loads ${count} zero-cost Runs in three reads, without fetching any run detail`, async () => {
       const get = vi.fn(async (path: string) => path.includes("/runs?") ? { runs: Array.from({ length: count }, (_, i) => ({ ...run, id: `run-${i}`, hasRecordedZeroCost: i % 2 === 0 })) } : path.endsWith("/agents") ? { agents: [] } : overview);

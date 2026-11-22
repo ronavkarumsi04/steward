@@ -17,6 +17,6 @@ export async function loadApprovalContext(api: ApiClient, companyId: string, app
     const run = runs.get(a.runId ?? "");
     const taskTitle = tasks.get(a.taskId ?? run?.taskId ?? "")?.title ?? null;
     const runIntent = run?.intent ?? null;
-    return [a.id, { taskTitle, runIntent, unavailable: failed || (!!(a.taskId || a.runId) && !taskTitle && !runIntent) }];
+    return [a.id, { taskTitle, runIntent, runStatus: run?.status ?? null, unavailable: failed || (!!(a.taskId || a.runId) && !taskTitle && !runIntent) }];
   }));
 }

@@ -35,7 +35,7 @@ export class ApprovalService {
   /** Two batch reads for the entire queue, including an organization-wide Inbox. No trace/Temporal reads. */
   async withWorkContext(scope: TenantScope, rows: (typeof approvals.$inferSelect)[]) {
     const runIds = [...new Set(rows.flatMap((a) => a.runId ? [a.runId] : []))];
-    const runs = runIds.length ? await this.db.select({ id: agentRuns.id, companyId: agentRuns.companyId, taskId: agentRuns.taskId, intent: agentRuns.intent }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, ...(scope.companyId ? { companyId: agentRuns.companyId } : {}) }, inArray(agentRuns.id, runIds))) : [];
+    const runs = runIds.length ? await this.db.select({ id: agentRuns.id, companyId: agentRuns.companyId, taskId: agentRuns.taskId, intent: agentRuns.intent, status: agentRuns.status }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, ...(scope.companyId ? { companyId: agentRuns.companyId } : {}) }, inArray(agentRuns.id, runIds))) : [];
     const byRun = new Map(runs.map((run) => [run.id, run]));
     const linkedRun = (a: typeof approvals.$inferSelect) => { const run = byRun.get(a.runId ?? ""); return run?.companyId === a.companyId ? run : undefined; };
     const taskIds = [...new Set(rows.flatMap((a) => { const id = a.taskId ?? linkedRun(a)?.taskId; return id ? [id] : []; }))];
@@ -44,7 +44,7 @@ export class ApprovalService {
     return rows.map((a) => {
       const run = linkedRun(a);
       const task = byTask.get(a.taskId ?? run?.taskId ?? "");
-      return { ...a, workContext: { taskTitle: task?.companyId === a.companyId ? task.title : null, runIntent: run?.intent?.split(/\r?\n/).find((line) => line.trim()) ?? null } };
+      return { ...a, workContext: { taskTitle: task?.companyId === a.companyId ? task.title : null, runIntent: run?.intent?.split(/\r?\n/).find((line) => line.trim()) ?? null, runStatus: run?.status ?? null } };
     });
   }
 

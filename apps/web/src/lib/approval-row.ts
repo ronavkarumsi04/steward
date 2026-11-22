@@ -1,7 +1,18 @@
-import type { Approval } from "./types";
+import type { Approval, Run } from "./types";
 import type { Locale } from "./i18n";
+import { decisionCopy } from "./decision-copy";
+import { isDecisionOpen, isRunClosed } from "./decision-semantics";
 
-export type ApprovalContext = { taskTitle: string | null; runIntent: string | null; unavailable?: boolean };
+export type ApprovalContext = { taskTitle: string | null; runIntent: string | null; runStatus?: Run["status"] | null; unavailable?: boolean };
+
+/** A still-pending database row is not a decision to make after its linked run has ended. */
+export function approvalRowState(approval: Approval, context: Pick<ApprovalContext, "runStatus"> | undefined, locale: Locale, now = Date.now()) {
+  const c = decisionCopy(locale);
+  const run = context?.runStatus ? { status: context.runStatus } : undefined;
+  const open = isDecisionOpen(approval, now, run);
+  const status = approval.status === "pending" ? run?.status === "cancelled" ? "cancelled" : isRunClosed(run) ? "closed" : open ? "pending" : "expired" : approval.status;
+  return { open, status, label: status === "closed" ? c.closed : status === "expired" ? c.expiredStatus : c[status] };
+}
 
 export const approvalContextUnavailable = (locale: Locale) => locale === "es" ? "No se pudieron cargar algunos nombres vinculados. Usa la referencia guardada para consultar la solicitud y su trabajo vinculado." : "Some linked work names could not be loaded. Use the recorded reference to inspect the request and its linked work.";
 

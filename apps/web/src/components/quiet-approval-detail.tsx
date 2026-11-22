@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { Approval, CompanyOverview, Run } from "@/lib/types";
+import { approvalActionLabel } from "@/lib/approval-row";
 import { runCostValue, runCostCompatibility } from "@/lib/work-loop";
 import { decisionCopy } from "@/lib/decision-copy";
 import { approvalSnapshot, isDecisionOpen, isRunClosed, recordedUsd } from "@/lib/decision-semantics";
@@ -129,7 +130,7 @@ export function QuietApprovalDetail({ approval, overview, run, members = [] }: {
   const deciderLabel = decider ? `${decider.name} (${decider.email})` : state.resolvedBy ? c.memberUnavailable : c.notRecorded;
   return <div className="q-decision-page">
     <Link href={`/app/c/${companyId}/approvals`} className="q-link"><Icon.ChevronRight size={14} className="rotate-180" />{c.back}</Link>
-    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{shortStatus}</span></header>
+    <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{approvalActionLabel(state, locale)}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{shortStatus}</span></header>
     {(decided || error || !canDecide || !open) && <section className="q-outcome" aria-labelledby="q-outcome-heading">
       <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? cancelled || (runClosed && state.status === "pending") ? statusText : `${c.recorded} · ${statusText}` : c.review}</h2>
       {decided && <>{!cancelled && !(runClosed && state.status === "pending") && <p>{c.outcome}</p>}<dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>

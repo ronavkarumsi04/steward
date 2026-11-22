@@ -5,6 +5,7 @@ import type { Approval, CompanyOverview, RunDetail, Task } from "@/lib/types";
 import { QuietWork } from "./quiet-work";
 import { QuietRunDetail } from "./quiet-run-detail";
 import { QuietRunRecord } from "./quiet-run-record";
+import { inspectRun } from "@/lib/run-inspection";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 const at = "2026-01-01T00:00:00Z";
@@ -12,6 +13,22 @@ const overview = { role: "owner", company: { id: "company", autonomyLevel: 1, ti
 const detail: RunDetail = { run: { id: "run", agentId: "agent", taskId: null, projectId: null, conversationId: null, trigger: {}, status: "executing", intent: "Check recorded evidence", plan: null, result: null, error: null, workflowId: null, costUsd: "", inputTokens: 0, outputTokens: 0, iterations: 0, createdAt: at, startedAt: at, finishedAt: null }, steps: [], aiCalls: [], toolCalls: [], artifacts: [], approvals: [], workflow: null };
 
 describe("Quiet work surfaces", () => {
+  it("composes plain approval timeline and Outcome copy without rewriting stored records or legacy inspection", () => {
+    const request: Approval = { id: "pending-request", runId: detail.run.id, taskId: null, agentId: detail.run.agentId, action: "browser.act", reason: "external_write actions require approval at autonomy level 1", risk: "LOW", dimension: "external_write", payload: { kind: "wait", ms: 500 }, status: "pending", expiresAt: "2099-01-01T00:00:00Z", createdAt: at, affectedSystem: "the open page", alternatives: [], estimatedCostUsd: "0.0000", resolution: null, resolvedAt: null, resolvedBy: null };
+    const record: RunDetail = { ...detail, run: { ...detail.run, status: "waiting_approval" }, approvals: [request] };
+    const original = structuredClone(record);
+    const html = renderToStaticMarkup(createElement(QuietRunRecord, { detail: record, companyId: "company", locale: "en", observedAt: Date.parse(at), timeZone: "UTC" }));
+    expect(html).toContain("Paused for your approval: Wait 0.5 seconds in the browser");
+    expect(html).toMatch(/<h3[^>]*>Wait 0.5 seconds in the browser<\/h3>/);
+    expect(html).toContain("Request estimate: $0.00 USD");
+    expect(html).not.toMatch(/browser\.act|external_write|est 0\.0000/);
+    const legacy = inspectRun(record, { now: Date.parse(at), companyId: "company" });
+    expect(legacy.timeline.find((entry) => entry.kind === "approval")?.title).toBe("browser.act");
+    expect(legacy.verdict.headline).toBe("Paused for your approval: browser.act");
+    const stored = { ...record, run: { ...record.run, result: { summary: "Stored browser.act narrative" } } };
+    expect(renderToStaticMarkup(createElement(QuietRunRecord, { detail: stored, companyId: "company", locale: "en", observedAt: Date.parse(at), timeZone: "UTC" }))).toContain("Stored browser.act narrative");
+    expect(record).toEqual(original);
+  });
   it.each(["en", "es"] as const)("names approval actions under a run in plain words (%s), preserving bounded previews and review links", (locale) => {
     const request: Approval = { id: "wait-request", runId: detail.run.id, taskId: null, agentId: detail.run.agentId, action: "browser.act", reason: "external_write", risk: "LOW", dimension: "external_write", payload: { kind: "wait", ms: 500 }, status: "pending", expiresAt: "2099-01-01T00:00:00Z", createdAt: at, affectedSystem: "browser", alternatives: [], estimatedCostUsd: null, resolution: null, resolvedAt: null, resolvedBy: null };
     const email = { ...request, id: "email-request", action: "email.send", payload: { to: "review@example.com", subject: "Long recorded subject ".repeat(30) } };

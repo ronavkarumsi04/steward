@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { decisionCopy } from "@/lib/decision-copy";
-import { isDecisionOpen } from "@/lib/decision-semantics";
-import { approvalActionLabel, approvalWorkLabel, approvalContextUnavailable, type ApprovalContext } from "@/lib/approval-row";
+import { approvalActionLabel, approvalWorkLabel, approvalContextUnavailable, approvalRowState, type ApprovalContext } from "@/lib/approval-row";
 import { t, tf, type Locale } from "@/lib/i18n";
 import type { InboxGroup } from "./inbox";
 import { Icon } from "./icons";
@@ -13,7 +12,7 @@ import { QuietPageHeading, QuietUnavailable } from "./quiet-depth";
 export function QuietInbox({ groups, manyOrgs, truncated, unavailableOrgs, locale, contexts = {} }: { groups: InboxGroup[]; manyOrgs: boolean; truncated: boolean; unavailableOrgs: string[]; locale: Locale; contexts?: Record<string, ApprovalContext> }) {
   const c = decisionCopy(locale);
   const now = Date.now();
-  const open = groups.map((group) => ({ ...group, approvals: group.approvals.filter((approval) => isDecisionOpen(approval, now)) })).filter((group) => group.approvals.length > 0);
+  const open = groups.map((group) => ({ ...group, approvals: group.approvals.filter((approval) => approvalRowState(approval, contexts[approval.id], locale, now).open) })).filter((group) => group.approvals.length > 0);
   const waiting = open.reduce((count, group) => count + group.approvals.length, 0);
   return <main className="q-depth q-depth-page q-depth-inbox">
     <QuietPageHeading title={t(locale, "inbox.title")} description={c.approvalsIntro} scope={<span>{waiting === 0 ? (unavailableOrgs.length ? c.unavailable : t(locale, "inbox.nothingPending")) : waiting === 1 ? t(locale, "inbox.oneRequest") : tf(locale, "inbox.nRequests", { n: waiting })}</span>} actions={<PushToggle />} />

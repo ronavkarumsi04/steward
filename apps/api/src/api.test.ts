@@ -957,7 +957,7 @@ describe("Quiet list projections", () => {
     await core.pool.query("insert into approvals (id, organization_id, company_id, run_id, action, reason, payload, risk, dimension, affected_system, expires_at) select $1 || '-a-' || n, $2, $3, $1 || '-' || n, 'browser.act', 'external_write', '{\"kind\":\"wait\",\"ms\":500}'::jsonb, 'LOW', 'external_write', 'browser', now() + interval '1 day' from generate_series(1,100) n", [prefix, orgId, companyId]);
     await core.pool.query("insert into ai_calls (organization_id, company_id, run_id, provider, model, status, cost_estimated, cost_usd) values ($1,$2,$3,'test','fixture','ok',false,0), ($1,$2,$4,'test','fixture','ok',true,0), ($1,$2,$5,'test','fixture','error',false,0)", [orgId, companyId, `${prefix}-1`, `${prefix}-2`, `${prefix}-3`]);
     type RunProjection = { id: string; hasRecordedZeroCost?: boolean };
-    type ApprovalProjection = { id: string; workContext?: { taskTitle: string | null; runIntent: string | null } };
+    type ApprovalProjection = { id: string; workContext?: { taskTitle: string | null; runIntent: string | null; runStatus: string | null } };
     const queries = vi.spyOn(core.pool, "query");
     try {
       const rows = await api.json<{ runs: RunProjection[] }>("GET", `/companies/${companyId}/runs?limit=100&view=quiet`);
@@ -973,7 +973,10 @@ describe("Quiet list projections", () => {
       const approvals = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/companies/${companyId}/approvals?limit=100&view=quiet`);
       expect(approvals.status).toBe(200);
       expect(approvals.body.approvals).toHaveLength(100);
-      for (const a of approvals.body.approvals) expect(a.workContext?.taskTitle).toBe("Recorded queue work");
+      for (const a of approvals.body.approvals) {
+        expect(a.workContext?.taskTitle).toBe("Recorded queue work");
+        expect(a.workContext?.runStatus).toBe("waiting_approval");
+      }
       const approvalQueryCount = queries.mock.calls.length;
       queries.mockClear();
       await api.json("GET", `/companies/${companyId}/approvals?limit=1&view=quiet`);
@@ -982,9 +985,13 @@ describe("Quiet list projections", () => {
       expect(detail.body.run.hasRecordedZeroCost).toBe(true);
       const plain = await api.json<{ runs: RunProjection[] }>("GET", `/companies/${companyId}/runs?limit=100`);
       expect(plain.body.runs.every((r) => r.hasRecordedZeroCost === undefined)).toBe(true);
+      const plainApprovals = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/companies/${companyId}/approvals?limit=100`);
+      expect(plainApprovals.body.approvals.every((a) => a.workContext === undefined)).toBe(true);
+      await core.pool.query("update agent_runs set status='succeeded' where id=$1", [`${prefix}-99`]);
       const inbox = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/orgs/${orgId}/approvals?limit=100&view=quiet`);
       expect(inbox.status, JSON.stringify(inbox.body)).toBe(200);
       expect(inbox.body.approvals.every((a) => a.workContext?.taskTitle === "Recorded queue work")).toBe(true);
+      expect(inbox.body.approvals.find((a) => a.id === `${prefix}-a-99`)?.workContext?.runStatus).toBe("succeeded");
     } finally { queries.mockRestore(); }
     // Even malformed links inside one organization cannot reveal another company's work names.
     const other = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Separate company" });
@@ -996,7 +1003,7 @@ describe("Quiet list projections", () => {
     await core.pool.query("update approvals set task_id=$1, run_id=$2 where id=$3", [otherTask.id, otherRun.id, `${prefix}-a-100`]);
     await core.pool.query("insert into ai_calls (organization_id, company_id, run_id, provider, model, status, cost_estimated, cost_usd) values ($1,$2,$3,'test','fixture','ok',false,0)", [orgId, otherScope.companyId, `${prefix}-4`]);
     const isolated = await api.json<{ approvals: Array<{ id: string; workContext: { taskTitle: string | null; runIntent: string | null } }> }>("GET", `/orgs/${orgId}/approvals?limit=200&view=quiet`);
-    expect(isolated.body.approvals.find((a) => a.id === `${prefix}-a-100`)?.workContext).toEqual({ taskTitle: null, runIntent: null });
+    expect(isolated.body.approvals.find((a) => a.id === `${prefix}-a-100`)?.workContext).toEqual({ taskTitle: null, runIntent: null, runStatus: null });
     const noForeignEvidence = await api.json<{ runs: Array<{ id: string; hasRecordedZeroCost: boolean }> }>("GET", `/companies/${companyId}/runs?limit=100&view=quiet`);
     expect(noForeignEvidence.body.runs.find((r) => r.id === `${prefix}-4`)?.hasRecordedZeroCost).toBe(false);
     const outsider = await register("Projection-outsider");
