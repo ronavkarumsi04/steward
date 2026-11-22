@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
-import type { AICall, Approval, CompanyOverview, Run } from "@/lib/types";
-import { runCostValue } from "@/lib/work-loop";
+import type { Approval, CompanyOverview, Run } from "@/lib/types";
+import { runCostValue, runCostCompatibility } from "@/lib/work-loop";
 import { decisionCopy } from "@/lib/decision-copy";
 import { approvalSnapshot, isDecisionOpen, recordedUsd } from "@/lib/decision-semantics";
 import { diffPayload } from "@/lib/approval-review";
@@ -19,7 +19,7 @@ import { StatusPill } from "./ui";
 export type DecisionMember = { userId: string; name: string; email: string };
 
 /** A real request, one review surface, one durable server decision. Delivery and execution stay distinct. */
-export function QuietApprovalDetail({ approval, overview, run, aiCalls = [], members = [] }: { approval: Approval; overview: CompanyOverview; run: Run | null; aiCalls?: AICall[]; members?: DecisionMember[] }) {
+export function QuietApprovalDetail({ approval, overview, run, members = [] }: { approval: Approval; overview: CompanyOverview; run: Run | null; members?: DecisionMember[] }) {
   const locale = useLocale();
   const c = decisionCopy(locale);
   const router = useRouter();
@@ -162,7 +162,7 @@ export function QuietApprovalDetail({ approval, overview, run, aiCalls = [], mem
     </dl><p>{c.estimateHint}</p>
       <section className="q-detail-section" style={{ marginTop: 24 }}><h2>{c.supporting}</h2>
         {state.runId ? <><Link className="q-link" href={`/app/c/${companyId}/runs/${state.runId}`}>{c.openRun}<Icon.ChevronRight size={14} /></Link>
-          {run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(runCostValue(run, aiCalls), locale) ?? c.unavailable} USD</p>{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}
+          {run ? <><p style={{ marginTop: 16 }}><StatusPill status={run.status} label={statusLabel(locale, run.status)} /></p><p>{c.runCost}: {recordedUsd(runCostValue(run), locale) ?? c.unavailable} USD</p>{runCostCompatibility(run, locale) && <p className="q-notice" role="status">{runCostCompatibility(run, locale)}</p>}{terminalRunMessage && <p className="q-notice" style={{ marginTop: 16 }}>{terminalRunMessage}</p>}</> : <p>{c.runUnavailable}</p>}
         </> : <p>{c.noRun}</p>}
       </section>
     </aside></div>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { decisionCopy } from "@/lib/decision-copy";
 import { isDecisionOpen } from "@/lib/decision-semantics";
-import { approvalActionLabel, approvalWorkLabel, type ApprovalContext } from "@/lib/approval-row";
+import { approvalActionLabel, approvalWorkLabel, approvalContextUnavailable, type ApprovalContext } from "@/lib/approval-row";
 import { t, tf, type Locale } from "@/lib/i18n";
 import type { InboxGroup } from "./inbox";
 import { Icon } from "./icons";
@@ -23,6 +23,7 @@ export function QuietInbox({ groups, manyOrgs, truncated, unavailableOrgs, local
       <div className="q-section-heading"><div><h2 id={`inbox-${group.company.id}`}>{group.company.name}</h2>{manyOrgs && <p className="text-sm text-muted">{group.orgName}</p>}</div><Link className="q-link" href={`/app/c/${group.company.id}/approvals`}>{t(locale, "inbox.allApprovals")}</Link></div>
       <ul className="q-work-list">{group.approvals.map((approval) => <li key={approval.id}><Link className="q-work-row" href={`/app/c/${group.company.id}/approvals/${approval.id}`}><Icon.Approvals size={18} /><div className="q-grow"><strong>{approvalWorkLabel(approval, contexts[approval.id], locale)}</strong><span className="q-approval-action">{approvalActionLabel(approval, locale)}</span><span>{approval.affectedSystem || c.notRecorded} · <Ago iso={approval.createdAt} locale={locale} /></span></div><div className="q-row-end"><RiskPill risk={approval.risk} /><span className="q-link">{c.review}<Icon.ChevronRight size={14} /></span></div></Link></li>)}</ul>
     </section>)}
+    {Object.values(contexts).some((context) => context.unavailable) && <p className="q-notice" role="status">{approvalContextUnavailable(locale)}</p>}
     {truncated && <p className="q-depth-notice mt-6" role="note">{t(locale, "inbox.truncated")}</p>}
     <p className="mt-8 text-sm text-muted">{t(locale, "inbox.homeScreen")}</p>
   </main>;

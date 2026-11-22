@@ -1,7 +1,9 @@
 import type { Approval } from "./types";
 import type { Locale } from "./i18n";
 
-export type ApprovalContext = { taskTitle: string | null; runIntent: string | null };
+export type ApprovalContext = { taskTitle: string | null; runIntent: string | null; unavailable?: boolean };
+
+export const approvalContextUnavailable = (locale: Locale) => locale === "es" ? "No se pudieron cargar algunos nombres vinculados. Usa la referencia guardada para consultar la solicitud y su trabajo vinculado." : "Some linked work names could not be loaded. Use the recorded reference to inspect the request and its linked work.";
 
 /** A row names recorded work, never a title inferred from a tool or policy dimension. */
 export function approvalWorkLabel(approval: Approval, context: ApprovalContext | undefined, locale: Locale): string {
@@ -14,7 +16,7 @@ export function approvalWorkLabel(approval: Approval, context: ApprovalContext |
 }
 
 /** Interpret only known payload fields. Typed text stays in the exact-payload review. */
-export function approvalActionLabel(approval: Approval, locale: Locale): string {
+function describeApprovalAction(approval: Approval, locale: Locale): string {
   const es = locale === "es";
   const p = approval.payload;
   const str = (key: string) => typeof p[key] === "string" ? (p[key] as string).trim() : "";
@@ -44,4 +46,10 @@ export function approvalActionLabel(approval: Approval, locale: Locale): string 
   if (approval.action === "sms.send") return `${es ? "Enviar mensaje de texto" : "Send text message"}${str("to") ? ` ${es ? "a" : "to"} ${str("to")}` : ""}`;
   if (approval.action === "social.publish") return `${es ? "Publicar" : "Publish post"}${str("network") ? ` ${es ? "en" : "on"} ${str("network")}` : ""}`;
   return `${es ? "Revisar acción" : "Review action"}: ${approval.action}`;
+}
+
+/** Rows are previews, not the exact payload: visibly abbreviate long selectors/subjects at 140 characters. */
+export function approvalActionLabel(approval: Approval, locale: Locale): string {
+  const characters = Array.from(describeApprovalAction(approval, locale));
+  return characters.length > 140 ? `${characters.slice(0, 139).join("").trimEnd()}…` : characters.join("");
 }

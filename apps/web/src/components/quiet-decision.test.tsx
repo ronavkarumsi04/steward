@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { AICall, Approval, CompanyOverview, Run } from "@/lib/types";
+import type { Approval, CompanyOverview, Run } from "@/lib/types";
 import { QuietApprovalDetail } from "./quiet-approval-detail";
 import { QuietOverview } from "./quiet-overview";
 import { QuietApprovals } from "./quiet-approvals";
@@ -14,7 +14,7 @@ describe("Quiet decision surfaces", () => {
   it("distinguishes pending rows by recorded task and browser action without exposing a policy reason", async () => {
     const requests = [500, 1000].map((ms) => ({ ...approval, id: `approval-${ms}`, taskId: `task-${ms}`, runId: `run-${ms}`, action: "browser.act", reason: "external_write", affectedSystem: "the open page", payload: { kind: "wait", ms } }));
     const get = vi.fn(async (path: string) => {
-      if (path.includes("/approvals?")) return { approvals: requests };
+      if (path.includes("/approvals?")) return { approvals: requests.map((a, i) => ({ ...a, workContext: { taskTitle: i === 0 ? "Prepare draft" : "Review landing page", runIntent: null } })) };
       if (path.includes("/tasks/")) return { task: { title: path.endsWith("500") ? "Prepare draft" : "Review landing page" } };
       return { run: { intent: "Recorded run context" } };
     });
@@ -24,16 +24,14 @@ describe("Quiet decision surfaces", () => {
   });
   it("uses the inspector's evidence rule in both Overview and supporting work", async () => {
     for (const recorded of [false, true]) {
-      const run = { id: "run-1", intent: "Review draft", status: "waiting_approval", costUsd: "0.000000", createdAt: "2026-01-01T00:00:00Z" } as Run;
-      const aiCalls = recorded ? [{ status: "ok", costEstimated: false, costUsd: "0" }] as AICall[] : [];
+      const run = { id: "run-1", intent: "Review draft", status: "waiting_approval", costUsd: "0.000000", hasRecordedZeroCost: recorded, createdAt: "2026-01-01T00:00:00Z" } as Run;
       const get = vi.fn(async (path: string) => {
         if (path.includes("/approvals?")) return { approvals: [] };
         if (path.includes("providers/usage")) return { usage: [] };
-        if (path.endsWith("/runs/run-1")) return { run, aiCalls };
         return { runs: [run] };
       });
       const home = renderToStaticMarkup(await QuietOverview({ overview, locale: "en", api: { get } as never }));
-      const supporting = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, runId: run.id }, overview, run, aiCalls }));
+      const supporting = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, runId: run.id }, overview, run }));
       for (const html of [home, supporting]) expect(html).toContain(`Recorded run cost: ${recorded ? "$0.00" : "Not available"} USD`);
     }
   });

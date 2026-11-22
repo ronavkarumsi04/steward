@@ -35,7 +35,7 @@ async function InboxPageContent() {
     me.memberships.map(async (m) => {
       const data = await Promise.all([
         api.get<{ companies: Company[] }>(`/orgs/${m.organizationId}/companies`),
-        api.get<{ approvals: Approval[] }>(`/orgs/${m.organizationId}/approvals?status=pending&limit=${INBOX_PAGE}`),
+        api.get<{ approvals: Approval[] }>(`/orgs/${m.organizationId}/approvals?status=pending&limit=${INBOX_PAGE}${quiet ? "&view=quiet" : ""}`),
       ]).catch((error: unknown) => { if (!quiet) throw error; return null; });
       if (!data) { unavailableOrgs.push(m.name); return { org: m, companies: [], approvals: [] }; }
       const [{ companies }, { approvals }] = data;
@@ -56,7 +56,8 @@ async function InboxPageContent() {
     .sort((a, b) => Date.parse(b.approvals[0]!.createdAt) - Date.parse(a.approvals[0]!.createdAt));
   const truncated = orgs.some((o) => o.approvals.length >= INBOX_PAGE);
   if (quiet) {
-    const contexts = Object.assign({}, ...await Promise.all(groups.map((group) => loadApprovalContext(api, group.company.id, group.approvals))));
+    // Never multiply Inbox reads by company count, including against an older API.
+    const contexts = Object.assign({}, ...await Promise.all(groups.map((group) => loadApprovalContext(api, group.company.id, group.approvals, false))));
     return <QuietInbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} unavailableOrgs={unavailableOrgs} locale={locale} contexts={contexts} />;
   }
   return <Inbox groups={groups} manyOrgs={me.memberships.length > 1} truncated={truncated} />;

@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, lt, inArray } from "drizzle-orm";
-import { approvals, auditLog, emitEvent, scoped, type Db } from "@steward/db";
+import { agentRuns, approvals, auditLog, emitEvent, scoped, tasks, type Db } from "@steward/db";
 import type { ApprovalRequest, ApprovalStatus, TenantScope } from "@steward/schema";
 
 /** Told, after the transaction commits, that a person is now being waited on. Best effort; never the record. */
@@ -18,6 +18,22 @@ export type ResolvedApproval = typeof approvals.$inferSelect & { signalDelivered
 
 export class ApprovalService {
   constructor(private readonly db: Db, private readonly signal?: ApprovalSignal, private readonly notifier?: ApprovalNotifier) {}
+
+  /** Two batch reads for the entire queue, including an organization-wide Inbox. No trace/Temporal reads. */
+  async withWorkContext(scope: TenantScope, rows: (typeof approvals.$inferSelect)[]) {
+    const runIds = [...new Set(rows.flatMap((a) => a.runId ? [a.runId] : []))];
+    const runs = runIds.length ? await this.db.select({ id: agentRuns.id, companyId: agentRuns.companyId, taskId: agentRuns.taskId, intent: agentRuns.intent }).from(agentRuns).where(scoped(scope, { organizationId: agentRuns.organizationId, ...(scope.companyId ? { companyId: agentRuns.companyId } : {}) }, inArray(agentRuns.id, runIds))) : [];
+    const byRun = new Map(runs.map((run) => [run.id, run]));
+    const linkedRun = (a: typeof approvals.$inferSelect) => { const run = byRun.get(a.runId ?? ""); return run?.companyId === a.companyId ? run : undefined; };
+    const taskIds = [...new Set(rows.flatMap((a) => { const id = a.taskId ?? linkedRun(a)?.taskId; return id ? [id] : []; }))];
+    const work = taskIds.length ? await this.db.select({ id: tasks.id, companyId: tasks.companyId, title: tasks.title }).from(tasks).where(scoped(scope, { organizationId: tasks.organizationId, ...(scope.companyId ? { companyId: tasks.companyId } : {}) }, inArray(tasks.id, taskIds))) : [];
+    const byTask = new Map(work.map((task) => [task.id, task]));
+    return rows.map((a) => {
+      const run = linkedRun(a);
+      const task = byTask.get(a.taskId ?? run?.taskId ?? "");
+      return { ...a, workContext: { taskTitle: task?.companyId === a.companyId ? task.title : null, runIntent: run?.intent?.split(/\r?\n/).find((line) => line.trim()) ?? null } };
+    });
+  }
 
   /** `actions` narrows to the tool calls named (e.g. the outbox's send tools) before the limit applies. */
   async list(scope: TenantScope, status?: ApprovalStatus, limit = 50, actions?: readonly string[]) {

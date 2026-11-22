@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Approval, Run } from "./types";
 import { approvalActionLabel, approvalWorkLabel } from "./approval-row";
-import { loadApprovalContext, loadRunCosts } from "./quiet-record-context";
+import { loadApprovalContext } from "./quiet-record-context";
+import { runCostValue } from "./work-loop";
 
 const request: Approval = { id: "a", action: "browser.act", reason: "external_write", payload: { kind: "wait", ms: 500 }, taskId: "task-1", runId: "run-1", agentId: null, risk: "LOW", dimension: "external_write", affectedSystem: "the open page", estimatedCostUsd: null, alternatives: [], status: "pending", resolvedAt: null, resolvedBy: null, resolution: null, createdAt: "2026-01-01T00:00:00Z", expiresAt: "2099-01-01T00:00:00Z", workflowId: null };
 
@@ -20,33 +21,43 @@ describe("Quiet approval row context", () => {
     expect(approvalWorkLabel({ ...request, taskId: null, runId: null }, undefined, "en")).toBe("No linked task or run");
     expect(approvalActionLabel(request, "es")).toContain("0,5");
   });
-  it("deduplicates linked reads within company scope and never loads a made-up title", async () => {
+  it("uses two list reads on an older API and reports partial context explicitly", async () => {
     const get = vi.fn(async (path: string) => {
-      if (path.endsWith("/runs/run-1")) return { run: { id: "run-1", taskId: "task-1", intent: "Check the browser" } };
+      if (path.endsWith("/runs?limit=200")) return { runs: [{ id: "run-1", taskId: "task-1", intent: "Check the browser" }] };
       throw new Error("task unavailable");
     });
     const contexts = await loadApprovalContext({ get } as never, "company-1", [request, { ...request, id: "b", taskId: null }]);
-    expect(contexts.a).toEqual({ taskTitle: null, runIntent: "Check the browser" });
+    expect(contexts.a).toEqual({ taskTitle: null, runIntent: "Check the browser", unavailable: true });
     expect(contexts.b).toEqual(contexts.a);
-    expect(get.mock.calls.map(([path]) => path).sort()).toEqual(["/companies/company-1/runs/run-1", "/companies/company-1/tasks/task-1"]);
+    expect(get.mock.calls.map(([path]) => path).sort()).toEqual(["/companies/company-1/runs?limit=200", "/companies/company-1/tasks?limit=200"]);
   });
-  it("does not fetch run traces when a recorded task title already identifies the request", async () => {
-    const get = vi.fn(async () => ({ task: { title: "Prepare draft" } }));
-    const contexts = await loadApprovalContext({ get } as never, "company-1", [request, { ...request, id: "b" }]);
+  it("needs no extra API read for projected work names", async () => {
+    const get = vi.fn();
+    const contexts = await loadApprovalContext({ get } as never, "company-1", [{ ...request, workContext: { taskTitle: "Prepare draft", runIntent: null } }]);
     expect(contexts.a?.taskTitle).toBe("Prepare draft");
-    expect(get).toHaveBeenCalledExactlyOnceWith("/companies/company-1/tasks/task-1");
+    expect(get).not.toHaveBeenCalled();
+  });
+  it("never fans out across companies in an old-API Inbox, marking missing names explicitly", async () => {
+    const get = vi.fn();
+    const contexts = await Promise.all(Array.from({ length: 100 }, (_, i) => loadApprovalContext({ get } as never, `company-${i}`, [{ ...request, id: `a-${i}` }], false)));
+    expect(get).not.toHaveBeenCalled();
+    expect(contexts.every((context) => Object.values(context).every((row) => row.unavailable))).toBe(true);
   });
 });
 
 describe("Evidence-backed run costs across Quiet lists", () => {
-  it("keeps missing/estimated zeros unavailable, but preserves an explicitly recorded zero", async () => {
-    const runs = ["untouched", "recorded", "estimated", "offline", "paid"].map((id) => ({ id, costUsd: id === "paid" ? "0.025" : "0.000000" })) as Run[];
-    const get = vi.fn(async (path: string) => {
-      const run = runs.find((item) => path.endsWith(`/${item.id}`))!;
-      if (run.id === "offline") throw new Error("unavailable");
-      return { run, aiCalls: run.id === "untouched" ? [] : [{ status: "ok", costEstimated: run.id === "estimated", costUsd: "0" }] };
-    });
-    expect(await loadRunCosts({ get } as never, "company-1", runs)).toEqual({ untouched: null, recorded: "0.000000", estimated: null, offline: null, paid: "0.025" });
-    expect(get).toHaveBeenCalledTimes(4);
+  it("keeps unproven zeros unavailable without reads, preserving a projected recorded zero", () => {
+    const runs = ["untouched", "recorded", "estimated", "old-api", "paid"].map((id) => ({ id, costUsd: id === "paid" ? "0.025" : "0.000000", ...(id !== "old-api" ? { hasRecordedZeroCost: id === "recorded" } : {}) })) as Run[];
+    expect(Object.fromEntries(runs.map((run) => [run.id, runCostValue(run)]))).toEqual({ untouched: null, recorded: "0.000000", estimated: null, "old-api": null, paid: "0.025" });
   });
+});
+
+it("bounds long selectors and email subjects visibly, without altering exact payload", () => {
+  for (const approval of [{ ...request, payload: { kind: "click", selector: "#" + "a".repeat(1000) } }, { ...request, action: "email.send", payload: { to: "review@example.com", subject: "Review ".repeat(200) } }]) {
+    const original = structuredClone(approval.payload);
+    const label = approvalActionLabel(approval, "en");
+    expect(Array.from(label).length).toBeLessThanOrEqual(140);
+    expect(label.endsWith("…")).toBe(true);
+    expect(approval.payload).toEqual(original);
+  }
 });

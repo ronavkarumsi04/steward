@@ -11,7 +11,7 @@ it("keeps the inspector available when an optional task request fails", async ()
   vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
   get.mockImplementation(async (path: string) => {
     if (path.endsWith("/tasks/task")) throw new ApiError(503, "unavailable", "Task store unavailable");
-    if (path.endsWith("/runs/run")) return { run: { id: "run", taskId: "task" } };
+    if (path.endsWith("/runs/run?view=quiet")) return { run: { id: "run", taskId: "task" } };
     return { role: "owner" };
   });
   const page = await RunPage({ params: Promise.resolve({ companyId: "company", runId: "run" }), searchParams: Promise.resolve({}) });
