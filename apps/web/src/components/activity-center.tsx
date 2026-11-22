@@ -10,11 +10,14 @@ import type { Project, StewardEvent } from "@/lib/types";
 import { actorLabel, correlationHref, eventCategory, eventNeedsAttention, summarizeEvent, type EventCategory } from "@/lib/event-format";
 import { Ago, Card, Empty, Json, PageHeader, Pill } from "./ui";
 import { Icon } from "./icons";
+import { useQuietSpecialist } from "./quiet-specialist-context";
+import { quietActorLabel, quietEventSummary, quietEventTitle } from "@/lib/quiet-event-format";
 
 type View = "all" | "attention" | EventCategory;
 const VIEWS: Array<[View, MessageKey]> = [["all", "activity.view.all"], ["attention", "activity.view.attention"], ["runs", "activity.view.runs"], ["tools", "activity.view.tools"], ["business", "activity.view.business"], ["governance", "activity.view.governance"], ["other", "activity.view.other"]];
 
-export function ActivityCenter({ companyId, initial, projects }: { companyId: string; initial: StewardEvent[]; projects: Project[] }) {
+export function ActivityCenter({ companyId, initial, projects, agents = [] }: { companyId: string; initial: StewardEvent[]; projects: Project[]; agents?: Array<{ id: string; name: string }> }) {
+  const quiet = useQuietSpecialist();
   const locale = useLocale();
   const t = useT();
   const tf = useTf();
@@ -42,9 +45,10 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
     if (actor !== "all" && String(event.actor.type ?? "unknown") !== actor) return false;
     if (projectId !== "all" && event.correlation.projectId !== projectId) return false;
     if (!needle) return true;
-    const haystack = `${event.type} ${actorLabel(event.actor)} ${summarizeEvent(event)} ${JSON.stringify(event.payload)} ${JSON.stringify(event.correlation)}`.toLowerCase();
+    const display = quiet ? `${quietEventTitle(event)} ${quietActorLabel(event.actor, agents)} ${quietEventSummary(event, locale)}` : "";
+    const haystack = `${event.type} ${actorLabel(event.actor)} ${summarizeEvent(event)} ${display} ${JSON.stringify(event.payload)} ${JSON.stringify(event.correlation)}`.toLowerCase();
     return haystack.includes(needle);
-  }), [events, view, actor, projectId, needle]);
+  }), [events, view, actor, projectId, needle, quiet, agents, locale]);
 
   async function loadOlder() {
     if (!events.length || busy) return;
@@ -93,7 +97,7 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
       <Card className="p-0 nb-left-blue">
         {visible.length === 0 ? <div className="p-4"><Empty icon={<Icon.Activity size={20} />}>{t("activity.noMatch")}</Empty></div> : (
           <ol className="divide-y divide-line">
-            {visible.map((event) => <EventRow key={event.seq} companyId={companyId} event={event} project={projects.find((project) => project.id === event.correlation.projectId)} />)}
+            {visible.map((event) => <EventRow key={event.seq} companyId={companyId} event={event} agents={agents} project={projects.find((project) => project.id === event.correlation.projectId)} />)}
           </ol>
         )}
         {events.length > 0 && hasOlder && (
@@ -104,7 +108,8 @@ export function ActivityCenter({ companyId, initial, projects }: { companyId: st
   );
 }
 
-function EventRow({ companyId, event, project }: { companyId: string; event: StewardEvent; project?: Project }) {
+function EventRow({ companyId, event, project, agents }: { companyId: string; event: StewardEvent; project?: Project; agents: Array<{ id: string; name: string }> }) {
+  const quiet = useQuietSpecialist();
   const t = useT();
   const locale = useLocale();
   const attention = eventNeedsAttention(event);
@@ -116,18 +121,18 @@ function EventRow({ companyId, event, project }: { companyId: string; event: Ste
         <div className="hidden w-20 shrink-0 pt-0.5 text-right sm:block"><div className="mono tnum text-xs text-faint">#{event.seq}</div><div className="mt-0.5 text-xs text-muted"><Ago iso={event.createdAt} locale={locale} /></div></div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mono text-xs font-semibold text-accent">{event.type}</span>
+            <span className={quiet ? "text-sm font-semibold text-accent" : "mono text-xs font-semibold text-accent"}>{quiet ? quietEventTitle(event) : event.type}</span>
             <span className="pill text-muted">{category}</span>
             {attention && <Pill tone="warn">{t("activity.attention")}</Pill>}
-            <span className="text-xs text-muted">{actorLabel(event.actor)}</span>
+            <span className="text-xs text-muted">{quiet ? quietActorLabel(event.actor, agents) : actorLabel(event.actor)}</span>
             <span className="sm:hidden text-xs text-faint"><Ago iso={event.createdAt} locale={locale} /></span>
           </div>
-          <p className="mt-1 text-sm leading-6 text-fg-2">{summarizeEvent(event)}</p>
+          <p className="mt-1 text-sm leading-6 text-fg-2">{quiet ? quietEventSummary(event, locale) : summarizeEvent(event)}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             {project && <Link className="pill text-accent hover:underline" href={`/app/c/${companyId}/projects/${project.id}`}>{project.name}</Link>}
             {links.filter((link) => link.label !== "Project" || !project).map((link) => <Link key={`${link.label}:${link.href}`} className="text-accent hover:underline" href={link.href}>{link.label}</Link>)}
           </div>
-          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none text-muted hover:text-fg">{t("activity.inspect")}</summary><div className="mt-2 grid gap-2 lg:grid-cols-3"><JsonBlock label={t("activity.payload")} value={event.payload} /><JsonBlock label={t("activity.actorBlock")} value={event.actor} /><JsonBlock label={t("activity.correlation")} value={event.correlation} /></div></details>
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none text-muted hover:text-fg">{t("activity.inspect")}</summary>{quiet && <p className="mono mt-2 text-muted">{event.type}</p>}<div className="mt-2 grid gap-2 lg:grid-cols-3"><JsonBlock label={t("activity.payload")} value={event.payload} /><JsonBlock label={t("activity.actorBlock")} value={event.actor} /><JsonBlock label={t("activity.correlation")} value={event.correlation} /></div></details>
         </div>
       </div>
     </li>

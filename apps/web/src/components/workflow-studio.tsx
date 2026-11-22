@@ -23,6 +23,8 @@ import {
   updateNode,
 } from "@/lib/workflows";
 import { Ago, Card, Empty, Pill, Spinner } from "./ui";
+import { useQuietSpecialist } from "./quiet-specialist-context";
+import { canTogglePublishedWorkflow, scheduleRhythm } from "@/lib/quiet-workflows";
 
 /**
  * The workflow studio: a company's standing work, drawn.
@@ -49,6 +51,7 @@ interface Draft {
 const asDraft = (workflow: WorkflowView): Draft => ({ id: workflow.id, name: workflow.name, nodes: arrange(workflow.nodes), enabled: workflow.enabled, updatedAt: workflow.updatedAt });
 
 export function WorkflowStudio({ companyId, initial }: { companyId: string; initial: WorkflowWorkspaceRead }) {
+  const quiet = useQuietSpecialist();
   const router = useRouter();
   const [workflows, setWorkflows] = useState(initial.workflows);
   const [draft, setDraft] = useState<Draft | null>(initial.workflows[0] ? asDraft(initial.workflows[0]) : null);
@@ -187,8 +190,8 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
           {notice && <p role="status" className="text-sm text-muted">{notice}</p>}
 
           <Card
-            title="Workflows"
-            description="Standing work a company does by itself: a trigger, who does it, and the ceiling. A workflow is a drawing of the rules and schedules the rest of Steward already runs."
+            title={quiet ? "Saved workflows" : "Workflows"}
+            description={quiet ? undefined : "Standing work a company does by itself: a trigger, who does it, and the ceiling. A workflow is a drawing of the rules and schedules the rest of Steward already runs."}
             className="nb-left-purple"
             action={canManage ? <button className="btn btn-sm" onClick={create} disabled={busy === "create"}>{busy === "create" ? "Drawing…" : "New workflow"}</button> : null}
           >
@@ -214,7 +217,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{workflow.name}</span>
                           <Pill tone={standingTone(state)}>{standingLabel(state)}</Pill>
-                          {!workflow.enabled && <Pill tone="warn">Paused</Pill>}
+                          {!workflow.enabled && (!quiet || canTogglePublishedWorkflow(workflow)) && <Pill tone="warn">Paused</Pill>}
                         </span>
                         <span className="mono mt-1 block text-xs text-muted">
                           {workflow.nodes.filter((node) => node.kind === "trigger").length} trigger(s) · revision {workflow.revision} · {workflow.liveCount} live row(s) · updated <Ago iso={workflow.updatedAt} />
@@ -236,7 +239,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                   <span className="flex flex-wrap items-center gap-2">
                     <button className="btn btn-sm" onClick={() => save()} disabled={!dirty || busy !== null} data-testid="workflow-save">Save draft</button>
                     <button className="btn btn-sm btn-primary" onClick={publish} disabled={busy !== null || !drawable(arrange(draft.nodes))} data-testid="workflow-publish">{busy === "publish" ? "Publishing…" : "Publish"}</button>
-                    <button className="btn btn-sm" onClick={toggleEnabled} disabled={busy !== null} data-testid="workflow-toggle">{draft.enabled ? "Pause" : "Resume"}</button>
+                    {(!quiet || canTogglePublishedWorkflow(selected ?? undefined)) && <button className="btn btn-sm" onClick={toggleEnabled} disabled={busy !== null} data-testid="workflow-toggle">{draft.enabled ? "Pause" : "Resume"}</button>}
                   </span>
                 ) : null
               }
@@ -334,7 +337,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                   {preview.targets.map((target) => (
                     <li key={target.triggerId}>
                       {target.kind} · {target.name} · {target.agentId}
-                      {target.kind === "rule" ? ` · ${(target.matchKinds ?? []).join(",")} · at most ${target.maxRunsPerHour}/h` : ` · ${target.cron} ${target.timezone}`}
+                      {target.kind === "rule" ? ` · ${(target.matchKinds ?? []).join(",")} · at most ${target.maxRunsPerHour}/h` : ` · ${quiet ? scheduleRhythm(target.cron ?? null, target.timezone ?? null) : `${target.cron} ${target.timezone}`}`}
                     </li>
                   ))}
                 </ul>
@@ -351,7 +354,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
               <ul className="space-y-4" data-testid="workflow-readings">
                 {readingsByTrigger(selected).map(({ node, reading }) => (
                   <li key={node.id}>
-                    <p className="mono text-xs text-muted">{triggerLabel(node)}</p>
+                    <p className="mono text-xs text-muted">{quiet && node.source === "schedule" ? scheduleRhythm(node.cron, node.timezone) : triggerLabel(node)}</p>
                     <p className="text-sm">{reading ? readingSummary(reading) : "Not published yet."}</p>
                     {reading?.drift.length ? (
                       <ul className="mt-2 space-y-1">
@@ -409,8 +412,9 @@ function NodeCard({
   onPatch: (patch: Partial<WorkflowNode>) => void;
   onRemove: () => void;
 }) {
+  const quiet = useQuietSpecialist();
   const label = node.kind === "trigger" ? "Trigger" : node.kind === "filter" ? "Filter" : node.kind === "agent" ? "Who does it" : "Ceiling";
-  const detail = node.kind === "trigger" ? triggerLabel(node) : node.kind === "agent" ? (agents.find((agent) => agent.id === node.agentId)?.name ?? "no agent chosen") : node.kind === "filter" ? "narrowing" : `${node.maxRunsPerHour}/hour`;
+  const detail = node.kind === "trigger" ? (quiet && node.source === "schedule" ? scheduleRhythm(node.cron, node.timezone) : triggerLabel(node)) : node.kind === "agent" ? (agents.find((agent) => agent.id === node.agentId)?.name ?? "no agent chosen") : node.kind === "filter" ? "narrowing" : `${node.maxRunsPerHour}/hour`;
 
   return (
     <article className="border border-line bg-panel p-3" aria-label={`${label}: ${detail}`}>
