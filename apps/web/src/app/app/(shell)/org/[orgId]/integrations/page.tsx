@@ -12,7 +12,11 @@ export const metadata: Metadata = { title: "Integrations" };
 
 export default async function IntegrationsPage(props: Parameters<typeof IntegrationsContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietToolsLoading />}><IntegrationsContent {...props} /></Suspense>;
+    const { orgId } = await props.params;
+    // requireMe reuses the shell's request-cached identity, before slow Tools reads.
+    const me = await requireMe();
+    const orgName = me.memberships.find(m => m.organizationId === orgId)?.name;
+    return <Suspense fallback={<QuietToolsLoading page="organizationConnections" orgId={orgId} orgName={orgName} />}><IntegrationsContent {...props} /></Suspense>;
   }
   return IntegrationsContent(props);
 }

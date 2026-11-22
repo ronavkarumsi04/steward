@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: "Marketplace" };
  */
 export default async function McpPage(props: Parameters<typeof McpContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietToolsLoading />}><McpContent {...props} /></Suspense>;
+    return <Suspense fallback={<QuietToolsLoading page="mcp" />}><McpContent {...props} /></Suspense>;
   }
   return McpContent(props);
 }
@@ -31,7 +31,7 @@ async function McpContent({ params }: { params: Promise<{ companyId: string }> }
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const read = await readTools(() => api.get<McpMarketplaceRead>(`/companies/${companyId}/mcp`));
-    return <QuietToolsFrame title="MCP servers" description="Bring your own tools. Inspect what a server offers, then grant only the access each agent needs." scope="Installed for this company only. Installation does not grant agent access.">
+    return <QuietToolsFrame page="mcp">
       {read.data ? <><ToolsPermission allowed={read.data.canManage} action="install servers and change tool access" /><McpMarketplace quiet companyId={companyId} initial={read.data} /></> : <ToolsReadError error={read.error} subject="MCP servers" href={`/app/c/${companyId}/mcp`} />}
     </QuietToolsFrame>;
   }

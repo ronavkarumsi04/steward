@@ -8,6 +8,7 @@ import { useLiveEvents } from "@/lib/use-events";
 import { useToast } from "./feedback";
 import { Icon } from "./icons";
 import { Ago, Card, Empty, PageHeader, Pill, Spinner } from "./ui";
+import { QuietToolsContext } from "./quiet-tools-context";
 
 /**
  * Watching an agent use a browser.
@@ -161,12 +162,13 @@ export function BrowserWorkspace({ companyId, initial, initialSession, quiet = f
 
   const providerMissing = !initial.available;
   const canStart = initial.canControl && initial.available && !!agentId && url.trim().length > 0 && busy === null;
+  const Header = quiet ? QuietToolsContext : PageHeader;
 
   return (
     <div className="space-y-5">
-      <PageHeader
+      <Header
         eyebrow="Browser"
-        title={quiet ? "Browser" : "Watch an agent use a browser"}
+        title={quiet ? null : "Watch an agent use a browser"}
         description={
           providerMissing
             ? "This deployment has no browser, so nothing here can open a page. The sessions below are still readable."

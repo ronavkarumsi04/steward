@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "Browser" };
  */
 export default async function BrowserPage(props: Parameters<typeof BrowserContent>[0]) {
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
-    return <Suspense fallback={<QuietToolsLoading />}><BrowserContent {...props} /></Suspense>;
+    return <Suspense fallback={<QuietToolsLoading page="browser" />}><BrowserContent {...props} /></Suspense>;
   }
   return BrowserContent(props);
 }
@@ -42,11 +42,11 @@ async function BrowserContent({
   const api = await serverApi();
   if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") {
     const read = await readTools(() => api.get<BrowserWorkspaceRead>(`/companies/${companyId}/browser`));
-    if (!read.data) return <QuietToolsFrame title="Browser" description="Watch agent browser sessions and stop work when needed." scope="This company only."><ToolsReadError error={read.error} subject="Browser" href={`/app/c/${companyId}/browser`} /></QuietToolsFrame>;
+    if (!read.data) return <QuietToolsFrame page="browser"><ToolsReadError error={read.error} subject="Browser" href={`/app/c/${companyId}/browser`} /></QuietToolsFrame>;
     const workspace = read.data;
     const chosen = (wanted && workspace.sessions.some(row => row.id === wanted) ? wanted : null) ?? preferredSession(workspace.sessions)?.id ?? null;
     const detail = chosen ? await readTools(() => api.get<BrowserSessionRead>(`/companies/${companyId}/browser/sessions/${chosen}`)) : null;
-    return <div className="quiet-tools"><ToolsPermission allowed={workspace.canControl} action="start or stop browser sessions" />{detail && !detail.data && <ToolsReadError error={detail.error} subject="Browser session" href={`/app/c/${companyId}/browser`} />}<BrowserWorkspace quiet companyId={companyId} initial={workspace} initialSession={detail?.data ?? null} /></div>;
+    return <QuietToolsFrame page="browser"><ToolsPermission allowed={workspace.canControl} action="start or stop browser sessions" />{detail && !detail.data && <ToolsReadError error={detail.error} subject="Browser session" href={`/app/c/${companyId}/browser`} />}<BrowserWorkspace quiet companyId={companyId} initial={workspace} initialSession={detail?.data ?? null} /></QuietToolsFrame>;
   }
 
   const workspace = await tryApi(() => api.get<BrowserWorkspaceRead>(`/companies/${companyId}/browser`));

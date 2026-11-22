@@ -1,17 +1,30 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ApiError } from "@/lib/api";
-import { QuietOrganizationFrame, QuietPageHeader, type QuietOrganizationSection } from "./quiet-organization";
+import { QuietOrganizationFrame, QuietPageHeader } from "./quiet-organization";
 import "./quiet-tools.css";
 
 export async function readTools<T>(read: () => Promise<T>): Promise<{ data: T; error?: never } | { data?: never; error: unknown }> {
   try { return { data: await read() }; } catch (error) { return { error }; }
 }
 
-export function QuietToolsFrame({ title, description, scope, orgId, active, children, organization = false }: { title: string; description: string; scope: string; orgId?: string; active?: QuietOrganizationSection; organization?: boolean; children: ReactNode }) {
-  if (organization && orgId) return <QuietOrganizationFrame orgId={orgId} title={title} description={description} scope={scope} active={active}><div className="quiet-tools">{children}</div></QuietOrganizationFrame>;
+/** Destination chrome uses only the route and authenticated identity, never Tools reads. */
+const toolsPages = {
+  connections: { title: "Connections", description: "Connect the services your team needs. Every action still follows your approval policies.", scope: "Organization connections are inherited and read-only here." },
+  organizationConnections: { title: "Connections", description: "Connect the services your team needs. Every action still follows your approval policies.", scope: "Shared across this organization’s companies." },
+  providers: { title: "AI providers", description: "Choose the models your companies can use, check their connections and review recorded usage.", scope: "Shared across all companies in this organization. Company model routing stays in company Settings." },
+  mcp: { title: "MCP servers", description: "Bring your own tools. Inspect what a server offers, then grant only the access each agent needs.", scope: "Installed for this company only. Installation does not grant agent access." },
+  browser: { title: "Browser", description: "Watch agent browser sessions and stop work when needed.", scope: "This company only." },
+  code: { title: "Code", description: "Read repositories and propose changes through an agent run.", scope: "This company only." },
+} as const;
+
+type ToolsFrameProps = { page: keyof typeof toolsPages; orgId?: string; orgName?: string; children: ReactNode };
+
+export function QuietToolsFrame({ page, orgId, orgName, children }: ToolsFrameProps) {
+  const { title, description, scope } = toolsPages[page];
+  if (orgId) return <QuietOrganizationFrame orgId={orgId} title={title} description={description} scope={`${orgName ?? "Organization"} · ${scope}`} active={page === "providers" ? "providers" : "integrations"}><div className="quiet-tools">{children}</div></QuietOrganizationFrame>;
   return <div className="quiet-tools">
-    <QuietPageHeader title={title} description={description} scope={scope} scopeType={organization ? "Organization" : "Company"} />
+    <QuietPageHeader title={title} description={description} scope={scope} />
     {children}
   </div>;
 }
@@ -30,6 +43,6 @@ export function ToolsPermission({ allowed, action = "manage connections" }: { al
   return allowed ? null : <p className="quiet-tools-permission">Read-only. An organization owner or admin can {action}.</p>;
 }
 
-export function QuietToolsLoading() {
-  return <div className="quiet-tools" role="status" aria-label="Loading tools"><QuietPageHeader title="Loading tools" description="Reading this workspace’s connections and permissions…" /><div className="quiet-tools-placeholder" aria-hidden="true" /><div className="quiet-tools-placeholder" aria-hidden="true" /></div>;
+export function QuietToolsLoading(props: Omit<ToolsFrameProps, "children">) {
+  return <QuietToolsFrame {...props}><div role="status" aria-label={`Loading ${toolsPages[props.page].title.toLowerCase()}`}><div className="quiet-tools-placeholder" aria-hidden="true" /><div className="quiet-tools-placeholder" aria-hidden="true" /></div></QuietToolsFrame>;
 }
