@@ -19,6 +19,8 @@ export interface CoreConfig {
   /** Public self-registration. When false, only the first user and invited emails can register. */
   allowSignup: boolean;
   requireEmailVerification: boolean;
+  signupTotalCap?: number;
+  signupDailyCap?: number;
 }
 
 function parseKeyMap(value: string | undefined): Record<string, string> {
@@ -57,6 +59,12 @@ export interface CoreContext {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
+  const cap = (key: string) => {
+    const value = env[key]?.trim();
+    if (!value) return undefined;
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(`${key} must be a non-negative integer`);
+    return Number(value);
+  };
   const req = (k: string) => {
     const v = env[k]?.trim();
     if (!v) throw new Error(`Missing required environment variable ${k}`);
@@ -104,6 +112,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
     logLevel: env.LOG_LEVEL,
     allowSignup: parseBoolean(env.ALLOW_SIGNUP, nodeEnv !== "production"),
     requireEmailVerification: parseBoolean(env.REQUIRE_EMAIL_VERIFICATION, false),
+    signupTotalCap: cap("SIGNUP_TOTAL_CAP"),
+    signupDailyCap: cap("SIGNUP_DAILY_CAP"),
   };
 }
 

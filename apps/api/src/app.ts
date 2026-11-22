@@ -6,6 +6,7 @@ import { MemoryError } from "@steward/memory";
 import { TenantError } from "@steward/db";
 import { HttpError, type ApiDeps, type AppEnv } from "./context.js";
 import { csrf, rateLimit, requestId, securityHeaders, session } from "./middleware.js";
+import { registerWaitlistRoutes } from "./routes/waitlist.js";
 import { RouteRegistry, openApiDocument } from "./route.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCompanyRoutes } from "./routes/companies.js";
@@ -103,6 +104,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
   v1.use("*", rateLimit({ capacity: 600, refillPerSec: 10 }));
 
   registerAuthRoutes(v1, registry);
+  registerWaitlistRoutes(v1, registry);
   registerLegalRoutes(v1, registry);
   registerPrivacyRoutes(v1, registry);
   registerCompanyRoutes(v1, registry);
@@ -128,7 +130,7 @@ export function createApp(deps: ApiDeps, bus: EventBus | null) {
     const rid = c.get("requestId");
     if (err instanceof HttpError) return c.json({ error: { code: err.code, message: err.message, details: err.details, requestId: rid } }, err.status);
     if (err instanceof AuthError) {
-      const status = err.code === "invalid_credentials" ? 401 : err.code === "forbidden" || err.code === "owner_invite_requires_provisioning" || err.code === "signup_closed" ? 403 : err.code === "not_found" ? 404 : err.code === "email_taken" ? 409 : 400;
+      const status = err.code === "invalid_credentials" ? 401 : err.code === "forbidden" || err.code === "owner_invite_requires_provisioning" || err.code === "signup_closed" || err.code === "signup_capped" ? 403 : err.code === "not_found" ? 404 : err.code === "email_taken" ? 409 : 400;
       return c.json({ error: { code: err.code, message: err.message, requestId: rid } }, status);
     }
     if (err instanceof TenantError) return c.json({ error: { code: "tenant_scope", message: err.message, requestId: rid } }, 400);
