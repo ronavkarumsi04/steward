@@ -1,4 +1,4 @@
-import { OverclockService, OverclockError } from "@steward/core";
+import { AGENT_TOOL_ALLOWLIST_LIMIT, OverclockService, OverclockError } from "@steward/core";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { AgentKind, CompanyProfile, PolicyRule, ID, OverclockConfig, RoutingPolicy, skillContext } from "@steward/schema";
@@ -110,11 +110,11 @@ export function registerCompanyRoutes(app: Hono<AppEnv>, reg: RouteRegistry) {
     const scope = await companyScope(c, param(c, "companyId"));
     return c.json({ agents: await c.get("deps").services.agents.list(scope), defaultAllowlists: DEFAULT_TOOL_ALLOWLIST });
   });
-  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/agents", tag: "agents", summary: "Create an agent", body: z.object({ kind: AgentKind, name: z.string().min(1).max(120), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), toolAllowlist: z.array(z.string()).max(200).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "post", path: "/companies/:companyId/agents", tag: "agents", summary: "Create an agent", body: z.object({ kind: AgentKind, name: z.string().min(1).max(120), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), toolAllowlist: z.array(z.string()).max(AGENT_TOOL_ALLOWLIST_LIMIT).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "admin");
     return c.json({ agent: await c.get("deps").services.agents.create(scope, body) }, 201);
   });
-  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/agents/:id", tag: "agents", summary: "Update an agent (prompt, tools, routing, budget, enabled)", body: z.object({ name: z.string().min(1).max(120).optional(), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), enabled: z.boolean().optional(), toolAllowlist: z.array(z.string()).max(200).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).nullable().optional() }) }, async (c, { body }) => {
+  defineRoute(app, reg, { method: "patch", path: "/companies/:companyId/agents/:id", tag: "agents", summary: "Update an agent (prompt, tools, routing, budget, enabled)", body: z.object({ name: z.string().min(1).max(120).optional(), description: z.string().max(2000).optional(), systemPrompt: z.string().max(20000).optional(), enabled: z.boolean().optional(), toolAllowlist: z.array(z.string()).max(AGENT_TOOL_ALLOWLIST_LIMIT).optional(), routingPolicy: RoutingPolicy.optional(), maxIterations: z.number().int().min(1).max(200).optional(), budgetUsdPerRun: z.number().min(0).nullable().optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "admin");
     const agent = await c.get("deps").services.agents.update(scope, param(c, "id"), body);
     if (!agent) throw new HttpError(404, "not_found");

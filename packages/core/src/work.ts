@@ -4,6 +4,7 @@ import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type T
 import { canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
 
 export const PROJECT_STATUSES = ["active", "blocked", "complete", "cancelled"] as const;
+export const AGENT_TOOL_ALLOWLIST_LIMIT = 200;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 async function assertScopedProject(db: DbOrTx, scope: TenantScope, projectId?: string | null) {

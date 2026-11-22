@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, unsubscribeToken, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AGENT_TOOL_ALLOWLIST_LIMIT, AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, unsubscribeToken, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -2507,6 +2507,38 @@ describe("mcp marketplace", () => {
     const alias = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install({ slug: "other" }));
     await core.pool.query("UPDATE mcp_servers SET slug='a_b' WHERE id=$1", [alias.body.server.id]);
     expect((await update(["web.*", "mcp.a-b.*", "mcp.a-b.billing.*", legacy])).body.agent.toolAllowlist).toEqual(["web.*"]);
+  }, 60_000);
+
+  d("rejects oversized MCP grant and wildcard revoke results without writing, while allowing the shared limit", async () => {
+    const me = await marketplace();
+    const installed = await me.api.json<{ server: ServerView }>("POST", `/companies/${me.companyId}/mcp`, me.install());
+    const serverId = installed.body.server.id;
+    await me.api.json("POST", `/companies/${me.companyId}/mcp/${serverId}/inspect`, {});
+    await core.pool.query("UPDATE mcp_tools SET tool_name='mcp.ledger.billing.' || name WHERE server_id=$1", [serverId]);
+    const unrelated = Array.from({ length: AGENT_TOOL_ALLOWLIST_LIMIT }, (_, index) => `web.unrecorded_${index}`);
+    const target = "mcp.ledger.billing.lookup_invoice";
+    const agentPath = `/companies/${me.companyId}/agents/${me.agentId}`;
+    const grantPath = `/companies/${me.companyId}/mcp/${serverId}/grant`;
+    const cases = [
+      { toolAllowlist: unrelated, granted: true, toolNames: null },
+      { toolAllowlist: unrelated, granted: true, toolNames: [target] },
+      ...["mcp.ledger.*", "mcp.ledger.billing.*"].map((wildcard) => ({ toolAllowlist: [...unrelated.slice(1), wildcard], granted: false, toolNames: [target] })),
+    ];
+    for (const { toolAllowlist, ...change } of cases) {
+      expect((await me.api.call("PATCH", agentPath, { toolAllowlist })).status).toBe(200);
+      const before = (await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0];
+      const rejected = await me.api.json<{ error: { code: string; message: string } }>("POST", grantPath, { agentId: me.agentId, ...change });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error.code).toBe("tool_allowlist_limit");
+      expect(rejected.body.error.message).toContain(String(AGENT_TOOL_ALLOWLIST_LIMIT));
+      expect((await core.pool.query("SELECT tool_allowlist, updated_at FROM agents WHERE id=$1", [me.agentId])).rows[0]).toEqual(before);
+    }
+    await me.api.call("PATCH", agentPath, { toolAllowlist: [...unrelated.slice(5), "mcp.ledger.billing.*"] });
+    const boundary = await me.api.json<{ agent: { toolAllowlist: string[] } }>("POST", grantPath, { agentId: me.agentId, toolNames: [target], granted: false });
+    expect(boundary.status).toBe(200);
+    expect(boundary.body.agent.toolAllowlist).toHaveLength(AGENT_TOOL_ALLOWLIST_LIMIT);
+    expect(boundary.body.agent.toolAllowlist).not.toContain(target);
+    expect((await me.api.call("PATCH", agentPath, { name: "Still editable", toolAllowlist: boundary.body.agent.toolAllowlist })).status).toBe(200);
   }, 60_000);
 
   d("rewrites legacy nested wildcard grants without widening their scope", async () => {
