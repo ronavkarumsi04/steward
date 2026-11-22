@@ -6,7 +6,7 @@ import s from "@/components/work-order/work-order.module.css";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Steward bills nothing during the hosted beta. Bring your own model keys; every run shows what it cost against the budget you set.",
+    "Steward’s hosted beta has no platform fee. Bring your own model keys; every run shows what it cost against the budget you set.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -47,7 +47,7 @@ const RATES: { id: string; tone?: "canary" | "pink"; name: string; price: string
     unit: "published here first",
     note: "When hosted plans arrive, every beta account hears before anything is charged.",
     lines: [
-      { text: "Steward keeps no card on file in beta. There is nothing to charge." },
+      { text: "The free hosted beta does not require a card." },
       { text: "Model costs stay yours and stay at list price, on every plan.", soon: true },
       { text: "Your documents, decisions and run ledgers leave with you via the API.", soon: true },
     ],
@@ -68,7 +68,7 @@ const CONDITIONS: [string, string][] = [
   ["Budgets are ceilings", "A run that reaches its budget stops and asks. Nothing carries on against a balance."],
   ["Cancel stops", "A cancelled run halts within seconds and its remaining actions are skipped, email included."],
   ["The record is yours", "Documents, decisions and run ledgers are exportable through the API at any time."],
-  ["Nothing is charged automatically", "There is no card on file in beta. Paid plans, when they exist, start only when you choose one."],
+  ["Nothing is charged automatically", "The free hosted beta does not require a card. The assisted pilot is a separate one-time onboarding offer."],
   ["Honest comparison", "Competitor figures on this page come from their public pricing pages and are dated. Tell us if they move."],
 ];
 
@@ -83,7 +83,7 @@ export default async function Pricing() {
             Pay for models. <span>Not for a middleman.</span>
           </h1>
           <p className={s.lede}>
-            Steward bills nothing during the hosted beta. You bring your own provider keys, each run shows what it cost against the budget you set, and the money goes to the provider at their list price.
+            The hosted beta has no platform fee. You bring your own provider keys, each run shows what it cost against the budget you set, and the money goes to the provider at their list price.
           </p>
         </div>
         <div className={s.rates}>
@@ -108,6 +108,9 @@ export default async function Pricing() {
             </article>
           ))}
         </div>
+        <p className={s.ledgerNote}>
+          Looking for hands-on setup? See the separate, invite-only <Link href="/pilot">assisted pilot</Link>.
+        </p>
         <p className={s.ledgerNote}>
           Hollow bullets are commitments about what paid hosting will keep, not features that exist today.{" "}
           {entry.open ? (

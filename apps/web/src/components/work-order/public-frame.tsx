@@ -15,8 +15,8 @@ export async function publicEntry(): Promise<{ href: string; label: string; open
 }
 
 /** The pad's binding and footer around any public page that is not the landing itself. */
-export async function PublicFrame({ current, children }: { current: "pricing" | "compare"; children: ReactNode }) {
-  const entry = await publicEntry();
+export async function PublicFrame({ current, children }: { current: "pricing" | "compare" | "pilot"; children: ReactNode }) {
+  const entry = current === "pilot" ? { href: "/login", label: "Sign in" } : await publicEntry();
   return (
     <Pad className={`paper ${s.home}`}>
       <a className={s.skip} href="#main">

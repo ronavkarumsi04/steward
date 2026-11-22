@@ -171,6 +171,10 @@ the application host. The worker-only manifest deliberately has no socket and ke
 
 `next.config.ts` disables Next's `standalone` output when `VERCEL=1` is present (Vercel produces its own serverless bundle) and keeps it for the Docker image. Security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options`) are set for every route.
 
+**Assisted pilot (`/pilot`):** Leave the web-only `STEWARD_PILOT_PAYMENT_LINK` unset to show the existing signup waitlist instead of checkout. The API must include the waitlist routes and migration for submissions to work. Do not change `ALLOW_SIGNUP` for the pilot.
+
+Before enabling checkout, get founder approval, activate Stripe payouts, publish the approved paid terms, and require acceptance before payment. Set `STEWARD_PILOT_PAYMENT_LINK` to a Stripe-hosted `https://buy.stripe.com/…` Payment Link for the agreed one-time price and redeploy the web app. Use a test link only in an isolated non-production environment. The link is visible to anyone who visits the page once configured: it is not an invitation check. The team verifies invitations and onboards manually; checkout never provisions accounts. Clear the env var and redeploy to hide checkout, and deactivate the link in Stripe to stop checkout from copies of the URL.
+
 ### 2.1 Single-project mode: the API served by the same deployment
 
 If you would rather not run a second host, set `EMBEDDED_API=true` on the Vercel project and the Next

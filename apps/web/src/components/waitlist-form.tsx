@@ -16,7 +16,7 @@ export function WaitlistConfirmation() {
   );
 }
 
-export function WaitlistForm({ state }: { state: "closed" | "capped" }) {
+export function WaitlistForm({ state }: { state: "closed" | "capped" | "pilot" }) {
   const [busy, setBusy] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +40,10 @@ export function WaitlistForm({ state }: { state: "closed" | "capped" }) {
   return (
     <form onSubmit={submit} className="access-card rise-in w-full max-w-md space-y-4 p-6 sm:p-7">
       <div className="access-title">
-        <h1>{state === "closed" ? "Steward is invite-only right now" : "The Steward beta is full"}</h1>
-        <p className="mt-2 text-sm text-muted">Join the waitlist for your own workspace. We&apos;ll invite people as capacity opens up. Already have a team invitation? Use its link instead.</p>
+        <h1>{state === "pilot" ? "Request a pilot invitation" : state === "closed" ? "Steward is invite-only right now" : "The Steward beta is full"}</h1>
+        <p className="mt-2 text-sm text-muted">{state === "pilot"
+          ? "Tell us what you’d like to try in the note below. Joining the Steward waitlist is free and does not guarantee an invitation."
+          : "Join the waitlist for your own workspace. We’ll invite people as capacity opens up. Already have a team invitation? Use its link instead."}</p>
       </div>
       <div>
         <label className="label" htmlFor="email">Email</label>
