@@ -6,6 +6,7 @@ import { getLocale } from "@/lib/server";
 import { t } from "@/lib/i18n";
 import { QuietSpecialistProvider } from "./quiet-specialist-context";
 import { SpecialistRecovery } from "./quiet-specialist-recovery";
+import { PageSkeleton } from "./feedback";
 import "@/app/app/quiet-specialist.css";
 
 export function quietSpecialistEnabled() {
@@ -28,7 +29,7 @@ export async function specialistPage(surface: string, render: () => Promise<Reac
 }
 
 export async function SpecialistLoading() {
-  if (!quietSpecialistEnabled()) return null;
+  if (!quietSpecialistEnabled()) return <PageSkeleton />;
   const locale = await getLocale();
   return <div className="q-specialist q-specialist-loading" role="status" aria-busy="true" aria-label={t(locale, "activity.loading")}><span className="sr-only">{t(locale, "activity.loading")}</span><div /><div /><div /></div>;
 }

@@ -9,6 +9,7 @@ import { FinanceCenter } from "./finance-center";
 import { GrowthPipeline } from "./growth-pipeline";
 import { QuietWorkNavigation } from "./quiet-work-navigation";
 import { WORKSPACE_ROUTES } from "@/lib/workspace-navigation";
+import WorkspaceLoading from "@/app/app/loading";
 import type { GrowthSnapshot } from "@/lib/types";
 
 vi.mock("server-only", () => ({}));
@@ -23,8 +24,23 @@ describe("specialist rollout boundary", () => {
     vi.stubEnv("VERCEL_ENV", "production");
     const original = createElement("p", null, "Existing company view");
     expect(await specialistPage("projects", async () => original)).toBe(original);
-    expect(await SpecialistLoading()).toBeNull();
+    expect(html(await SpecialistLoading())).toBe(html(createElement(WorkspaceLoading)));
     await expect(specialistPage("projects", async () => { throw new ApiError(403, "forbidden", "old error"); })).rejects.toThrow("old error");
+  });
+  it.each([
+    ["projects", () => import("@/app/app/c/[companyId]/projects/loading")],
+    ["chat", () => import("@/app/app/c/[companyId]/chat/loading")],
+    ["activity", () => import("@/app/app/c/[companyId]/activity/loading")],
+    ["workflows", () => import("@/app/app/c/[companyId]/workflows/loading")],
+    ["signals", () => import("@/app/app/c/[companyId]/signals/loading")],
+    ["growth", () => import("@/app/app/c/[companyId]/growth/loading")],
+    ["finance", () => import("@/app/app/c/[companyId]/finance/loading")],
+    ["site", () => import("@/app/app/c/[companyId]/site/loading")],
+  ] as const)("retains the workspace skeleton at the shell-off %s boundary", async (_surface, load) => {
+    vi.stubEnv("STEWARD_WORKSPACE_SHELL", "legacy");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { default: Loading } = await load();
+    expect(html(await Loading())).toBe(html(createElement(WorkspaceLoading)));
   });
   it("only wraps the real result when Quiet is selected", async () => {
     vi.stubEnv("STEWARD_WORKSPACE_SHELL", "quiet");
