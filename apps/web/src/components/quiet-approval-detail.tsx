@@ -15,8 +15,10 @@ import { useLocale } from "./locale-provider";
 import { Icon } from "./icons";
 import { StatusPill } from "./ui";
 
+export type DecisionMember = { userId: string; name: string; email: string };
+
 /** A real request, one review surface, one durable server decision. Delivery and execution stay distinct. */
-export function QuietApprovalDetail({ approval, overview, run }: { approval: Approval; overview: CompanyOverview; run: Run | null }) {
+export function QuietApprovalDetail({ approval, overview, run, members = [] }: { approval: Approval; overview: CompanyOverview; run: Run | null; members?: DecisionMember[] }) {
   const locale = useLocale();
   const c = decisionCopy(locale);
   const router = useRouter();
@@ -119,12 +121,14 @@ export function QuietApprovalDetail({ approval, overview, run }: { approval: App
   const statusText = state.status === "pending" ? open ? c.pending : c.expiredStatus : state.status === "expired" ? c.expiredStatus : c[state.status];
   const terminalRunMessage = run?.status === "failed" ? c.executionFailed : run?.status === "succeeded" ? c.executionSucceeded : run?.status === "cancelled" ? c.executionCancelled : null;
   const decided = !pending;
+  const decider = members.find((member) => member.userId === state.resolvedBy);
+  const deciderLabel = decider ? `${decider.name} (${decider.email})` : state.resolvedBy ? c.memberUnavailable : c.notRecorded;
   return <div className="q-decision-page">
     <Link href={`/app/c/${companyId}/approvals`} className="q-link"><Icon.ChevronRight size={14} className="rotate-180" />{c.back}</Link>
     <header className="q-page-heading" style={{ marginTop: 24 }}><div><h1 ref={heading} tabIndex={-1}>{state.action}</h1><p>{c.approvalsIntro}</p></div><span className={`pill ${pending ? "pill-warn" : ""}`}>{statusText}</span></header>
     {(decided || error || !canDecide || !open) && <section className="q-outcome" aria-labelledby="q-outcome-heading">
       <h2 id="q-outcome-heading" ref={outcome} tabIndex={-1}>{decided ? `${c.recorded} · ${statusText}` : c.review}</h2>
-      {decided && <><p>{c.outcome}</p><dl className="q-facts"><div><dt>{c.by}</dt><dd>{state.resolvedBy ?? c.notRecorded}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
+      {decided && <><p>{c.outcome}</p><dl className="q-facts"><div><dt>{c.by}</dt><dd>{deciderLabel}{state.resolvedBy && <details><summary>{c.auditUserId}</summary>{state.resolvedBy}</details>}</dd></div><div><dt>{c.at}</dt><dd>{state.resolvedAt ? <time dateTime={state.resolvedAt}>{date(state.resolvedAt)}</time> : c.notRecorded}</dd></div></dl>
         {typeof state.resolution?.note === "string" && state.resolution.note && <p>{state.resolution.note}</p>}
         <p role="status">{state.signalDelivered === false ? c.deliveryFailed : state.signalDelivered === true ? c.delivered : state.workflowId === null ? c.recordOnly : c.deliveryUnknown}</p>
         <Link className="q-link" href={`/app/c/${companyId}/approvals?status=history`}>{c.history}</Link></>}

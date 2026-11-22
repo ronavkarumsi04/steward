@@ -41,6 +41,13 @@ describe("Quiet decision surfaces", () => {
     expect(html).toContain("Decision history");
     expect(html).not.toContain('data-persistent="true"');
   });
+  it("identifies the decider from real member data and keeps a truthful fallback when unavailable", () => {
+    const decided = { ...approval, status: "approved" as const, resolvedBy: "user-1" };
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: decided, overview, run: null, members: [{ userId: "user-1", name: "Test reviewer", email: "reviewer@example.test" }] }));
+    expect(html).toContain("Test reviewer (reviewer@example.test)");
+    const missing = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: decided, overview, run: null }));
+    expect(missing).toContain("Member name not available");
+  });
   it("keeps work and decisions visible when the provider ledger fails, without inventing spend", async () => {
     const get = vi.fn(async (path: string) => {
       if (path.includes("providers/usage")) throw new Error("offline");
