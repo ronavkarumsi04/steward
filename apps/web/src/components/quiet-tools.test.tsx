@@ -71,7 +71,7 @@ describe("Quiet providers and safe failures", () => {
   it("does not invent zero spend for an empty ledger or redisplay credentials/errors", () => {
     const provider = { id: "provider", label: "Test provider", providerType: "openai", secretLast4: "S3CR", authMethod: "api_key", status: "error", enabled: true, priority: 100, lastError: "SECRET_ERROR" } as ProviderCredential;
     const output = html(createElement(ProvidersPanel, { quiet: true, orgId: "org", providers: [provider], types: [], models: [], usage: [], devices: [], isAdmin: false }));
-    expect(output).toContain("Not available");
+    expect(output).toContain("Usage · last 30 days · Cost: Not available");
     expect(output).toContain("Credential stored");
     for (const forbidden of ["$0.0000", "S3CR", "SECRET_ERROR", "Add and test"]) expect(output).not.toContain(forbidden);
   });
@@ -84,7 +84,7 @@ describe("Quiet providers and safe failures", () => {
     const output = html(await QuietProviders({ api: { get } as never, orgId: "org", membership: { organizationId: "org", name: "Test org", slug: "test", role: "viewer" }, serverUrl: "http://localhost:3000/api" }));
     expect(output).toContain("Configured providers");
     expect(output).toContain("Read-only");
-    expect(output).toContain("Usage · last 30 days · Not available");
+    expect(output).toContain("Usage · last 30 days · Cost: Not available");
     expect(output).not.toContain("No AI calls recorded yet");
     expect(output).not.toContain("SECRET_FAILURE");
   });

@@ -163,7 +163,7 @@ export function ProvidersPanel({ orgId, types, providers, models, usage, devices
         )}
       </Card>
 
-      <Card title={quiet && (!usageAvailable || usage.length === 0) ? "Usage · last 30 days · Not available" : `Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`} className="nb-left-orange">
+      <Card title={quiet && (!usageAvailable || usage.length === 0) ? "Usage · last 30 days · Cost: Not available" : `Usage · last 30 days · ${usd(totalCost)} · ${totalCalls} calls`} className="nb-left-orange">
         {!usageAvailable ? <p className="text-muted">Usage could not be read. No spend is inferred from missing data.</p> : usage.length === 0 ? <Empty>No AI calls recorded yet.</Empty> : (
           <div className={quiet ? "quiet-tools-table" : undefined}><table className="w-full text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">Provider</th><th>Model</th><th>Calls</th><th>Errors</th><th>Tokens in / out</th><th>Cost</th></tr></thead>
