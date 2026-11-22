@@ -64,10 +64,10 @@
 .q-error { color: var(--danger); margin-block: 16px; }
 @media (max-width: 1199px) { .q-overview-grid, .q-detail-grid { gap: 28px; grid-template-columns: minmax(0, 1fr) 250px; } }
 @media (max-width: 1023px) {
-  .quiet-content { padding-bottom: calc(var(--quiet-nav-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
-  html:has(.quiet-workspace) { scroll-padding-bottom: calc(var(--quiet-nav-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
-  .quiet-content :is(a, button, input, textarea, summary, [tabindex]) { scroll-margin-bottom: calc(var(--quiet-nav-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
-  .q-actions[data-persistent="true"] { position: fixed; z-index: calc(var(--z-nav) + 1); bottom: var(--quiet-nav-height, 77px); inset-inline: 0; padding: 12px 16px; border-top-color: var(--control-border); }
+  .quiet-content { padding-bottom: calc(var(--workspace-bottom-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
+  html:has(.quiet-workspace) { scroll-padding-bottom: calc(var(--workspace-bottom-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
+  .quiet-content :is(a, button, input, textarea, summary, [tabindex]) { scroll-margin-bottom: calc(var(--workspace-bottom-height, 77px) + var(--quiet-action-height, 0px) + 28px); }
+  .q-actions[data-persistent="true"] { position: fixed; z-index: calc(var(--z-nav) + 1); bottom: var(--workspace-bottom-height, 77px); inset-inline: 0; padding: 12px 16px; border-top-color: var(--control-border); }
   .q-actions[data-persistent="true"] .q-action-buttons { display: grid; grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 767px) {

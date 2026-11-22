@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 import { AgentRuntime, AgentServiceFactory, buildToolRegistry, registryWithMcpTools } from "@steward/agents";
 import { BrowserAction } from "@steward/browser";
-import { AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
+import { AuthService, OrganizationService, PrivacyService, SignupService, createCoreContext, internalServiceToken, loadConfig, unsubscribeToken, type CoreContext, type MailMessage, type Mailer } from "@steward/core";
 import { runMigrations } from "@steward/db";
 import { SUITE } from "@steward/evals";
 import { REQUIRED_AGREEMENTS, REQUIRED_VERSIONS } from "@steward/legal";
@@ -473,6 +473,53 @@ function fakeTemporal(): WorkflowClient {
   };
   return double as WorkflowClient;
 }
+
+describe("messaging consent", () => {
+  async function recipient() {
+    const { api, orgId } = await register();
+    const company = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Consent Co" });
+    expect(company.status).toBe(201);
+    return { organizationId: orgId, companyId: company.body.company.id, channel: "email" as const, address: "Recipient@example.com" };
+  }
+
+  d("unsubscribes via a signed link, revokes mixed-case consent and handles a repeat click", async () => {
+    const input = await recipient();
+    const { organizationId, companyId, channel, address } = input;
+    const { rows: [contact] } = await core.pool.query<{ id: string }>(
+      "insert into contacts (organization_id, company_id, email) values ($1, $2, $3) returning id",
+      [organizationId, companyId, address],
+    );
+    await core.pool.query(
+      "insert into messaging_consents (organization_id, company_id, channel, address, status, source, granted_at) values ($1, $2, $3, $4, 'granted', 'api', now())",
+      [organizationId, companyId, channel, address],
+    );
+
+    const lowerAddress = address.toLowerCase();
+    const token = unsubscribeToken(core.config.masterKey, { ...input, address: lowerAddress });
+    const anon = client();
+    for (let click = 0; click < 2; click++) {
+      expect(await anon.json("POST", "/unsubscribe", { token }, { origin: ENV.APP_URL! })).toMatchObject({
+        status: 200,
+        body: { ok: true, channel, address: lowerAddress },
+      });
+    }
+    expect((await core.pool.query("select address from suppression_list where company_id=$1 and channel=$2", [companyId, channel])).rows)
+      .toEqual([{ address: lowerAddress }]);
+    expect((await core.pool.query("select opted_out_at from contacts where id=$1", [contact!.id])).rows[0])
+      .toEqual({ opted_out_at: expect.any(Date) });
+    expect((await core.pool.query("select address, status, revoked_at from messaging_consents where company_id=$1 and channel=$2", [companyId, channel])).rows)
+      .toEqual([{ address, status: "revoked", revoked_at: expect.any(Date) }]);
+  });
+
+  d("grants messaging consent again for the same address with different casing", async () => {
+    const input = await recipient();
+    const privacy = new PrivacyService(core.db);
+    const first = await privacy.grantConsent({ ...input, evidence: "First opt-in", source: "api" });
+    const second = await privacy.grantConsent({ ...input, address: input.address.toLowerCase(), evidence: "New opt-in", source: "web" });
+    expect(second).toMatchObject({ ...input, id: first.id, status: "granted", evidence: "New opt-in", source: "web", grantedAt: expect.any(Date), revokedAt: null });
+    expect(await privacy.listConsents(input.organizationId)).toEqual([second]);
+  });
+});
 
 describe("auth + sessions", () => {
   d("registration requires accepting the current legal documents, and records what was accepted", async () => {
