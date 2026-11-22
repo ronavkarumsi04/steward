@@ -73,3 +73,28 @@ test("on a phone the order reads top to bottom with the entry action and no side
   await networkSettled(page);
   expect(errors).toEqual([]);
 });
+
+test("public navigation and the entry form remain reachable without script at all three widths", async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, javaScriptEnabled: false });
+  const page = await context.newPage();
+  const errors = watchErrors(page, { expect: [{ method: "GET", path: /^\/_next\/static\/.*\.js$/, reason: "csp" }] });
+  try {
+    await page.goto("/");
+    for (const width of [375, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const nav = page.getByRole("navigation", { name: "Primary" });
+      for (const name of ["Pricing", "Compare"]) {
+        const link = nav.getByRole("link", { name, exact: true });
+        await expect(link).toBeInViewport();
+        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+      await expect(page.locator("#hero-email")).toBeInViewport();
+      await expect(page.getByRole("figure", { name: /example work order/i })).toBeVisible();
+      expect(await overflow(page)).toBe(0);
+    }
+    await networkSettled(page);
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});

@@ -14,5 +14,5 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
     api.get<{ agents: Agent[] }>(`/companies/${companyId}/agents`),
   ]);
   if (!data) notFound();
-  return <ChatView companyId={companyId} conversation={data.conversation} initialMessages={data.messages} agents={agents} />;
+  return <ChatView key={conversationId} companyId={companyId} conversation={data.conversation} initialMessages={data.messages} agents={agents} />;
 }

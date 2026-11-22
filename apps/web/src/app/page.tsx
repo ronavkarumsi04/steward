@@ -4,7 +4,8 @@ import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { getMeOptional, getAuthConfig } from "@/lib/server";
 import { landingArrival } from "@/lib/arrivals";
-import { StewardMark } from "@/components/brand";
+import { Masthead } from "@/components/work-order/masthead";
+import { OrderSpecimen } from "@/components/work-order/order-specimen";
 import { Icon } from "@/components/icons";
 import { Pad } from "@/components/work-order/pad";
 import { EntryForm } from "@/components/work-order/entry-form";
@@ -18,12 +19,6 @@ export const metadata: Metadata = {
 
 const ARRIVAL = landingArrival();
 const delay = (step: number) => ({ "--enter-delay": `${ARRIVAL.delayMs(step)}ms` }) as CSSProperties;
-
-const PLAN = [
-  ["Reproduce the rounding error on staging", "Done"],
-  ["Patch the cart total and add a regression test", "Done"],
-  ["Ship the fix", "Approved by you, 14:02"],
-] as const;
 
 const COPIES = [
   {
@@ -103,112 +98,25 @@ export default async function Landing() {
       <a className={s.skip} href="#main">
         Skip to content
       </a>
-      <header className={s.binding}>
-        <nav className={s.bindingInner} aria-label="Primary">
-          <Link href="/" className={s.brand} aria-label="Steward home">
-            <StewardMark size={22} /> Steward
-          </Link>
-          <div className={s.navLinks}>
-            <a href="#how">How it works</a>
-            <a href="#workspace">The workspace</a>
-            <a href="#conditions">Conditions</a>
-            <Link href="/pricing">Pricing</Link>
-            <Link href="/compare">Compare</Link>
-          </div>
-          <div className={s.navActions}>
-            <Link href="/login" className={s.navSignIn}>
-              Sign in
-            </Link>
-            {open ? (
-              <Link href="/register" className={s.navCta}>
-                Create your company
-              </Link>
-            ) : (
-              <Link href="/login" className={s.navCta}>
-                Enter workspace
-              </Link>
-            )}
-          </div>
-        </nav>
-      </header>
+      <Masthead current="home" href={entry} label={entryLabel} />
 
       <main id="main" className={s.pad}>
-        <section className={`${s.set} rise-in`} aria-labelledby="hero-title" data-hero>
-          <div className={s.sheet}>
-            <aside className={s.stub} aria-label="Order details">
-              <p>
-                <span className={s.fieldLabel}>No.</span>
-                <span className={s.serial}>000412</span>
-              </p>
-              <p>
-                <span className={s.fieldLabel}>Filed</span>
-                <span className={s.carbon}>Oct 29</span>
-              </p>
-              <ul className={s.copyKey}>
-                <li data-copy="work">White · the work</li>
-                <li data-copy="approval">Canary · the approval</li>
-                <li data-copy="record">Pink · the record</li>
-              </ul>
-              <StewardMark size={40} className={s.stubMark} />
-            </aside>
-            <div className={s.perf} aria-hidden="true" />
-            <div className={s.body}>
-              <div className={s.formHead}>
-                <span>Work order</span>
-                <span>Form STW-1 · An operating system for AI-run companies</span>
-              </div>
-              <h1 id="hero-title" className={`${s.h1} rise-in`} style={delay(1)}>
-                Agents do the work. <span>You keep the record.</span>
-              </h1>
-              <p className={`${s.lede} rise-in`} style={delay(2)}>
-                Steward runs your company’s engineering, marketing, sales and operations with AI agents. Every task becomes a work order: planned, budgeted, approved by you and filed with its evidence.
-              </p>
-              <div className={s.fieldsWrap}>
-                <dl className={s.fields}>
-                  <div className={`${s.field} ${s.span3}`}>
-                    <dt className={s.fieldLabel}>Instruction</dt>
-                    <dd className={s.carbon}>Fix the checkout bug before Friday’s launch, then tell me what changed.</dd>
-                  </div>
-                  <div className={s.field}>
-                    <dt className={s.fieldLabel}>Assigned to</dt>
-                    <dd className={s.carbon}>Engineering agent</dd>
-                  </div>
-                  <div className={`${s.field} ${s.span2} ${s.planField}`}>
-                    <dt className={s.fieldLabel}>Plan</dt>
-                    <dd>
-                      <ol className={s.plan}>
-                        {PLAN.map(([step, status]) => (
-                          <li key={step}>
-                            <span className={s.carbon}>{step}</span>
-                            <span className={s.status}>{status}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </dd>
-                  </div>
-                  <div className={s.field}>
-                    <dt className={s.fieldLabel}>Evidence</dt>
-                    <dd className={s.carbon}>6 model calls, 3 tool calls, 1 browser trace</dd>
-                  </div>
-                  <div className={s.field}>
-                    <dt className={s.fieldLabel}>Cost</dt>
-                    <dd className={s.carbon}>$0.41 of a $5.00 budget</dd>
-                  </div>
-                </dl>
-                <div className={s.stamp} aria-hidden="true">
-                  <strong>Approved</strong>
-                  <span>Oct 29 · by you</span>
-                </div>
-              </div>
-              <EntryForm id="hero-email" action={entry} label={entryLabel} note={entryNote} />
-              <p className={s.footnote}>Illustration of a Steward work order, not a live run. In the product, every step is recorded.</p>
-            </div>
+        <section className={s.spread} aria-labelledby="hero-title" data-hero>
+          <div className={s.leadColumn}>
+            <h1 id="hero-title" className={`${s.h1} rise-in`}>
+              Agents do the work. <span>You keep the record.</span>
+            </h1>
+            <p className={s.lede}>
+              Give AI agents a job, a budget and rules for when to ask you. Get back the work and a record of every step.
+            </p>
+            <EntryForm id="hero-email" action={entry} label={entryLabel} note={entryNote} />
           </div>
+          <div className="rise-in" style={delay(1)}><OrderSpecimen /></div>
         </section>
 
         <section id="how" className={s.leaf} aria-labelledby="how-title">
           <div className={s.leafHead}>
-            <p className={s.kicker}>How a work order moves</p>
+
             <h2 id="how-title" className={s.h2}>
               Written once. <span>Filed three times.</span>
             </h2>
@@ -254,7 +162,7 @@ export default async function Landing() {
 
         <section id="workspace" className={s.leaf} aria-labelledby="workspace-title">
           <div className={s.leafHead}>
-            <p className={s.kicker}>The order book</p>
+
             <h2 id="workspace-title" className={s.h2}>
               One workspace. <span>Every desk on it.</span>
             </h2>
@@ -284,7 +192,7 @@ export default async function Landing() {
 
         <section id="conditions" className={s.leaf} aria-labelledby="conditions-title">
           <div className={s.leafHead}>
-            <p className={s.kicker}>Printed on the back of every order</p>
+
             <h2 id="conditions-title" className={s.h2}>
               Conditions. <span>Not fine print.</span>
             </h2>

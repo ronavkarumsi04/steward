@@ -6,7 +6,7 @@ export function EntryForm({ id, action, label, note }: { id: string; action: str
   return (
     <form action={action} method="get" className={s.sign}>
       <label htmlFor={id} className={s.fieldLabel}>
-        Authorised by
+        Work email
       </label>
       <div className={s.signRow}>
         <input id={id} name="email" type="email" autoComplete="email" required placeholder="you@yourcompany.com" className={s.signInput} aria-describedby={`${id}-note`} />

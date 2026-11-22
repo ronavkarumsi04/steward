@@ -1,0 +1,70 @@
+@layer components {
+  .company-register, .run-register {
+    min-width: 0;
+    background: var(--panel);
+    border-block: var(--edge) solid var(--line);
+  }
+  .company-register > li + li, .run-register > li + li { border-top: var(--edge) solid var(--line); }
+  .company-entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 12px 20px;
+    align-items: center;
+    padding: 20px 16px;
+    transition: background-color var(--dur-micro) var(--ease-house);
+  }
+  .company-entry:hover { background: var(--panel-2); }
+  .company-entry h3 { font-size: 1.2rem; overflow-wrap: anywhere; }
+  .company-id { display: grid; place-items: center; width: 40px; height: 40px; background: var(--panel-2); border: var(--edge) solid var(--line); }
+  .company-open, .run-intent { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); }
+  .company-open { font-size: .875rem; font-weight: 600; }
+  .run-register > li { padding: 16px; }
+  .run-intent {
+    width: 100%;
+    min-height: var(--control-target);
+    justify-content: space-between;
+    font-size: 1.05rem;
+    font-weight: 650;
+  }
+  .run-intent span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+  .run-intent svg { flex: none; }
+  .run-register details { margin-top: 8px; }
+  .run-register summary { width: fit-content; padding: 12px 8px; min-height: var(--control-target); color: var(--muted); cursor: pointer; font-size: .875rem; }
+  .run-register summary:focus-visible { outline-offset: -3px; }
+  .run-register details[open] dl { padding: 8px; }
+  .run-register dt { color: var(--muted); }
+  .chat-spread { display: grid; gap: 16px; }
+  .chat-directory { display: flex; flex-direction: column; gap: 12px; padding: 8px; height: 100%; }
+  .chat-history-link { display: block; padding: 8px 12px; margin: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: var(--radius-sm); }
+  .chat-history-link:hover { background: var(--panel-2); }
+  .chat-history-link[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+  .chat-starters, .chat-transcript {
+    display: flex;
+    flex-direction: column;
+    padding: clamp(16px, 3vw, 40px);
+    border: var(--edge) solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+  }
+  .chat-starters { justify-content: center; gap: 24px; min-height: 60svh; }
+  .chat-starters .desk-title { max-width: 20ch; }
+  .chat-transcript { height: clamp(32rem, 72dvh, 60rem); }
+  .chat-transcript textarea { max-height: 25dvh; }
+  @media (min-width: 64rem) {
+    .chat-spread {
+      grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+      height: max(36rem, calc(100dvh - var(--workspace-header-height, 64px) - 48px));
+    }
+    .chat-directory { border-right: var(--edge) solid var(--line); }
+    .chat-starters, .chat-transcript { height: 100%; min-height: 0; }
+    .chat-starters { overflow-y: auto; justify-content: safe center; }
+  }
+  @media (max-width: 63.99rem) {
+    #chat-history { max-height: 36svh; }
+  }
+  @media (max-width: 40rem) {
+    .company-entry { grid-template-columns: minmax(0, 1fr) auto; }
+    .company-id { display: none; }
+    .company-open { grid-column: 1 / -1; }
+  }
+}

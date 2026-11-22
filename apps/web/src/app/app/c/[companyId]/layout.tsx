@@ -24,9 +24,10 @@ export default async function CompanyLayout({ children, params }: { children: Re
   const { company, pendingApprovals } = overview;
   return (
     <div className="flex min-h-screen flex-col">
+      <a href="#workspace-content" className="workspace-skip">{t(locale, "shell.skipContent")}</a>
       <TopNav me={me} orgId={company.organizationId} />
-      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-4 sm:px-5 md:flex-row md:gap-6 md:py-6">
-        <aside aria-label={t(locale, "shell.companyNav")} className="relative z-[var(--z-sidebar)] md:sticky md:top-[4.25rem] md:w-[248px] md:shrink-0 md:self-start">
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col gap-4 px-3 py-4 sm:px-5 lg:flex-row lg:gap-6 lg:py-6">
+        <aside aria-label={t(locale, "shell.companyNav")} className="relative z-[var(--z-sidebar)] lg:sticky workspace-rail lg:w-[224px] lg:shrink-0 lg:self-start">
           <div className="nb-sidebar-shell rounded-xl border border-line p-2">
             <Link href={`/app/c/${company.id}`} className="flex items-center gap-3 border border-line bg-panel p-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-line bg-accent-soft text-fg">
@@ -39,7 +40,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
                 </span>
               </span>
             </Link>
-            <div className="mt-3 flex flex-wrap items-center gap-2 border border-line bg-panel-2 p-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2 px-2 py-1">
               <StatusPill status={company.status} label={t(locale, `status.${company.status}` as MessageKey)} />
               <Pill title={tf(locale, "shell.autonomyLevel", { n: company.autonomyLevel })}>L{company.autonomyLevel}</Pill>
               {company.outboundPaused && <Pill tone="warn">{t(locale, "shell.outboundPaused")}</Pill>}
@@ -49,7 +50,7 @@ export default async function CompanyLayout({ children, params }: { children: Re
             <CompanySidebar companyId={company.id} pendingApprovals={pendingApprovals} activeRuns={active?.runs.length ?? 0} />
           </div>
         </aside>
-        <main className="min-w-0 flex-1 rise-in">{children}</main>
+        <main id="workspace-content" tabIndex={-1} className="min-w-0 flex-1 rise-in">{children}</main>
       </div>
     </div>
   );
