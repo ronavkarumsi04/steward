@@ -4,6 +4,8 @@ import { t } from "@/lib/i18n";
 import type { Artifact, Decision, Document, Memory, Project } from "@/lib/types";
 import { KnowledgePanel } from "@/components/knowledge";
 import { PageHeader } from "@/components/ui";
+import { QuietKnowledge } from "@/components/quiet-knowledge";
+import { workspaceShell } from "@/lib/workspace-theme";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: t(await getLocale(), "knowledge.title") };
@@ -14,6 +16,7 @@ export default async function KnowledgePage({ params, searchParams }: { params: 
   const { companyId } = await params;
   const { tab } = await searchParams;
   const api = await serverApi();
+  if (workspaceShell(process.env.STEWARD_WORKSPACE_SHELL, process.env.VERCEL_ENV) === "quiet") return <QuietKnowledge companyId={companyId} api={api} locale={locale} tab={tab} />;
   const [{ documents }, { decisions }, { memories, pending, canManage }, { artifacts }, { projects }, { role }] = await Promise.all([
     api.get<{ documents: Document[] }>(`/companies/${companyId}/documents`),
     api.get<{ decisions: Decision[] }>(`/companies/${companyId}/decisions?limit=100`),

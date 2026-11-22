@@ -53,7 +53,7 @@ function WorkspaceMenu({ me, orgId, companyId, label, children }: { me: Me; orgI
       </nav>
       {destinations.some((d) => d.scope) && <>
         <h3>{t("quiet.organization")} · {destinations.find((d) => d.scope)?.scope}</h3>
-        <nav aria-label={t("shell.orgNav")}>{destinations.filter((d) => d.scope).map((d) => <Link key={d.href} href={d.href} className="nav-item" aria-current={path === d.href ? "page" : undefined}>{t(d.label)}</Link>)}</nav>
+        <nav aria-label={t("shell.orgNav")}>{destinations.filter((d) => d.scope).map((d) => <Link key={d.href} href={d.href} className="nav-item" aria-current={path === d.href ? "page" : undefined}>{t(d.label === "top.privacy" ? "quiet.privacy" : d.label)}</Link>)}</nav>
       </>}
       <button type="button" className="btn quiet-logout" disabled={busy} onClick={logout}>{t("top.signOut")}</button>
     </dialog>
@@ -151,7 +151,8 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
         <div className="quiet-context-name">{company.name} <span aria-hidden="true">/</span> {t(PRIMARY.find((p) => p[0] === group)?.[2] ?? "nav.settings")}</div>
         <CompanyCommandPalette key={company.id} companyId={company.id} quiet destinations={workspaceDestinations(me, company.organizationId)} />
       </div>
-      {subroutes.length > 1 && <div className="quiet-subnav">
+      {/* Knowledge owns one collection nav, including Connections, inside its pages. */}
+      {group !== "knowledge" && subroutes.length > 1 && <div className="quiet-subnav">
         {([undefined, "automation", "business"] as const).map((section) => {
           const routes = subroutes.filter((route) => route.section === section);
           if (!routes.length) return null;
@@ -164,7 +165,7 @@ export function CompanyWorkspace({ company, me, pendingApprovals, children }: { 
       </div>}
       {organizationLinks.length > 0 && <nav className="quiet-tabs quiet-organization" aria-label={t("quiet.organization")}>
         <span className="quiet-tab-label">{t("quiet.organization")} · {organizationLinks[0]?.scope}</span>
-        {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label)}</Link>)}
+          {organizationLinks.map((destination) => <Link key={destination.href} href={destination.href}>{t(destination.label === "top.privacy" ? "quiet.privacy" : destination.label)}</Link>)}
       </nav>}
       <main ref={content} id="workspace-content" tabIndex={-1} className="quiet-content">{children}</main>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>

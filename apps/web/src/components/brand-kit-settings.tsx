@@ -73,7 +73,7 @@ export function BrandPreview({ kit, name }: { kit: BrandKit; name: string }) {
   );
 }
 
-export function BrandKitSettings({ company, profile }: { company: Company; profile: CompanyProfile | null }) {
+export function BrandKitSettings({ company, profile, quiet = false }: { company: Company; profile: CompanyProfile | null; quiet?: boolean }) {
   const t = useT();
   const tf = useTf();
   const router = useRouter();
@@ -114,7 +114,7 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
   }
 
   return (
-    <form onSubmit={save} className="card nb-left-purple space-y-4" aria-labelledby="brand-kit-heading">
+    <form onSubmit={save} className={quiet ? "card space-y-4" : "card nb-left-purple space-y-4"} aria-labelledby="brand-kit-heading">
       <div>
         <h2 id="brand-kit-heading" className="font-semibold">{t("brand.title")}</h2>
         <p className="text-sm text-muted">
@@ -198,7 +198,8 @@ export function BrandKitSettings({ company, profile }: { company: Company; profi
           </div>
         </div>
         <div className="space-y-2">
-          <span className="label">{t("brand.preview")}</span>
+          <span className="label">{quiet ? tf("brand.sitePreview", { scheme: kit.dark ? t("brand.dark") : t("brand.light") }) : t("brand.preview")}</span>
+          {quiet && <p className="text-sm text-muted">{t("brand.sitePreviewHelp")}</p>}
           <BrandPreview kit={kit} name={name} />
         </div>
       </div>

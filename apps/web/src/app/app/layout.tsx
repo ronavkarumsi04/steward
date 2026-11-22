@@ -5,6 +5,7 @@ import { workspaceShell } from "@/lib/workspace-theme";
 import "./quiet-workspace.css";
 import "./quiet-decision.css";
 import "./quiet-work.css";
+import "./quiet-depth.css";
 import { Manrope } from "next/font/google";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });

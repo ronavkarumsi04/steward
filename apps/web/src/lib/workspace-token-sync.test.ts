@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 // Same canonical file as the research handoff, not another app-specific palette.
 const spec = JSON.parse(readFileSync(new URL("../../../../docs/research/steward-redesign/tokens.json", import.meta.url), "utf8"));
 const css = readFileSync(new URL("../app/app/quiet-workspace.css", import.meta.url), "utf8");
-const blocks = [...css.matchAll(/\.quiet-workspace\s*\{([^}]+)\}/g)].slice(0, 3).map((match) =>
+// A palette may share a selector list with the root canvas; ignore layout-only rules.
+const blocks = [...css.matchAll(/\.quiet-workspace[^{}]*\{([^}]+)\}/g)].map((match) =>
   Object.fromEntries([...match[1]!.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((token) => [token[1], token[2]])),
-);
+).filter((tokens) => tokens.bg);
 const mapping = {
   bg: "canvas", "bg-tint": "rail", panel: "canvas", "panel-2": "surface", "panel-3": "surfaceRaised",
   rail: "rail", fg: "ink", "fg-2": "muted", muted: "muted", faint: "muted", line: "border",

@@ -12,36 +12,41 @@ function errorText(err: unknown) {
 }
 
 /** Optional marketing email, separate from the contractual clickwrap and withdrawable at any time. */
-export function MarketingConsentToggle({ optedIn }: { optedIn: boolean }) {
+export function MarketingConsentToggle({ optedIn, quiet = false }: { optedIn: boolean; quiet?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const t = useT();
   const [on, setOn] = useState(optedIn);
   const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<{ error: boolean; text: string } | null>(null);
 
   async function toggle(next: boolean) {
     setBusy(true);
     setOn(next);
+    setOutcome(null);
     try {
       await browserApi.post("/privacy/marketing-consent", { optedIn: next });
-      toast("ok", next ? "You are subscribed to product news." : "You have been unsubscribed from product news.");
+      const text = next ? "You are subscribed to product news." : "You have been unsubscribed from product news.";
+      if (quiet) setOutcome({ error: false, text });
+      else toast("ok", text);
       router.refresh();
     } catch (err) {
       setOn(!next);
-      toast("err", errorText(err));
+      if (quiet) setOutcome({ error: true, text: errorText(err) });
+      else toast("err", errorText(err));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <label className="flex items-start gap-3 text-sm">
+    <div><label className="flex items-start gap-3 text-sm">
       <input type="checkbox" className="mt-1 size-4 shrink-0 accent-accent" checked={on} disabled={busy} onChange={(e) => void toggle(e.target.checked)} />
       <span>
         <span className="font-medium">{t("privacy.marketing")}</span>
         <span className="mt-1 block text-muted">{t("privacy.marketingHelp")}</span>
       </span>
-    </label>
+    </label>{quiet && outcome && <p role={outcome.error ? "alert" : "status"} className={`mt-3 text-sm ${outcome.error ? "text-danger" : "text-ok"}`}>{outcome.text}</p>}</div>
   );
 }
 
