@@ -50,7 +50,8 @@
 [data-public-design="quiet"] .public-family :is(.text-xs, .pill, .label, .hint, .help, .eyebrow) { font-size: max(12px, .75rem); }
 [data-public-design="quiet"] .public-family :is(.text-sm, p.text-xs, .text-xs p, .text-xs li) { font-size: max(14px, .875rem); }
 [data-public-design="quiet"] .public-family :is(p.hint, p.help, p.public-access-note) { font-size: max(14px, .875rem); }
-[data-public-design="quiet"] .public-family :is(.btn, .input, select, textarea) { border-radius: 8px; min-height: 44px; font-size: max(14px, .875rem); font-stretch: normal; white-space: normal; }
+[data-public-design="quiet"] .public-family :is(.btn, .input, select, textarea) { border-radius: 8px; min-height: 44px; min-width: 0; max-width: 100%; font-size: max(14px, .875rem); font-stretch: normal; white-space: normal; }
+[data-public-design="quiet"] .public-family .pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 [data-public-design="quiet"] .public-family :is(.btn:not(.btn-primary):not(.btn-danger), .input, select, textarea) { border-color: var(--control-border); }
 [data-public-design="quiet"] .public-family :is(input, .input, select, textarea) { background: var(--panel); color: var(--fg); }
 [data-public-design="quiet"] .public-family input { accent-color: var(--accent); }
@@ -72,7 +73,7 @@
 [data-public-design="quiet"] .public-header { max-width: 1280px; margin: auto; min-height: 88px; display: flex; align-items: center; gap: 40px; padding: 16px 32px; border-bottom: 1px solid var(--line); }
 [data-public-design="quiet"] .public-brand { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; letter-spacing: -.035em; }
 [data-public-design="quiet"] .public-brand svg { color: var(--accent); }
-[data-public-design="quiet"] .public-header nav { display: flex; gap: 28px; margin-left: auto; font-size: 14px; color: var(--muted); }
+[data-public-design="quiet"] .public-header nav { display: flex; flex-wrap: wrap; gap: 28px; margin-left: auto; font-size: 14px; color: var(--muted); }
 [data-public-design="quiet"] .public-header nav a { display: inline-flex; align-items: center; min-height: 44px; }
 [data-public-design="quiet"] .public-header nav a:is(:hover, [aria-current]) { color: var(--accent); text-decoration: underline; text-underline-offset: 6px; }
 [data-public-design="quiet"] .public-header-actions { display: flex; gap: 8px; align-items: center; }
@@ -128,6 +129,8 @@
 [data-public-design="quiet"] .public-pilot .public-price { margin: 0; font-size: 48px; line-height: 1.2; letter-spacing: -.04em; color: var(--fg); font-weight: 600; }
 [data-public-design="quiet"] .public-price span { font-size: 14px; letter-spacing: normal; font-weight: 400; }
 [data-public-design="quiet"] .public-closing { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+/* Keep an email field's intrinsic width from sizing the whole closing grid track. */
+[data-public-design="quiet"] .public-closing > * { min-width: 0; }
 [data-public-design="quiet"] .public-closing p { margin-top: 16px; color: var(--muted); }
 [data-public-design="quiet"] .public-closing form { margin: 0; }
 [data-public-design="quiet"] .public-footer { display: grid; gap: 20px; max-width: 1216px; margin: auto; padding: 40px 32px; border-top: 1px solid var(--line); }
@@ -138,10 +141,10 @@
 
 /* Existing business/access logic stays intact; adapt the shared visual vocabulary. */
 [data-public-design="quiet"] .public-family [class*="signInput"] { border: 1px solid var(--control-border); padding: 12px; border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 16px; }
-[data-public-design="quiet"] .public-family [class*="signButton"] { background: var(--accent); color: var(--accent-fg); border-radius: 8px; font-size: 14px; }
+[data-public-design="quiet"] .public-family [class*="signButton"] { background: var(--accent); color: var(--accent-fg); border-radius: 8px; font-size: 14px; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 [data-public-design="quiet"] .public-family [class*="signButton"]:hover { background: var(--accent-hover); }
 [data-public-design="quiet"] .public-family [class*="signRow"] { flex-wrap: wrap; }
-[data-public-design="quiet"] .public-family [class*="signRow"] input { flex-basis: 180px; }
+[data-public-design="quiet"] .public-family [class*="signRow"] input { flex-basis: 180px; max-width: 100%; }
 [data-public-design="quiet"] .public-family [class*="signNote"] { font-size: 14px; }
 [data-public-design="quiet"] .public-family [class*="fieldLabel"] { text-transform: none; letter-spacing: normal; font-size: 12px; font-stretch: normal; }
 [data-public-design="quiet"] .public-family [data-tone] { color: var(--fg); background: var(--panel-2); border-color: var(--line); border-radius: 10px; }
@@ -161,6 +164,12 @@
 [data-public-design="quiet"] .public-family .access-footer { border-color: var(--line); font-size: 12px; }
 [data-public-design="quiet"] .public-legal { font-size: 16px; }
 [data-public-design="quiet"] .public-legal > header { background: var(--bg); }
+[data-public-design="quiet"] .public-legal > header > div { height: auto; min-height: 52px; flex-wrap: wrap; padding-block: 8px; }
+[data-public-design="quiet"] .public-legal > header nav { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+/* The mobile grid's implicit auto track otherwise takes the legal links' min-content width. */
+[data-public-design="quiet"] .public-legal > .grid { grid-template-columns: minmax(0, 1fr); }
+[data-public-design="quiet"] .public-legal [aria-label="Document list"] ul { flex-wrap: wrap; }
+[data-public-design="quiet"] .public-legal [aria-label="Document list"] a { white-space: normal; }
 [data-public-design="quiet"] .public-legal article { max-width: 76ch; }
 [data-public-design="quiet"] .public-legal h1 { font-size: clamp(30px, 4vw, 48px); }
 [data-public-design="quiet"] .public-legal [class*="border-b-2"] { border-bottom-width: 1px; }
@@ -173,6 +182,9 @@
 [data-public-design="quiet"] .quiet-story h2 { font-size: clamp(30px, 3.5vw, 44px); }
 [data-public-design="quiet"] .quiet-story [class*="stage"] { border-color: var(--line); }
 [data-public-design="quiet"] .quiet-story [class*="sheetTitle"] { font-family: var(--font-sans); }
+@media (min-width: 1024px) {
+  [data-public-design="quiet"] .public-legal > .grid { grid-template-columns: 240px minmax(0, 1fr); }
+}
 @media (max-width: 1023px) {
   [data-public-design="quiet"] .public-hero { grid-template-columns: 1fr; padding-block: 64px; gap: 48px; }
   [data-public-design="quiet"] .public-hero h1 { font-size: clamp(40px, 7vw, 60px); }

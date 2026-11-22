@@ -3,7 +3,7 @@
 .q-depth .q-depth-note { padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-tint); margin-bottom: 24px; }
 .q-depth-note p { color: var(--muted); margin-top: 5px; }
 .q-depth .q-depth-search { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-block: 24px; }
-.q-depth-search label { flex: 1 1 240px; font-size: 12px; color: var(--muted); }
+.q-depth-search label { flex: 1 1 240px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--muted); }
 .q-depth-search input { margin-top: 7px; }
 .q-depth .q-agent-list { list-style: none; padding: 0; }
 .q-agent-list > li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 18px; padding-block: 26px; border-top: 1px solid var(--line); }
@@ -11,12 +11,12 @@
 .q-agent-list h3 { font-size: 17px; }
 .q-agent-list p { margin-top: 7px; color: var(--muted); }
 .q-agent-actions { display: flex; flex-wrap: wrap; align-content: start; gap: 8px; }
-.q-agent-activity { display: grid; gap: 8px; margin-top: 20px; }
+.q-agent-activity { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 20px; }
 .q-agent-activity > span { color: var(--muted); font-size: 12px; }
 .q-agent-activity, .q-agent-list > li > div { min-width: 0; }
 .q-agent-list .q-agent-task { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .q-agent-run-reference { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 12px; }
-.q-agent-run-reference .q-link { white-space: nowrap; }
+.q-agent-run-reference .q-link { min-width: 0; overflow-wrap: anywhere; }
 .q-agent-history { display: grid; gap: 12px; margin-top: 12px; }
 .q-agent-history li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .q-team-settings { padding-block: 16px; border-block: 1px solid var(--line); }
@@ -96,6 +96,8 @@
 .q-depth-section-select { display: none; }
 .q-depth-rail > p { padding: 20px 12px; color: var(--muted); font-size: max(14px, .875rem); }
 .q-depth-content { min-width: 0; display: grid; gap: 28px; }
+/* Constrain the grid items, not the table: its labeled region owns horizontal scrolling. */
+.q-depth-content > * { min-width: 0; }
 .quiet-workspace .q-depth-content > .card,
 .quiet-workspace .q-depth-content > div > .card,
 .quiet-workspace .q-depth-content > div > form.card,

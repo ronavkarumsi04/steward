@@ -59,7 +59,11 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
    while still allowing rem-based user enlargement above them. */
 .quiet-workspace :where(.text-xs, .pill, .kbd, .label, .help, .eyebrow, .nb-section-label, .nb-metric > :first-child, .table th, code, [class*="text-[8px]"], [class*="text-[9px]"], [class*="text-[10px]"], [class*="text-[11px]"]) { font-size: max(12px, 0.75rem); }
 .quiet-workspace :where(.text-sm, .table, .panel-heading p, p.text-xs, li.text-xs, .text-xs p, .text-xs li, .prose) { font-size: max(14px, 0.875rem); }
-.quiet-workspace .btn { white-space: normal; font-size: max(14px, 0.875rem); }
+.quiet-workspace .btn { min-width: 0; max-width: 100%; white-space: normal; font-size: max(14px, 0.875rem); }
+/* Text-only zoom enlarges intrinsic control widths without changing the viewport. */
+.quiet-workspace :is(.input, .select, textarea) { min-width: 0; max-width: 100%; }
+.quiet-workspace .pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.quiet-workspace .quiet-page-heading { overflow-wrap: anywhere; }
 .quiet-workspace .btn:active, .quiet-workspace .nav-item:active { transform: none; }
 .quiet-workspace .desk-title { font-size: clamp(24px, 3vw, 30px); line-height: 1.2; font-weight: 700; letter-spacing: -.035em; }
 .quiet-workspace .desk-heading { padding-block: 0 20px; margin-bottom: 24px; }
