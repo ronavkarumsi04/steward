@@ -65,7 +65,7 @@ export function ProjectWorkspace({ companyId, initial }: { companyId: string; in
           <div className="flex items-center justify-between gap-3"><Pill tone={STATUS_TONE[project.status]}>{project.status}</Pill><span className="text-xs text-faint">{ago(project.updatedAt)}</span></div>
           <h2 className="mt-3 text-lg font-semibold tracking-tight group-hover:text-accent">{project.name}</h2>
           <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted">{project.objective || project.description}</p>
-          <div className="mt-4 space-y-2 border-t border-line pt-3 text-xs">
+          <div className="q-project-context mt-4 space-y-2 border-t border-line pt-3 text-xs">
             <div><span className="text-faint">Success</span><div className="mt-0.5 line-clamp-2 text-fg-2">{project.successSignal || "Not defined yet"}</div></div>
             <div><span className="text-faint">Next</span><div className="mt-0.5 line-clamp-2 font-medium">{project.nextStep || "Steward will determine the next step"}</div></div>
           </div>

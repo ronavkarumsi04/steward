@@ -73,7 +73,7 @@ describe("specialist presentation parity", () => {
   it("keeps all grouped work and business URLs available in the phone disclosure", () => {
     const current = WORKSPACE_ROUTES.find((route) => route.suffix === "/finance")!;
     const result = html(createElement(QuietWorkNavigation, { base: "/app/c/company", current }));
-    const mobile = result.slice(result.indexOf("<details"));
+    const mobile = result.slice(result.indexOf('<details class="q-work-navigation-mobile"'));
     expect(mobile).toContain("<strong>Finance</strong>");
     for (const route of WORKSPACE_ROUTES.filter((route) => route.group === "work")) expect(mobile).toContain(`href="/app/c/company${route.suffix}"`);
     expect(mobile).toContain('aria-current="page"');
