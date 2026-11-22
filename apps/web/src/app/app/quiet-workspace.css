@@ -61,7 +61,7 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace :where(.text-sm, .table, .panel-heading p, p.text-xs, li.text-xs, .text-xs p, .text-xs li, .prose) { font-size: max(14px, 0.875rem); }
 .quiet-workspace .btn { max-width: 100%; white-space: normal; overflow-wrap: normal; font-size: max(14px, 0.875rem); }
 /* Content may break long identifiers; controls and short labels keep whole words. */
-.quiet-workspace :is(button, .btn, .pill, label, .label, summary) { overflow-wrap: normal; }
+.quiet-workspace :is(a, button, .btn, .pill, label, .label, summary, td, th, select) { overflow-wrap: normal; }
 /* Action/badge rows yield before their shortest readable label does. */
 .quiet-workspace .flex:has(> :is(.btn, .pill)) { flex-wrap: wrap; }
 .quiet-workspace .flex > :is(.btn, .pill) { min-width: min-content; }
