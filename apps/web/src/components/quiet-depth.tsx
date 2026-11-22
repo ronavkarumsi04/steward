@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Locale } from "@/lib/i18n";
+export { QuietSectionNav } from "./quiet-section-nav";
 
 /** Same section-local recovery language used by the decision/work screens. No raw API errors. */
 export function QuietUnavailable({ href, locale = "en" }: { href: string; locale?: Locale }) {
@@ -10,10 +11,6 @@ export function QuietUnavailable({ href, locale = "en" }: { href: string; locale
 export function QuietPageHeading({ title, description, scope, actions, level = 1 }: { title: string; description?: ReactNode; scope?: ReactNode; actions?: ReactNode; level?: 1 | 2 }) {
   const Heading = level === 1 ? "h1" : "h2";
   return <header className="q-depth-heading"><div><Heading>{title}</Heading>{description && <p>{description}</p>}{scope && <div className="q-depth-scope">{scope}</div>}</div>{actions && <div className="q-depth-actions">{actions}</div>}</header>;
-}
-
-export function QuietSectionNav({ label, items, children }: { label: string; items: ReadonlyArray<readonly [string, string]>; children?: ReactNode }) {
-  return <aside className="q-depth-rail"><nav aria-label={label}><ul>{items.map(([id, title]) => <li key={id}><a href={`#${id}`}>{title}</a></li>)}</ul></nav>{children}</aside>;
 }
 
 export function QuietTable({ label, children }: { label: string; children: ReactNode }) {

@@ -152,7 +152,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       {(error || saved) && <p role="status" className={`text-sm ${error ? "text-danger" : "text-ok"}`}>{error ?? saved}</p>}
 
       {/* What a founder edits first comes first; the pause/archive controls and the developer toggle sit last. */}
-      <form onSubmit={saveProfile} id="profile" className="card nb-left-green settings-anchor space-y-3">
+      <form onSubmit={saveProfile} id="profile" className={quiet ? "card settings-anchor space-y-3" : "card nb-left-green settings-anchor space-y-3"}>
         <h2 className="font-semibold">{t("settings.profile")}</h2>
         <p className="text-sm text-muted">{t("settings.profileHelp")}</p>
         <div className="grid gap-3 md:grid-cols-2">
@@ -173,10 +173,10 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
       </form>
 
       <div id="brand-kit" className="settings-anchor">
-        <BrandKitSettings company={company} profile={profile} />
+        <BrandKitSettings company={company} profile={profile} quiet={quiet} />
       </div>
 
-      <form onSubmit={saveCompany} id="autonomy" className="card nb-left-blue settings-anchor space-y-3">
+      <form onSubmit={saveCompany} id="autonomy" className={quiet ? "card settings-anchor space-y-3" : "card nb-left-blue settings-anchor space-y-3"}>
         <h2 className="font-semibold">{t("settings.autonomy")}</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div><label className="block"><span className="label">{t("settings.companyName")}</span><input name="name" className="input" defaultValue={company.name} required /></label></div>
@@ -199,7 +199,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         <div className="flex justify-end"><button className="btn btn-primary" disabled={!isAdmin}>{t("settings.save")}</button></div>
       </form>
 
-      <Card title={t("settings.policies")} id="policies" className="nb-left-yellow settings-anchor">
+      <Card title={t("settings.policies")} id="policies" className={quiet ? "settings-anchor" : "nb-left-yellow settings-anchor"}>
         <p className="mb-3 text-sm text-muted">{t("settings.policiesHelp")} <b>{t("policy.mode.deny")}</b> {t("settings.policiesDeny")} <b>{t("policy.mode.approve")}</b> {t("settings.policiesApprove")} <b>{t("policy.mode.allow")}</b> {t("settings.policiesAllow")}</p>
         <div className="space-y-2">
           {DIMENSIONS.map((d) => {
@@ -219,7 +219,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </div>
       </Card>
 
-      <Card title={t("settings.budgets")} id="budgets" className="nb-left-orange settings-anchor">
+      <Card title={t("settings.budgets")} id="budgets" className={quiet ? "settings-anchor" : "nb-left-orange settings-anchor"}>
         {budgets.length === 0 ? <Empty>{t("settings.noBudgets")}</Empty> : (
           <div className="table-wrap mb-4"><table className="table text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="py-1">{t("settings.category")}</th><th>{t("settings.period")}</th><th>{t("settings.limit")}</th><th>{t("settings.spent")}</th><th>{t("settings.reserved")}</th><th>{t("settings.remaining")}</th><th>{t("settings.hardStop")}</th></tr></thead>
@@ -242,7 +242,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title={t("settings.goals")} id="goals" className="nb-left-purple settings-anchor">
+      <Card title={t("settings.goals")} id="goals" className={quiet ? "settings-anchor" : "nb-left-purple settings-anchor"}>
         <ul className="mb-4 divide-y divide-line text-sm">
           {goals.map((g) => (
             <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -264,7 +264,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
         </form>
       </Card>
 
-      <Card title={t("settings.controls")} id="controls" className="nb-left-red settings-anchor">
+      <Card title={t("settings.controls")} id="controls" className={quiet ? "settings-anchor" : "nb-left-red settings-anchor"}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 text-sm">
             <div className="font-medium">{t("settings.outboundPause")}</div>

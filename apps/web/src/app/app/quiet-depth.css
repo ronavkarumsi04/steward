@@ -12,7 +12,9 @@
 .q-depth-rail nav ul { display: grid; gap: 4px; }
 .q-depth-rail nav a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; }
 .q-depth-rail nav a:hover { background: var(--accent-soft); color: var(--accent); }
-.q-depth-rail > p { padding: 20px 12px; color: var(--muted); font-size: max(12px, .75rem); }
+.q-depth-rail nav a[aria-current="location"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.q-depth-section-select { display: none; }
+.q-depth-rail > p { padding: 20px 12px; color: var(--muted); font-size: max(14px, .875rem); }
 .q-depth-content { min-width: 0; display: grid; gap: 28px; }
 .quiet-workspace .q-depth-content > .card,
 .quiet-workspace .q-depth-content > div > .card,
@@ -89,11 +91,15 @@
 @media (max-width: 767px) {
   .quiet-workspace .q-depth { padding-top: 24px; padding-bottom: 40px; }
   .quiet-workspace .q-depth-heading { flex-direction: column; gap: 16px; padding-bottom: 24px; margin-bottom: 24px; }
-  .q-depth-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
-  .q-depth-rail { position: static; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
-  .q-depth-rail nav ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  /* Block flow keeps the sticky chooser's containing block as the whole page, not one grid row. */
+  .q-depth-layout { display: block; }
+  .q-depth-rail { top: 0; z-index: var(--z-sidebar); background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 12px; }
+  .q-depth-rail nav { display: none; }
+  .q-depth-section-select { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+  .q-depth-section-select select { width: 100%; color: var(--fg); }
   .q-depth-rail > p { padding-block: 12px 0; }
-  .q-depth-content { gap: 24px; }
+  .q-depth-content { gap: 24px; margin-top: 24px; }
+  .q-depth-content :is(section, form, [id]) { scroll-margin-top: calc(var(--depth-nav-height, 96px) + 16px); }
   .q-depth form[data-dimension], .q-depth form[data-purpose] { grid-template-columns: minmax(0, 1fr) !important; }
   .q-depth form[data-dimension] > button, .q-depth form[data-purpose] > button { justify-self: stretch; }
   .q-depth-new ol[aria-label="Progress"] { gap: 12px; }

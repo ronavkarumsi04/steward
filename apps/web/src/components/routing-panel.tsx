@@ -47,7 +47,7 @@ export function RoutingPanel({ orgId, companyId, models, routing, isAdmin, quiet
   }
 
   return (
-    <Card title={t("routing.title")} className="nb-left-purple">
+    <Card title={t("routing.title")} className={quiet ? undefined : "nb-left-purple"}>
       <p className="mb-3 text-sm text-muted">{t("routing.intro")}</p>
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
       {quiet && saved && <p role="status" className="mb-2 text-sm text-ok">{t("routing.saved")}</p>}
