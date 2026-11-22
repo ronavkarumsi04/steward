@@ -11,6 +11,7 @@ export async function QuietWork({ companyId, kind, filters, api, locale }: { com
   const status = filters.status || workStatuses(kind, view);
   if (status) query.set("status", status);
   if (kind === "runs" && filters.taskId) query.set("taskId", filters.taskId);
+  if (kind === "runs") query.set("view", "quiet");
   const [records, people, company, goals] = await Promise.allSettled([
     api.get<{ tasks?: Task[]; runs?: Run[] }>(`/companies/${companyId}/${kind}?${query}`),
     api.get<{ agents: Agent[] }>(`/companies/${companyId}/agents`),

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { agentRunSteps, agentRuns, agentSchedules, agents, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
+import { agentRunSteps, agentRuns, agentSchedules, agents, aiCalls, artifacts, businessSignals, campaigns, conversations, decisions, documents, documentVersions, emitEvent, mcpServers, mcpTools, messages, projects, scoped, tasks, toolCalls, type Db, type DbOrTx } from "@steward/db";
 import { canTransitionRun, type AgentKind, type RunStatus, type StepKind, type TaskStatus, type TenantScope } from "@steward/schema";
 import { EXPLICIT_NO_TOOLS, canonicalizeMcpAllowlistEntry, explicitToolAllowlist, mcpNamespace } from "@steward/tools";
 import { cancelRunApprovals } from "./approvals.js";
@@ -209,6 +209,14 @@ export interface RunTrigger {
 
 export class RunService {
   constructor(private readonly db: Db) {}
+
+  /** One batch ledger query, never run traces or Temporal. The default row zero is not evidence. */
+  async withCostEvidence(scope: TenantScope, rows: (typeof agentRuns.$inferSelect)[]) {
+    const ids = rows.filter((run) => Number(run.costUsd) === 0).map((run) => run.id);
+    const recorded = ids.length ? await this.db.selectDistinct({ runId: aiCalls.runId, companyId: aiCalls.companyId }).from(aiCalls).where(scoped(scope, { organizationId: aiCalls.organizationId, companyId: aiCalls.companyId }, inArray(aiCalls.runId, ids), eq(aiCalls.status, "ok"), eq(aiCalls.costEstimated, false), eq(aiCalls.costUsd, "0"))) : [];
+    const evidence = new Set(recorded.map((call) => `${call.companyId}:${call.runId}`));
+    return rows.map((run) => ({ ...run, hasRecordedZeroCost: evidence.has(`${run.companyId}:${run.id}`) }));
+  }
 
   list(scope: TenantScope, filter: { status?: RunStatus[]; agentId?: string; taskId?: string; projectId?: string; trigger?: string; limit?: number } = {}) {
     return this.db

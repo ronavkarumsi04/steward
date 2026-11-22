@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { Approval, CompanyOverview } from "@/lib/types";
+import type { Approval, CompanyOverview, Run } from "@/lib/types";
 import { QuietApprovalDetail } from "./quiet-approval-detail";
 import { QuietOverview } from "./quiet-overview";
 import { QuietApprovals } from "./quiet-approvals";
@@ -12,6 +12,36 @@ const approval: Approval = { id: "approval-1", action: "email.send", reason: "Pl
 const overview = { company: { id: "company-1", name: "Test workspace", organizationId: "org-1", autonomyLevel: 1, timezone: "UTC" }, role: "owner", agents: [], budgets: [], pendingApprovals: 1 } as unknown as CompanyOverview;
 
 describe("Quiet decision surfaces", () => {
+  it("leads with a plain action title while preserving exact recorded action and policy details", () => {
+    const html = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, action: "browser.act", payload: { kind: "wait", ms: 500 }, reason: "external_write actions require approval" }, overview, run: null }));
+    expect(html).toMatch(/<h1[^>]*>Wait 0.5 seconds in the browser<\/h1>/);
+    expect(html).toContain("browser.act");
+    expect(html).toContain("external_write actions require approval");
+  });
+  it("distinguishes pending rows by recorded task and browser action without exposing a policy reason", async () => {
+    const requests = [500, 1000].map((ms) => ({ ...approval, id: `approval-${ms}`, taskId: `task-${ms}`, runId: `run-${ms}`, action: "browser.act", reason: "external_write", affectedSystem: "the open page", payload: { kind: "wait", ms } }));
+    const get = vi.fn(async (path: string) => {
+      if (path.includes("/approvals?")) return { approvals: requests.map((a, i) => ({ ...a, workContext: { taskTitle: i === 0 ? "Prepare draft" : "Review landing page", runIntent: null } })) };
+      if (path.includes("/tasks/")) return { task: { title: path.endsWith("500") ? "Prepare draft" : "Review landing page" } };
+      return { run: { intent: "Recorded run context" } };
+    });
+    const html = renderToStaticMarkup(await QuietApprovals({ companyId: "company-1", status: "pending", locale: "en", api: { get } as never }));
+    for (const fact of ["Task: Prepare draft", "Task: Review landing page", "Wait 0.5 seconds", "Wait 1 second", "/approvals/approval-500", "/approvals/approval-1000"]) expect(html).toContain(fact);
+    expect(html).not.toContain("external_write");
+  });
+  it("uses the inspector's evidence rule in both Overview and supporting work", async () => {
+    for (const recorded of [false, true]) {
+      const run = { id: "run-1", intent: "Review draft", status: "waiting_approval", costUsd: "0.000000", hasRecordedZeroCost: recorded, createdAt: "2026-01-01T00:00:00Z" } as Run;
+      const get = vi.fn(async (path: string) => {
+        if (path.includes("/approvals?")) return { approvals: [] };
+        if (path.includes("providers/usage")) return { usage: [] };
+        return { runs: [run] };
+      });
+      const home = renderToStaticMarkup(await QuietOverview({ overview, locale: "en", api: { get } as never }));
+      const supporting = renderToStaticMarkup(createElement(QuietApprovalDetail, { approval: { ...approval, runId: run.id }, overview, run }));
+      for (const html of [home, supporting]) expect(html).toContain(`Recorded run cost: ${recorded ? "$0.00" : "Not available"} USD`);
+    }
+  });
   it("localizes cancelled and closed run states in Spanish", () => {
     for (const status of ["cancelled", "succeeded"] as const) {
       const html = renderToStaticMarkup(createElement(LocaleProvider, { locale: "es", children: createElement(QuietApprovalDetail, { approval, overview, run: { id: "r1", status } as never }) }));

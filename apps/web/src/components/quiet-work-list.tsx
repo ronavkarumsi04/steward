@@ -10,7 +10,7 @@ import { statusLabel, t, type Locale, type MessageKey } from "@/lib/i18n";
 import { browserApi } from "@/lib/api";
 import { recordedUsd } from "@/lib/decision-semantics";
 import { workCopy } from "@/lib/work-copy";
-import { runCostValue, workHref, type WorkFilters, type WorkKind, type WorkView } from "@/lib/work-loop";
+import { runCostValue, runCostCompatibility, workHref, type WorkFilters, type WorkKind, type WorkView } from "@/lib/work-loop";
 import { Ago, StatusPill } from "./ui";
 import { Icon } from "./icons";
 import { QuietTaskForm } from "./quiet-task-form";
@@ -27,6 +27,7 @@ export function QuietWorkList({ companyId, kind, filters, locale, tasks, runs, a
   const matches = (title: string, agentId: string | null) => `${title} ${name(agentId)}`.toLocaleLowerCase(locale).includes(q);
   const shownTasks = tasks.filter((task) => matches(task.title, task.assigneeAgentId));
   const shownRuns = runs.filter((run) => matches(run.intent || run.id, run.agentId));
+  const costCompatibility = runs.map((run) => runCostCompatibility(run, locale)).find(Boolean);
   const count = kind === "tasks" ? shownTasks.length : shownRuns.length;
   const here = workHref(companyId, kind, filters);
   async function changeTask(task: Task, status?: TaskStatus) {
@@ -47,6 +48,7 @@ export function QuietWorkList({ companyId, kind, filters, locale, tasks, runs, a
     <form className="q-work-search" action={`/app/c/${companyId}/${kind}`}><label htmlFor="work-search">{c.search}</label><div><input id="work-search" name="q" type="search" className="input" defaultValue={filters.q} placeholder={c.searchHint} /><button className="btn">{c.apply}</button><Link className="q-link" href={workHref(companyId, kind, { view: "all" })}>{c.reset}</Link></div>{(["view", "status", "taskId"] as const).map((key) => filters[key] ? <input key={key} type="hidden" name={key} value={filters[key]} /> : null)}</form>
     {(filters.taskId || filters.status) && <p className="q-caption">{filters.taskId && `${c.taskFilter}: ${filters.taskId}`} {filters.status && `${c.statusFilter}: ${filters.status.split(",").map((s) => statusLabel(locale, s)).join(", ")}`}</p>}
     <p className="q-caption">{c.latest}</p>
+    {kind === "runs" && costCompatibility && <p className="q-notice" role="status">{costCompatibility}</p>}
     {partial && <p role="alert" className="q-notice">{c.loadError} <Link className="q-link" href={here}>{c.retry}</Link></p>}
     {error && <p role="alert" className="q-notice q-error">{error} <a className="q-link" href={here}>{c.refresh}</a></p>}
     {!count && !recordsFailed ? <div className="q-empty"><h2>{q ? c.noResults : kind === "tasks" ? c.noTasks : c.noRuns}</h2><p>{q ? c.noResultsHint : c.emptyHint}</p></div> : <ul className="q-work-list">

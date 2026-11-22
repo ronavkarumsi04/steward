@@ -130,9 +130,11 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   });
 
   // ---- runs ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), trigger: z.string().max(40).optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs", tag: "runs", summary: "List runs", query: z.object({ status: csv(RunStatus), agentId: z.string().optional(), taskId: z.string().optional(), projectId: ID.optional(), trigger: z.string().max(40).optional(), limit, view: z.literal("quiet").optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
-    return c.json({ runs: await c.get("deps").services.runs.list(scope, query) });
+    const service = c.get("deps").services.runs;
+    const runs = await service.list(scope, query);
+    return c.json({ runs: query.view === "quiet" ? await service.withCostEvidence(scope, runs) : runs });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs", tag: "runs", summary: "Start an ad-hoc run with an instruction", body: z.object({ agentId: ID, projectId: ID.nullable().optional(), instruction: z.string().min(1).max(8000) }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
@@ -151,7 +153,7 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
     const instruction = launchKitBrief({ ...(current ?? {}), name: current?.name || company.name });
     return c.json({ run: await launchRun(deps.services, deps.workflows, scope, { agentId: chief.id, instruction, kind: "launch" }) }, 201);
   });
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, AI/model calls, tool calls, artifacts, approvals, live workflow status" }, async (c) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/runs/:id", tag: "runs", summary: "Run detail: steps, AI/model calls, tool calls, artifacts, approvals, live workflow status", query: z.object({ view: z.literal("quiet").optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
     const deps = c.get("deps");
     const run = await deps.services.runs.get(scope, param(c, "id"));
@@ -164,7 +166,9 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
       deps.services.approvals.list(scope).then((a) => a.filter((x) => x.runId === run.id)),
       deps.workflows ? deps.workflows.runStatus(run.id).catch(() => null) : Promise.resolve(null),
     ]);
-    return c.json({ run, steps, aiCalls, toolCalls, artifacts, approvals, workflow });
+    // Detail already has the ledger: publish the same proof bit as the list without another query.
+    const hasRecordedZeroCost = aiCalls.some((call) => call.status === "ok" && !call.costEstimated && Number(call.costUsd) === 0);
+    return c.json({ run: query.view === "quiet" ? { ...run, hasRecordedZeroCost } : run, steps, aiCalls, toolCalls, artifacts, approvals, workflow });
   });
   defineRoute(app, reg, { method: "post", path: "/companies/:companyId/runs/:id/cancel", tag: "runs", summary: "Request cancellation of a run", body: z.object({ reason: z.string().max(500).optional() }) }, async (c, { body }) => {
     const scope = await companyScope(c, param(c, "companyId"), "member");
@@ -230,13 +234,17 @@ export function registerWorkRoutes(app: Hono<AppEnv>, reg: RouteRegistry, bus: E
   });
 
   // ---- approvals ----
-  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals", tag: "approvals", summary: "List approvals", query: z.object({ status: ApprovalStatus.optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals", tag: "approvals", summary: "List approvals", query: z.object({ status: ApprovalStatus.optional(), limit, view: z.literal("quiet").optional() }) }, async (c, { query }) => {
     const scope = await companyScope(c, param(c, "companyId"));
-    return c.json({ approvals: await c.get("deps").services.approvals.list(scope, query.status, query.limit) });
+    const service = c.get("deps").services.approvals;
+    const approvals = await service.list(scope, query.status, query.limit);
+    return c.json({ approvals: query.view === "quiet" ? await service.withWorkContext(scope, approvals) : approvals });
   });
-  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/approvals", tag: "approvals", summary: "Approvals across every company in the organization: the inbox", query: z.object({ status: ApprovalStatus.optional(), limit }) }, async (c, { query }) => {
+  defineRoute(app, reg, { method: "get", path: "/orgs/:orgId/approvals", tag: "approvals", summary: "Approvals across every company in the organization: the inbox", query: z.object({ status: ApprovalStatus.optional(), limit, view: z.literal("quiet").optional() }) }, async (c, { query }) => {
     const scope = orgScope(c, param(c, "orgId"));
-    return c.json({ approvals: await c.get("deps").services.approvals.listForOrganization(scope, query.status, query.limit) });
+    const service = c.get("deps").services.approvals;
+    const approvals = await service.listForOrganization(scope, query.status, query.limit);
+    return c.json({ approvals: query.view === "quiet" ? await service.withWorkContext(scope, approvals) : approvals });
   });
   defineRoute(app, reg, { method: "get", path: "/companies/:companyId/approvals/:id", tag: "approvals", summary: "Approval detail" }, async (c) => {
     const scope = await companyScope(c, param(c, "companyId"));

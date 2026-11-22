@@ -942,6 +942,77 @@ describe("tenancy + RBAC", () => {
   });
 });
 
+describe("Quiet list projections", () => {
+  d("projects 100 approval names and zero-cost evidence in fixed queries without detail reads", async () => {
+    const { api, orgId } = await register();
+    const co = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Queue projection" });
+    const companyId = co.body.company.id;
+    const scope: TenantScope = { organizationId: orgId, companyId, actor: { type: "system", component: "test" } };
+    const svc = services.forScope(scope);
+    const agents = await svc.agents.list(scope);
+    const agentId = agents[0]!.id;
+    const task = await svc.tasks.create(scope, { title: "Recorded queue work" });
+    const prefix = `projection-${uniq()}`;
+    await core.pool.query("insert into agent_runs (id, organization_id, company_id, agent_id, task_id, trigger, intent, status) select $1 || '-' || n, $2, $3, $4, $5, '{}'::jsonb, 'Review recorded draft ' || n, 'waiting_approval' from generate_series(1,100) n", [prefix, orgId, companyId, agentId, task.id]);
+    await core.pool.query("insert into approvals (id, organization_id, company_id, run_id, action, reason, payload, risk, dimension, affected_system, expires_at) select $1 || '-a-' || n, $2, $3, $1 || '-' || n, 'browser.act', 'external_write', '{\"kind\":\"wait\",\"ms\":500}'::jsonb, 'LOW', 'external_write', 'browser', now() + interval '1 day' from generate_series(1,100) n", [prefix, orgId, companyId]);
+    await core.pool.query("insert into ai_calls (organization_id, company_id, run_id, provider, model, status, cost_estimated, cost_usd) values ($1,$2,$3,'test','fixture','ok',false,0), ($1,$2,$4,'test','fixture','ok',true,0), ($1,$2,$5,'test','fixture','error',false,0)", [orgId, companyId, `${prefix}-1`, `${prefix}-2`, `${prefix}-3`]);
+    type RunProjection = { id: string; hasRecordedZeroCost?: boolean };
+    type ApprovalProjection = { id: string; workContext?: { taskTitle: string | null; runIntent: string | null; runStatus: string | null } };
+    const queries = vi.spyOn(core.pool, "query");
+    try {
+      const rows = await api.json<{ runs: RunProjection[] }>("GET", `/companies/${companyId}/runs?limit=100&view=quiet`);
+      expect(rows.status).toBe(200);
+      expect(rows.body.runs).toHaveLength(100);
+      expect(rows.body.runs.find((r) => r.id === `${prefix}-1`)?.hasRecordedZeroCost).toBe(true);
+      for (const n of [2, 3, 4]) expect(rows.body.runs.find((r) => r.id === `${prefix}-${n}`)?.hasRecordedZeroCost).toBe(false);
+      const runQueryCount = queries.mock.calls.length;
+      queries.mockClear();
+      await api.json("GET", `/companies/${companyId}/runs?limit=1&view=quiet`);
+      expect(queries.mock.calls.length).toBe(runQueryCount);
+      queries.mockClear();
+      const approvals = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/companies/${companyId}/approvals?limit=100&view=quiet`);
+      expect(approvals.status).toBe(200);
+      expect(approvals.body.approvals).toHaveLength(100);
+      for (const a of approvals.body.approvals) {
+        expect(a.workContext?.taskTitle).toBe("Recorded queue work");
+        expect(a.workContext?.runStatus).toBe("waiting_approval");
+      }
+      const approvalQueryCount = queries.mock.calls.length;
+      queries.mockClear();
+      await api.json("GET", `/companies/${companyId}/approvals?limit=1&view=quiet`);
+      expect(queries.mock.calls.length).toBe(approvalQueryCount);
+      const detail = await api.json<{ run: RunProjection }>("GET", `/companies/${companyId}/runs/${prefix}-1?view=quiet`);
+      expect(detail.body.run.hasRecordedZeroCost).toBe(true);
+      const plain = await api.json<{ runs: RunProjection[] }>("GET", `/companies/${companyId}/runs?limit=100`);
+      expect(plain.body.runs.every((r) => r.hasRecordedZeroCost === undefined)).toBe(true);
+      const plainApprovals = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/companies/${companyId}/approvals?limit=100`);
+      expect(plainApprovals.body.approvals.every((a) => a.workContext === undefined)).toBe(true);
+      await core.pool.query("update agent_runs set status='succeeded' where id=$1", [`${prefix}-99`]);
+      const inbox = await api.json<{ approvals: ApprovalProjection[] }>("GET", `/orgs/${orgId}/approvals?limit=100&view=quiet`);
+      expect(inbox.status, JSON.stringify(inbox.body)).toBe(200);
+      expect(inbox.body.approvals.every((a) => a.workContext?.taskTitle === "Recorded queue work")).toBe(true);
+      expect(inbox.body.approvals.find((a) => a.id === `${prefix}-a-99`)?.workContext?.runStatus).toBe("succeeded");
+    } finally { queries.mockRestore(); }
+    // Even malformed links inside one organization cannot reveal another company's work names.
+    const other = await api.json<{ company: { id: string } }>("POST", `/orgs/${orgId}/companies`, { name: "Separate company" });
+    const otherScope: TenantScope = { ...scope, companyId: other.body.company.id };
+    const otherSvc = services.forScope(otherScope);
+    const otherTask = await otherSvc.tasks.create(otherScope, { title: "Other company's private work" });
+    const otherAgent = (await otherSvc.agents.list(otherScope))[0]!;
+    const otherRun = await otherSvc.runs.create(otherScope, { agentId: otherAgent.id, taskId: otherTask.id, trigger: { kind: "user", instruction: "Other company's private run" } });
+    await core.pool.query("update approvals set task_id=$1, run_id=$2 where id=$3", [otherTask.id, otherRun.id, `${prefix}-a-100`]);
+    await core.pool.query("insert into ai_calls (organization_id, company_id, run_id, provider, model, status, cost_estimated, cost_usd) values ($1,$2,$3,'test','fixture','ok',false,0)", [orgId, otherScope.companyId, `${prefix}-4`]);
+    const isolated = await api.json<{ approvals: Array<{ id: string; workContext: { taskTitle: string | null; runIntent: string | null } }> }>("GET", `/orgs/${orgId}/approvals?limit=200&view=quiet`);
+    expect(isolated.body.approvals.find((a) => a.id === `${prefix}-a-100`)?.workContext).toEqual({ taskTitle: null, runIntent: null, runStatus: null });
+    const noForeignEvidence = await api.json<{ runs: Array<{ id: string; hasRecordedZeroCost: boolean }> }>("GET", `/companies/${companyId}/runs?limit=100&view=quiet`);
+    expect(noForeignEvidence.body.runs.find((r) => r.id === `${prefix}-4`)?.hasRecordedZeroCost).toBe(false);
+    const outsider = await register("Projection-outsider");
+    expect((await outsider.api.json("GET", `/companies/${companyId}/runs?view=quiet`)).status).toBe(404);
+    expect((await outsider.api.json("GET", `/companies/${companyId}/approvals?view=quiet`)).status).toBe(404);
+    expect((await outsider.api.json("GET", `/orgs/${orgId}/approvals?view=quiet`)).status).toBe(404);
+  });
+});
+
 describe("providers", () => {
   d("stores secrets encrypted, never returns them, and tests live against the provider", async () => {
     const { api, orgId } = await register();

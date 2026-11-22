@@ -264,6 +264,8 @@ export interface Run {
   error: string | null;
   workflowId: string | null;
   costUsd: string;
+  /** Quiet projection of successful, non-estimated zero ledger usage. Absent on older APIs. */
+  hasRecordedZeroCost?: boolean;
   inputTokens: number;
   outputTokens: number;
   iterations: number;
@@ -347,6 +349,8 @@ export interface Artifact {
 }
 export interface Approval {
   id: string;
+  /** Opt-in Quiet list projection. Missing on older APIs; null values mean no recorded linked name. */
+  workContext?: { taskTitle: string | null; runIntent: string | null; runStatus?: Run["status"] | null };
   /** Set on every stored row; optional only so fixtures and older surfaces keep type-checking. */
   companyId?: string;
   runId: string | null;
