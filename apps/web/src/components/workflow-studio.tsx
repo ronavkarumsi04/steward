@@ -26,7 +26,7 @@ import {
 } from "@/lib/workflows";
 import { Ago, Card, Empty, Pill, Spinner } from "./ui";
 import { useQuietSpecialist } from "./quiet-specialist-context";
-import { canTogglePublishedWorkflow, scheduleRhythm } from "@/lib/quiet-workflows";
+import { canTogglePublishedWorkflow, quietWorkflowSentence, scheduleRhythm } from "@/lib/quiet-workflows";
 
 /**
  * The workflow studio: a company's standing work, drawn.
@@ -221,9 +221,16 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
                           <Pill tone={standingTone(state)}>{standingLabel(state)}</Pill>
                           {!workflow.enabled && (!quiet || canTogglePublishedWorkflow(workflow)) && <Pill tone="warn">Paused</Pill>}
                         </span>
-                        <span className="mono mt-1 block text-xs text-muted">
-                          {workflow.nodes.filter((node) => node.kind === "trigger").length} trigger(s) · revision {workflow.revision} · {quiet && workflow.publishedAt && workflow.readings.length === 0 ? "published work not compared" : `${workflow.liveCount} live row(s)`} · updated <Ago iso={workflow.updatedAt} />
-                        </span>
+                        {quiet ? (
+                          <span className="mt-1 block text-sm text-muted" data-testid="workflow-summary">
+                            {workflow.publishedAt && workflow.readings.length === 0 ? "Published work cannot be checked against this drawing · " : ""}
+                            Last changed <Ago iso={workflow.updatedAt} />
+                          </span>
+                        ) : (
+                          <span className="mono mt-1 block text-xs text-muted">
+                            {workflow.nodes.filter((node) => node.kind === "trigger").length} trigger(s) · revision {workflow.revision} · {`${workflow.liveCount} live row(s)`} · updated <Ago iso={workflow.updatedAt} />
+                          </span>
+                        )}
                       </button>
                     </li>
                   );
@@ -320,7 +327,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
             ) : (
               <ul className="space-y-3" data-testid="workflow-sentences">
                 {sentences.map((sentence, index) => (
-                  <li key={index} className="text-sm">{sentence}</li>
+                  <li key={index} className="text-sm">{quiet ? quietWorkflowSentence(sentence) : sentence}</li>
                 ))}
               </ul>
             )}

@@ -11,6 +11,7 @@ import { AuthForm } from "./auth-form";
 import { QuietHome } from "./quiet-home";
 import { quietPublicEnabled } from "@/lib/public-design";
 import { landingStoryEnabled } from "@/lib/landing-story";
+import { describeWorkflow } from "@steward/core";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/use-events", () => ({ useLiveEvents: (_id: string, options: { initial?: StewardEvent[] }) => ({ events: options.initial ?? [], connected: true }) }));
@@ -54,9 +55,47 @@ describe("Quiet walkthrough regressions", () => {
       const result = html(quiet(node));
       expect(result).toContain(`data-testid="workflow-toggle">${enabled ? "Pause" : "Resume"}</button>`);
       expect(result).toContain("This workflow has been published");
+      expect(result).toContain("Published work cannot be checked against this drawing");
       expect(result).not.toContain("this drawing has not been published");
       expect(result).not.toContain("0 live row(s)");
       expect(html(node)).toContain("Nothing is running yet: this drawing has not been published.");
+    }
+  });
+  it("keeps Quiet saved rows readable and leaves shell-off operator metadata intact", () => {
+    for (const canManage of [true, false]) {
+      const node = createElement(WorkflowStudio, { companyId: "company", initial: { ...workspace, canManage } });
+      const legacy = html(node).match(/<span class="mono mt-1 block text-xs text-muted">(.*?)<\/span>/)?.[1];
+      expect(legacy).toMatch(/^1 trigger\(s\) · revision 0 · 0 live row\(s\) · updated <time /);
+      const result = html(quiet(node));
+      const summary = result.match(/<span class="mt-1 block text-sm text-muted" data-testid="workflow-summary">(.*?)<\/span>/)?.[1];
+      expect(summary).toBe(`Last changed ${legacy!.slice(legacy!.indexOf("<time"))}`);
+      const list = result.match(/data-testid="workflow-list">(.*?)<\/ul>/)?.[1];
+      expect(list).toContain("Drawn, not published");
+      expect(list).not.toMatch(/trigger\(s\)|revision|live row\(s\)|class="mono/);
+    }
+  });
+  it("explains the server's schedule sentence in Quiet without changing the legacy paragraph", () => {
+    for (const canManage of [true, false]) {
+      for (const [cron, timezone, rhythm] of [
+        ["0 10 * * 1", "UTC", "At 10:00, only on Monday · UTC"],
+        ["30 9 * * *", "America/New_York", "At 09:30 · America/New_York"],
+      ] as const) {
+        const initial: WorkflowWorkspaceRead = {
+          ...workspace,
+          canManage,
+          workflows: workspace.workflows.map((workflow) => {
+            const nodes = workflow.nodes.map((node) => node.kind === "trigger" ? { ...node, cron, timezone } : node);
+            return { ...workflow, nodes, sentences: describeWorkflow(nodes, { agents: workspace.agents, projects: workspace.projects }) };
+          }),
+        };
+        const node = createElement(WorkflowStudio, { companyId: "company", initial });
+        const sentences = (markup: string) => markup.match(/data-testid="workflow-sentences">(.*?)<\/ul>/)?.[1];
+        const original = initial.workflows[0]!.sentences[0]!;
+        expect(sentences(html(node))).toBe(`<li class="text-sm">${original}</li>`);
+        const result = sentences(html(quiet(node)));
+        expect(result).toBe(`<li class="text-sm">${rhythm}: Researcher starts a run: “Plan the week”. A tick that arrives while the last run is still going is skipped.</li>`);
+        expect(result).not.toContain(cron);
+      }
     }
   });
   it("preserves raw activity in the inspector, not in the Quiet row heading", () => {
