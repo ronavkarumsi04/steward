@@ -290,7 +290,7 @@ export function BrowserWorkspace({ companyId, initial, initialSession, quiet = f
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-baseline gap-2">
                             <span className="text-xs font-bold uppercase tracking-wide text-muted">{row.label}</span>
-                            <span className="text-sm font-medium text-fg">{row.action}</span>
+                            <span className={`text-sm font-medium text-fg${quiet ? " q-browser-step-action" : ""}`}>{row.action}</span>
                           </span>
                           <span className="mt-0.5 block truncate text-xs text-muted">
                             {shortUrl(row.frame.url)} · {new Date(row.frame.createdAt).toLocaleTimeString()}

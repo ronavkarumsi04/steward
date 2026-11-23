@@ -28,6 +28,8 @@
 .quiet-tools :is(p, li, td, th, code) { overflow-wrap: anywhere; }
 .quiet-tools .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
 .quiet-tools .quiet-provider-badges .pill { flex-shrink: 0; white-space: nowrap; }
+/* Step captions can contain technical URLs/selectors; ordinary buttons and pills keep whole words. */
+.quiet-tools .q-browser-step-action { overflow-wrap: anywhere; }
 .quiet-provider-actions { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .quiet-tools .empty-note { padding: 32px 20px; background: var(--panel-2); border: 1px dashed var(--line-strong); border-radius: 10px; }
 .quiet-tools .empty-note > div { max-width: 65ch; }

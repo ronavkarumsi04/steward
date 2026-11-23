@@ -53,6 +53,7 @@ const SUITE_FILES = [
   "palette-keyboard.spec.ts",
   "quiet-desktop-rail.spec.ts",
   "quiet-mobile-nav.spec.ts",
+  "quiet-recheck.spec.ts",
   SEAM,
   "session.ts",
   "site-studio.spec.ts",
