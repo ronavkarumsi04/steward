@@ -90,6 +90,9 @@ html:has(.quiet-workspace) { scrollbar-gutter: stable; }
 .quiet-workspace .nb-command-input:focus { box-shadow: none; }
 .quiet-workspace .nb-command-input::placeholder { color: var(--muted); opacity: 1; }
 .quiet-workspace .nb-command-overlay { background: transparent; }
+/* The palette's header, results and footer already own their padding. */
+.quiet-workspace .nb-command-overlay .nb-dialog { padding: 0; }
+.quiet-workspace .nb-command-item { padding: 10px 12px; }
 .quiet-workspace :is(.nav-item[aria-current="page"], .nb-command-item-active, .nb-command-item[aria-selected="true"], .segmented > [aria-current="page"], .segmented > [aria-pressed="true"], .segmented > [data-active="true"]) {
   /* Undo the incumbent canary component's local ink tokens in BOTH themes. */
   --fg: inherit; --fg-2: inherit; --muted: inherit; --faint: inherit; --panel: inherit; --panel-2: inherit; --line: inherit;
