@@ -11,6 +11,7 @@ import { AuthForm } from "./auth-form";
 import { QuietHome } from "./quiet-home";
 import { quietPublicEnabled } from "@/lib/public-design";
 import { landingStoryEnabled } from "@/lib/landing-story";
+import { describeWorkflow } from "@steward/core";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/use-events", () => ({ useLiveEvents: (_id: string, options: { initial?: StewardEvent[] }) => ({ events: options.initial ?? [], connected: true }) }));
@@ -57,6 +58,30 @@ describe("Quiet walkthrough regressions", () => {
       expect(result).not.toContain("this drawing has not been published");
       expect(result).not.toContain("0 live row(s)");
       expect(html(node)).toContain("Nothing is running yet: this drawing has not been published.");
+    }
+  });
+  it("explains the server's schedule sentence in Quiet without changing the legacy paragraph", () => {
+    for (const canManage of [true, false]) {
+      for (const [cron, timezone, rhythm] of [
+        ["0 10 * * 1", "UTC", "At 10:00, only on Monday · UTC"],
+        ["30 9 * * *", "America/New_York", "At 09:30 · America/New_York"],
+      ]) {
+        const initial: WorkflowWorkspaceRead = {
+          ...workspace,
+          canManage,
+          workflows: workspace.workflows.map((workflow) => {
+            const nodes = workflow.nodes.map((node) => node.kind === "trigger" ? { ...node, cron, timezone } : node);
+            return { ...workflow, nodes, sentences: describeWorkflow(nodes, { agents: workspace.agents, projects: workspace.projects }) };
+          }),
+        };
+        const node = createElement(WorkflowStudio, { companyId: "company", initial });
+        const sentences = (markup: string) => markup.match(/data-testid="workflow-sentences">(.*?)<\/ul>/)?.[1];
+        const original = initial.workflows[0]!.sentences[0]!;
+        expect(sentences(html(node))).toBe(`<li class="text-sm">${original}</li>`);
+        const result = sentences(html(quiet(node)));
+        expect(result).toBe(`<li class="text-sm">${rhythm}: Researcher starts a run: “Plan the week”. A tick that arrives while the last run is still going is skipped.</li>`);
+        expect(result).not.toContain(cron);
+      }
     }
   });
   it("preserves raw activity in the inspector, not in the Quiet row heading", () => {
