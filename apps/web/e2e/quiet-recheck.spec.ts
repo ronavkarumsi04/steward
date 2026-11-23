@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { BrowserService } from "@steward/core";
 import { FakeBrowserProvider } from "@steward/core/test/fake-browser";
 import { openSeedDb, seedScope } from "./seed";
-import { register } from "./session";
+import { networkSettled, register, watchErrors } from "./session";
 
 test.skip(process.env.STEWARD_WORKSPACE_SHELL !== "quiet", "Requires an explicitly opted-in Quiet web process.");
 
@@ -24,6 +24,7 @@ async function idleCompany(page: Page) {
 
 for (const width of [320, 390]) {
   test(`section pickers retain keyboard focus at ${width}px`, async ({ page }) => {
+    const errors = watchErrors(page);
     await page.setViewportSize({ width, height: 844 });
     const { companyId, orgId } = await idleCompany(page);
     for (const path of ["/app/account", `/app/org/${orgId}/privacy`, `/app/c/${companyId}/settings`, "/app/design"]) {
@@ -59,9 +60,12 @@ for (const width of [320, 390]) {
       await page.keyboard.press("Tab");
       expect(await page.locator(hash!).evaluate((element) => Boolean(element.compareDocumentPosition(document.activeElement!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
     }
+    await networkSettled(page);
+    expect(errors).toEqual([]);
   });
 
   test(`captured Browser steps contain URLs in live and ended sessions at ${width}px`, async ({ page }) => {
+    const errors = watchErrors(page);
     await page.setViewportSize({ width, height: 844 });
     const { companyId } = await idleCompany(page);
     const seed = openSeedDb();
@@ -89,5 +93,7 @@ for (const width of [320, 390]) {
       await provider.dispose();
       await seed.close();
     }
+    await networkSettled(page);
+    expect(errors).toEqual([]);
   });
 }
