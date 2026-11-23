@@ -60,6 +60,19 @@ describe("Quiet walkthrough regressions", () => {
       expect(html(node)).toContain("Nothing is running yet: this drawing has not been published.");
     }
   });
+  it("keeps Quiet saved rows readable and leaves shell-off operator metadata intact", () => {
+    for (const canManage of [true, false]) {
+      const node = createElement(WorkflowStudio, { companyId: "company", initial: { ...workspace, canManage } });
+      const legacy = html(node).match(/<span class="mono mt-1 block text-xs text-muted">(.*?)<\/span>/)?.[1];
+      expect(legacy).toMatch(/^1 trigger\(s\) · revision 0 · 0 live row\(s\) · updated <time /);
+      const result = html(quiet(node));
+      const summary = result.match(/<span class="mt-1 block text-sm text-muted" data-testid="workflow-summary">(.*?)<\/span>/)?.[1];
+      expect(summary).toBe(`Last changed ${legacy!.slice(legacy!.indexOf("<time"))}`);
+      const list = result.match(/data-testid="workflow-list">(.*?)<\/ul>/)?.[1];
+      expect(list).toContain("Drawn, not published");
+      expect(list).not.toMatch(/trigger\(s\)|revision|live row\(s\)|class="mono/);
+    }
+  });
   it("explains the server's schedule sentence in Quiet without changing the legacy paragraph", () => {
     for (const canManage of [true, false]) {
       for (const [cron, timezone, rhythm] of [
