@@ -26,7 +26,7 @@ import {
 } from "@/lib/workflows";
 import { Ago, Card, Empty, Pill, Spinner } from "./ui";
 import { useQuietSpecialist } from "./quiet-specialist-context";
-import { canTogglePublishedWorkflow, scheduleRhythm } from "@/lib/quiet-workflows";
+import { canTogglePublishedWorkflow, quietWorkflowSentence, scheduleRhythm } from "@/lib/quiet-workflows";
 
 /**
  * The workflow studio: a company's standing work, drawn.
@@ -320,7 +320,7 @@ export function WorkflowStudio({ companyId, initial }: { companyId: string; init
             ) : (
               <ul className="space-y-3" data-testid="workflow-sentences">
                 {sentences.map((sentence, index) => (
-                  <li key={index} className="text-sm">{sentence}</li>
+                  <li key={index} className="text-sm">{quiet ? quietWorkflowSentence(sentence) : sentence}</li>
                 ))}
               </ul>
             )}
