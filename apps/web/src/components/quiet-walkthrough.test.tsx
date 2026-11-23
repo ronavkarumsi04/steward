@@ -65,7 +65,7 @@ describe("Quiet walkthrough regressions", () => {
       for (const [cron, timezone, rhythm] of [
         ["0 10 * * 1", "UTC", "At 10:00, only on Monday · UTC"],
         ["30 9 * * *", "America/New_York", "At 09:30 · America/New_York"],
-      ]) {
+      ] as const) {
         const initial: WorkflowWorkspaceRead = {
           ...workspace,
           canManage,
