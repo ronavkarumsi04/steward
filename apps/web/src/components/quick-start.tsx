@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
@@ -38,9 +40,9 @@ export function QuickStart({ companyId, agents }: { companyId: string; agents: A
         <span className="nb-section-label">MANUAL TASK</span>
       </div>
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
-        <select aria-label="Agent" className="input w-full md:w-56" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+        <QuietSelect aria-label="Agent" className="input w-full md:w-56" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
           {enabled.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        </QuietSelect>
         <input
           aria-label="Instruction"
           className="input min-w-0 flex-1"

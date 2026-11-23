@@ -3,7 +3,7 @@
 .q-depth .q-depth-note { padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-tint); margin-bottom: 24px; }
 .q-depth-note p { color: var(--muted); margin-top: 5px; }
 .q-depth .q-depth-search { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-block: 24px; }
-.q-depth-search label { flex: 1 1 240px; font-size: 12px; color: var(--muted); }
+.q-depth-search label { flex: 1 1 240px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--muted); }
 .q-depth-search input { margin-top: 7px; }
 .q-depth .q-agent-list { list-style: none; padding: 0; }
 .q-agent-list > li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 18px; padding-block: 26px; border-top: 1px solid var(--line); }
@@ -11,13 +11,14 @@
 .q-agent-list h3 { font-size: 17px; }
 .q-agent-list p { margin-top: 7px; color: var(--muted); }
 .q-agent-actions { display: flex; flex-wrap: wrap; align-content: start; gap: 8px; }
-.q-agent-activity { display: grid; gap: 8px; margin-top: 20px; }
+.q-agent-activity { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 20px; }
 .q-agent-activity > span { color: var(--muted); font-size: 12px; }
 .q-agent-activity, .q-agent-list > li > div { min-width: 0; }
 .q-agent-list .q-agent-task { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .q-agent-run-reference { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 12px; }
-.q-agent-run-reference .q-link { white-space: nowrap; }
-.q-agent-history { display: grid; gap: 12px; margin-top: 12px; }
+.q-agent-run-reference .q-link { min-width: 0; overflow-wrap: normal; }
+.q-agent-run-reference .pill, .q-agent-history .pill, .q-schedule-list .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
+.q-agent-history { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 .q-agent-history li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .q-team-settings { padding-block: 16px; border-block: 1px solid var(--line); }
 .q-team-settings p { margin-block: 10px; color: var(--muted); }
@@ -35,13 +36,20 @@
 .q-depth .q-depth-panel > .card { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .q-depth .q-depth-panel > .card > div:first-child { margin-bottom: 24px; }
 .q-depth .q-depth-panel > .card li { padding-block: 18px; }
-.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.q-depth .q-depth-panel .truncate { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
 .q-depth .q-depth-panel nav { margin-bottom: 30px; }
 .q-depth .q-depth-panel nav .btn { border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px; }
 .q-depth .q-depth-panel nav .btn[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 .q-depth .q-depth-panel .card-inset { margin-block: 20px; }
 .q-depth .q-depth-panel input, .q-depth .q-depth-panel textarea, .q-depth .q-depth-panel select { max-width: 100%; }
 .q-depth .q-source-meta { display: block; color: var(--muted); font-size: 12px; margin-top: 7px; }
+.q-document-row { flex-wrap: wrap; }
+.q-document-row > button { flex-basis: 240px; }
+.q-document-source { flex-basis: 100%; min-width: 0; max-width: 100%; }
+/* A machine path owns its scroll region; it must not size or split the title button. */
+.q-document-source code { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; overflow-wrap: normal; }
+.q-depth-panel .grid-cols-2:has(> label > input[type="checkbox"]) { display: flex; flex-wrap: wrap; }
+.q-depth-panel .grid-cols-2 > label:has(> input[type="checkbox"]) { flex: 1 1 calc((100% - .75rem) / 2); min-width: min-content; max-width: 100%; }
 .q-depth .q-member-list > li { padding-block: 22px; gap: 18px; }
 .q-member-identity { display: flex; gap: 14px; align-items: start; min-width: 0; flex: 1 1 260px; }
 .q-member-identity > div { min-width: 0; }
@@ -59,6 +67,7 @@
 .q-schedule-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 14px; }
 .q-schedule-wide { grid-column: 1 / -1; }
 .q-schedule-submit { justify-self: start; }
+.q-schedule-actions { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .q-depth .q-graph-summary { font-size: 14px; line-height: 1.5; }
 .q-depth-loading > div { min-height: 100px; margin-top: 24px; border-radius: 10px; background: var(--bg-tint); border: 1px solid var(--line); }
 @media (max-width: 767px) {
@@ -93,9 +102,11 @@
 .q-depth-rail nav a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; }
 .q-depth-rail nav a:hover { background: var(--accent-soft); color: var(--accent); }
 .q-depth-rail nav a[aria-current="location"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
-.q-depth-section-select { display: none; }
+.q-depth-section-picker { display: none; }
 .q-depth-rail > p { padding: 20px 12px; color: var(--muted); font-size: max(14px, .875rem); }
 .q-depth-content { min-width: 0; display: grid; gap: 28px; }
+/* Constrain the grid items, not the table: its labeled region owns horizontal scrolling. */
+.q-depth-content > * { min-width: 0; }
 .quiet-workspace .q-depth-content > .card,
 .quiet-workspace .q-depth-content > div > .card,
 .quiet-workspace .q-depth-content > div > form.card,
@@ -177,15 +188,16 @@
 @media (max-width: 767px) {
   .quiet-workspace .q-depth-page { padding-top: 24px; padding-bottom: 40px; }
   .quiet-workspace .q-depth-heading { flex-direction: column; gap: 16px; padding-bottom: 24px; margin-bottom: 24px; }
-  /* Block flow keeps the sticky chooser's containing block as the whole page, not one grid row. */
+  /* Keep the wrapping section chooser in flow so it cannot cover enlarged copy. */
   .q-depth-layout { display: block; }
-  .q-depth-rail { top: 0; z-index: var(--z-sidebar); background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 12px; }
-  .q-depth-rail nav { display: none; }
-  .q-depth-section-select { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
-  .q-depth-section-select select { width: 100%; color: var(--fg); }
+  .q-depth-rail { position: static; border-bottom: 1px solid var(--line); padding-block: 12px; }
+  .q-depth-rail > nav { display: none; }
+  .q-depth-section-picker { display: block; }
+  .q-depth-section-picker > summary { min-height: 44px; padding: 12px 16px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--panel); color: var(--fg); font-size: max(14px, .875rem); line-height: 1.4; }
+  .q-depth-section-picker > nav { margin-top: 8px; }
   .q-depth-rail > p { padding-block: 12px 0; }
   .q-depth-content { gap: 24px; margin-top: 24px; }
-  .q-depth-content :is(section, form, [id]) { scroll-margin-top: calc(var(--depth-nav-height, 96px) + 16px); }
+  .q-depth-content :is(section, form, [id]) { scroll-margin-top: 16px; }
   .q-depth-page form[data-dimension], .q-depth-page form[data-purpose] { grid-template-columns: minmax(0, 1fr) !important; }
   .q-depth-page #budgets > form, .q-depth-page #goals > form { grid-template-columns: minmax(0, 1fr); }
   .q-settings-budget-table { display: none; }

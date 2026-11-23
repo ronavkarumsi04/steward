@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AUTONOMY_LABELS, type AutonomyLevel } from "@steward/schema";
@@ -88,9 +90,9 @@ export function OnboardingWizard({ memberships, providersByOrg, providerErrors =
           {memberships.length > 1 && (
             <div>
               <label className="label" htmlFor="org">Organization</label>
-              <select id="org" className="input" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+              <QuietSelect id="org" className="input" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
                 {memberships.map((m) => <option key={m.organizationId} value={m.organizationId}>{m.name}</option>)}
-              </select>
+              </QuietSelect>
             </div>
           )}
           <div>
@@ -104,9 +106,9 @@ export function OnboardingWizard({ memberships, providersByOrg, providerErrors =
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label" htmlFor="stage">Stage</label>
-              <select id="stage" className="input" value={stage} onChange={(e) => setStage(e.target.value as typeof stage)}>
+              <QuietSelect id="stage" className="input" value={stage} onChange={(e) => setStage(e.target.value as typeof stage)}>
                 {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              </QuietSelect>
             </div>
             <div>
               <label className="label" htmlFor="model">Business model</label>

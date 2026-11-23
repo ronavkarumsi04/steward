@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ApiError, browserApi } from "@/lib/api";
@@ -436,14 +438,14 @@ function EntityForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1">
             <span className={label}>WHAT KIND OF THING</span>
-            <select data-testid="graph-type" className={field} value={form.type} onChange={(event) => set({ type: event.target.value })}>
+            <QuietSelect data-testid="graph-type" className={field} value={form.type} onChange={(event) => set({ type: event.target.value })}>
               {types.map((row) => (
                 <option key={row.type} value={row.type}>
                   {row.label}
                   {row.total ? ` (${row.total} known)` : ""}
                 </option>
               ))}
-            </select>
+            </QuietSelect>
           </label>
           <label className="space-y-1">
             <span className={label}>HOW SURE, 0–1</span>
@@ -629,14 +631,14 @@ function Neighborhood({
           >
             <label className="space-y-1">
               <span className="block text-xs font-semibold tracking-wide text-muted">THE DUPLICATE TO FOLD IN</span>
-              <select data-testid="graph-merge-input" className="rounded-md border border-line bg-bg px-3 py-2 text-sm" value={merge} onChange={(event) => onMerge(event.target.value)}>
+              <QuietSelect data-testid="graph-merge-input" className="rounded-md border border-line bg-bg px-3 py-2 text-sm" value={merge} onChange={(event) => onMerge(event.target.value)}>
                 {duplicates.map((duplicate) => (
                   <option key={duplicate.id} value={duplicate.id}>
                     {duplicate.label}
                     {duplicate.entityType ? ` (${typeLabel(overview, duplicate.entityType)})` : ""}
                   </option>
                 ))}
-              </select>
+              </QuietSelect>
             </label>
             <button data-testid="graph-merge-submit" className="btn btn-primary" type="submit" disabled={busy !== null}>
               Merge it in
@@ -742,7 +744,7 @@ function Neighborhood({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1">
                       <span className="block text-xs font-semibold tracking-wide text-muted">WHAT IT POINTS AT</span>
-                      <select
+                      <QuietSelect
                         data-testid="graph-target-kind"
                         className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm"
                         value={claim.targetKind}
@@ -756,30 +758,30 @@ function Neighborhood({
                             {kindLabel(overview, kind)}
                           </option>
                         ))}
-                      </select>
+                      </QuietSelect>
                     </label>
                     <label className="space-y-1">
                       <span className="block text-xs font-semibold tracking-wide text-muted">WHICH ONE</span>
-                      <select data-testid="graph-target" className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm" value={claim.targetId} onChange={(event) => onClaim({ ...claim, targetId: event.target.value })}>
+                      <QuietSelect data-testid="graph-target" className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm" value={claim.targetId} onChange={(event) => onClaim({ ...claim, targetId: event.target.value })}>
                         {targets.length === 0 && <option value="">Nothing of that kind is here yet</option>}
                         {targets.map((target) => (
                           <option key={target.id} value={target.id}>
                             {target.label}
                           </option>
                         ))}
-                      </select>
+                      </QuietSelect>
                     </label>
                   </div>
 
                   <label className="space-y-1">
                     <span className="block text-xs font-semibold tracking-wide text-muted">WHAT IT CLAIMS</span>
-                    <select data-testid="graph-relation" className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm" value={claim.relation} onChange={(event) => onClaim({ ...claim, relation: event.target.value })}>
+                    <QuietSelect data-testid="graph-relation" className="w-full rounded-md border border-line bg-bg px-3 py-2 text-sm" value={claim.relation} onChange={(event) => onClaim({ ...claim, relation: event.target.value })}>
                       {relations.map((relation) => (
                         <option key={relation.id} value={relation.id}>
                           {relation.label}
                         </option>
                       ))}
-                    </select>
+                    </QuietSelect>
                     {/* Only the claim the vocabulary allows is offered, and the sentence behind it is the server's own. */}
                     <span className="block text-[11px] text-muted">{relations.find((relation) => relation.id === claim.relation)?.sentence ?? "No claim can point at that kind of thing."}</span>
                   </label>

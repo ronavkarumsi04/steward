@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -49,7 +51,7 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div><label className="label">Success signal</label><textarea aria-label="Project success signal" value={successSignal} onChange={(e) => setSuccessSignal(e.target.value)} className="input min-h-20 resize-y" maxLength={2000} /></div>
         <div><label className="label">Next concrete step</label><textarea aria-label="Project next step" value={nextStep} onChange={(e) => setNextStep(e.target.value)} className="input min-h-20 resize-y" maxLength={2000} /></div>
-        <div className="space-y-2"><label className="label">State</label><select aria-label="Project status" className="input" value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}><option value="active">Active</option><option value="blocked">Blocked</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option></select><button className="btn btn-primary w-full" onClick={saveProject} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
+        <div className="space-y-2"><label className="label">State</label><QuietSelect aria-label="Project status" className="input" value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}><option value="active">Active</option><option value="blocked">Blocked</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option></QuietSelect><button className="btn btn-primary w-full" onClick={saveProject} disabled={busy}>{busy ? "Saving…" : "Save"}</button></div>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
     </section>
@@ -63,7 +65,7 @@ export function ProjectDetail({ companyId, initial }: { companyId: string; initi
       </section>
       <section className="card nb-left-orange overflow-hidden">
         <div className="border-b border-line px-5 py-3"><div className="eyebrow">Work queue</div><h2 className="mt-1 text-base font-semibold">Tasks</h2></div>
-        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={quiet ? `/app/c/${companyId}/tasks?q=${encodeURIComponent(task.title)}` : `/app/c/${companyId}/tasks/${task.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60"><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
+        {initial.tasks.length === 0 ? <div className="p-5 text-sm text-muted">No project tasks yet.</div> : <div className="divide-y divide-line">{initial.tasks.slice(0,12).map((task) => <Link key={task.id} href={quiet ? `/app/c/${companyId}/tasks?q=${encodeURIComponent(task.title)}` : `/app/c/${companyId}/tasks/${task.id}`} className={`flex items-center gap-3 px-5 py-3 hover:bg-panel-2/60${quiet ? " q-project-work-row" : ""}`}><StatusPill status={task.status} /><span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span><span className="text-xs text-muted">{task.priority}</span></Link>)}</div>}
       </section>
     </div>
 

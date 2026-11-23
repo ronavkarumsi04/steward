@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useLocale, useT, useTf } from "./locale-provider";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -182,7 +184,7 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
       {schedulesAvailable && <Card title={t("agents.schedules")} className={quiet ? undefined : "nb-left-orange"}>
         <p className="mb-3 text-sm text-muted">{t("agents.schedulesHelp")}</p>
         <fieldset disabled={quiet && (!isAdmin || !hydrated || busy)}><form onSubmit={(e) => { if (!quiet) return addSchedule(e); e.preventDefault(); void change(() => addSchedule(e)); }} className={quiet ? "q-schedule-form" : "mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto]"}>
-          <ScheduleField quiet={quiet} label={t("agents.agent")}><select name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></ScheduleField>
+          <ScheduleField quiet={quiet} label={t("agents.agent")}><QuietSelect name="agentId" className="input" aria-label={t("agents.agent")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id}>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</QuietSelect></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.scheduleName")}><input name="name" className="input" placeholder={t("agents.scheduleNamePlaceholder")} required aria-label={t("agents.scheduleName")} /></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.cron")}><input name="cron" className="input mono" placeholder="0 9 * * MON" required aria-label={t("agents.cron")} /></ScheduleField>
           <ScheduleField quiet={quiet} label={t("agents.timezone")}><input name="timezone" className="input" placeholder="UTC" aria-label={t("agents.timezone")} aria-invalid={quiet && scheduleFeedback?.field === "timezone" || undefined} aria-describedby={quiet && scheduleFeedback?.field === "timezone" ? "schedule-error" : undefined} /></ScheduleField>
@@ -192,14 +194,14 @@ export function AgentsPanel({ companyId, agents, schedules, defaultAllowlists, o
         </form></fieldset>
         {quiet && scheduleFeedback?.id === null && <p id="schedule-error" tabIndex={-1} role="alert" className="text-sm text-danger">{scheduleFeedback.message}</p>}
         {schedules.length === 0 ? <Empty>{t("agents.noSchedules")}</Empty> : (
-          <ul className="divide-y divide-line text-sm">
+          <ul className={`divide-y divide-line text-sm${quiet ? " q-schedule-list" : ""}`}>
             {schedules.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>
                   <span className="font-medium">{s.name}</span> <span className="mono text-xs text-muted">{s.cron} {s.timezone}</span>
                   <div className="text-xs text-muted">{agents.find((a) => a.id === s.agentId)?.name} · last fired <Ago iso={s.lastFiredAt} /> · {quiet && !s.temporalScheduleId ? <span className="pill text-warn">{c.registrationUnconfirmed}</span> : <StatusPill status={s.enabled ? t("agents.active") : t("agents.paused")} />}</div>
                 </div>
-                <div className="flex gap-1">
+                <div className={quiet ? "q-schedule-actions" : "flex gap-1"}>
                   <button className="btn" disabled={quiet && (!canTrigger || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "trigger"), canTrigger) : scheduleAction(s, "trigger")}>{t("agents.runNow")}</button>
                   <button className="btn" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "toggle")) : scheduleAction(s, "toggle")}>{s.enabled ? t("agents.pause") : t("agents.resume")}</button>
                   <button className="btn btn-danger" disabled={quiet && (!isAdmin || !hydrated || busy)} onClick={() => quiet ? change(() => scheduleAction(s, "delete")) : scheduleAction(s, "delete")}>{t("agents.delete")}</button>

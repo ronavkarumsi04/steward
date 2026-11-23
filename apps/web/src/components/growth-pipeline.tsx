@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useMemo, useState, type FormEvent } from "react";
 import { useT, useTf } from "./locale-provider";
 import type { MessageKey } from "@/lib/i18n";
@@ -154,7 +156,7 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
         <SpecialistDisclosure label={t("growth.createCampaign")}>
         <form onSubmit={createCampaign} className="grid gap-3 border-b border-line p-4 sm:grid-cols-2 lg:grid-cols-6 sm:p-5">
           <div className="lg:col-span-2"><label className="label">{t("growth.campaignName")}</label><input name="campaignName" aria-label={t("growth.campaignName")} className="input" placeholder={t("growth.campaignNamePlaceholder")} required maxLength={200} /></div>
-          <div><label className="label">{t("growth.channel")}</label><select name="channel" aria-label={t("growth.channelLabel")} className="input"><option value="email">{t("growth.channelEmail")}</option><option value="social">{t("growth.channelSocial")}</option><option value="ads">{t("growth.channelAds")}</option></select></div>
+          <div><label className="label">{t("growth.channel")}</label><QuietSelect name="channel" aria-label={t("growth.channelLabel")} className="input"><option value="email">{t("growth.channelEmail")}</option><option value="social">{t("growth.channelSocial")}</option><option value="ads">{t("growth.channelAds")}</option></QuietSelect></div>
           <div><label className="label">{t("growth.budgetContext")}</label><input name="budgetUsd" aria-label={t("growth.budgetLabel")} className="input tnum" type="number" min={0} step="0.01" placeholder="$" /></div>
           <div className="lg:col-span-2"><label className="label">{t("growth.audience")}</label><input name="audience" aria-label={t("growth.audienceLabel")} className="input" placeholder={t("growth.audiencePlaceholder")} maxLength={2000} /></div>
           <div className="sm:col-span-2 lg:col-span-5"><label className="label">{t("growth.objective")}</label><input name="objective" aria-label={t("growth.objectiveLabel")} className="input" placeholder={t("growth.objectivePlaceholder")} maxLength={2000} /></div>
@@ -181,9 +183,9 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
                     {campaign.config.audience ? <div><span className="font-medium text-fg-2">{t("growth.audienceColon")}</span> {String(campaign.config.audience)}</div> : null}
                     <div className="mt-1"><span className="tnum font-medium text-fg-2">{sent}</span> sent · <span className="tnum font-medium text-fg-2">{failed}</span> failed</div>
                   </div>
-                  <select aria-label={tf("growth.statusFor", { name: campaign.name })} className="input h-9 w-auto min-w-32 py-1.5 text-xs" value={campaign.status} disabled={busy === `campaign-${campaign.id}`} onChange={(e) => updateCampaign(campaign.id, e.target.value as CampaignStatus)}>
+                  <QuietSelect aria-label={tf("growth.statusFor", { name: campaign.name })} className="input h-9 w-auto min-w-32 py-1.5 text-xs" value={campaign.status} disabled={busy === `campaign-${campaign.id}`} onChange={(e) => updateCampaign(campaign.id, e.target.value as CampaignStatus)}>
                     {CAMPAIGN_STATUSES.map((s) => <option key={s.id} value={s.id}>{t(s.label as MessageKey)}</option>)}
-                  </select>
+                  </QuietSelect>
                 </article>
               );
             })}
@@ -228,9 +230,9 @@ export function GrowthPipeline({ companyId, initial }: { companyId: string; init
                         {lead.contactEmail && <div className="mt-1 truncate text-xs text-muted">{lead.contactEmail}</div>}
                         <div className="mt-3 flex items-center justify-between gap-2">
                           <span className="tnum text-xs font-medium">{quiet && lead.valueUsd === null ? t("quiet.notAvailable") : lead.valueUsd ? money(Number(lead.valueUsd)) : t("growth.noValue")}</span>
-                          <select aria-label={tf("growth.stageFor", { title: lead.title })} className="input h-8 w-auto min-w-0 py-1 text-xs" value={lead.stage} disabled={busy === lead.id} onChange={(e) => moveLead(lead.id, e.target.value as LeadStage)}>
+                          <QuietSelect aria-label={tf("growth.stageFor", { title: lead.title })} className="input h-8 w-auto min-w-0 py-1 text-xs" value={lead.stage} disabled={busy === lead.id} onChange={(e) => moveLead(lead.id, e.target.value as LeadStage)}>
                             {STAGES.map((s) => <option key={s.id} value={s.id}>{t(s.label as MessageKey)}</option>)}
-                          </select>
+                          </QuietSelect>
                         </div>
                         {lead.source && <div className="mt-2 text-[11px] text-faint">Source: {lead.source}</div>}
                       </article>

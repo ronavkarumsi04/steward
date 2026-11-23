@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { ImageView } from "@/lib/types";
@@ -61,9 +63,9 @@ export function PicturesPanel({ companyId, pictures, onLoaded }: { companyId: st
           <label className="flex items-center gap-1">
             <input type="radio" name="purpose" checked={purpose === "logo"} onChange={() => setPurpose("logo")} /> Logo candidate
           </label>
-          <select aria-label="Shape" className="input" value={aspect} onChange={(e) => setAspect(e.target.value as typeof aspect)}>
+          <QuietSelect aria-label="Shape" className="input" value={aspect} onChange={(e) => setAspect(e.target.value as typeof aspect)}>
             {ASPECTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-          </select>
+          </QuietSelect>
           <button type="submit" className="btn btn-primary" disabled={busy || prompt.trim().length < 8}>{busy ? "Making…" : "Make picture"}</button>
         </div>
         <p className="text-xs text-muted">Made with the company’s NVIDIA key (FLUX.1 schnell), about five seconds. Logo candidates come out best as a flat, simple mark on a plain background.</p>

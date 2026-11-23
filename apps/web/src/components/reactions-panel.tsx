@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
@@ -313,9 +315,9 @@ function RuleEditor({
         </div>
         <div>
           <label className="label" htmlFor={`rule-agent-${mode}`}>The agent that does the work</label>
-          <select id={`rule-agent-${mode}`} className="input" value={agentId} onChange={(e) => setAgentId(e.target.value)} required>
+          <QuietSelect id={`rule-agent-${mode}`} className="input" value={agentId} onChange={(e) => setAgentId(e.target.value)} required>
             {enabledAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+          </QuietSelect>
         </div>
       </div>
 
@@ -363,10 +365,10 @@ function RuleEditor({
         </div>
         <div>
           <label className="label" htmlFor={`rule-project-${mode}`}>Only this project (optional)</label>
-          <select id={`rule-project-${mode}`} className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <QuietSelect id={`rule-project-${mode}`} className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
             <option value="">The whole company</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </QuietSelect>
         </div>
       </div>
 

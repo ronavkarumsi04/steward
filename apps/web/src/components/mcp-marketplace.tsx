@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import type { McpInspectionResult, McpInstallForm, McpMarketplaceRead, McpServerView, McpToolView } from "@/lib/types";
@@ -456,14 +458,14 @@ function ServerCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-2 text-xs">
                     <span className="text-muted">Agent</span>
-                    <select className="rounded-md border border-line bg-bg px-2 py-1 text-xs" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+                    <QuietSelect className="rounded-md border border-line bg-bg px-2 py-1 text-xs" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
                       {agents.map((agent) => (
                         <option key={agent.id} value={agent.id} disabled={!agent.enabled}>
                           {agent.name}
                           {agent.enabled ? "" : " (disabled)"}
                         </option>
                       ))}
-                    </select>
+                    </QuietSelect>
                   </label>
                   <button data-testid="mcp-grant-all" className="btn" disabled={!canGrant || busy !== null} onClick={() => onGrant(agentId, true)} title={`Writes ${serverPattern(server.slug)} into ${agents.find((agent) => agent.id === agentId)?.name ?? "the agent"}'s tools`}>
                     Grant every tool

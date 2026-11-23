@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -204,7 +206,7 @@ export function AgentOverclock({
               </legend>
               <label className="block text-xs text-muted">
                 Sampling method
-                <select
+                <QuietSelect
                   aria-label={`${phase} sampling method`}
                   className="input mt-1"
                   value={config[phase].sampler}
@@ -218,7 +220,7 @@ export function AgentOverclock({
                   <option value="temperature">Temperature</option>
                   <option value="top_p">Top P</option>
                   <option value="provider_default">Provider default</option>
-                </select>
+                </QuietSelect>
               </label>
               <label className="block text-xs text-muted">
                 {config[phase].sampler === "top_p"

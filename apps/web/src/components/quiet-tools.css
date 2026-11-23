@@ -21,12 +21,14 @@
    Eight pixels also clears the shell's 2px outline plus 3px offset at any text size. */
 .quiet-tools form label { display: block; }
 .quiet-tools form label > :is(input, select, textarea) { margin-block-start: 8px; }
+.quiet-tools form label > .q-reflow-select { margin-block-start: 8px; }
 .quiet-tools form label.label { margin-block-end: 8px; }
 .quiet-tools form :is(input, select, textarea) + :is(p, span, .help) { margin-block-start: 8px; }
 .quiet-tools :is(.flex, .grid) > * { min-width: 0; }
-.quiet-tools :is(p, li, td, th, code, .pill, label, .label) { overflow-wrap: anywhere; }
-.quiet-tools .pill { max-width: 100%; white-space: normal; }
+.quiet-tools :is(p, li, td, th, code) { overflow-wrap: anywhere; }
+.quiet-tools .pill { max-width: 100%; white-space: normal; overflow-wrap: normal; }
 .quiet-tools .quiet-provider-badges .pill { flex-shrink: 0; white-space: nowrap; }
+.quiet-provider-actions { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
 .quiet-tools .empty-note { padding: 32px 20px; background: var(--panel-2); border: 1px dashed var(--line-strong); border-radius: 10px; }
 .quiet-tools .empty-note > div { max-width: 65ch; }
 .quiet-tools-state { border: 1px solid var(--line); border-radius: 10px; padding: 24px; margin-bottom: 24px; }

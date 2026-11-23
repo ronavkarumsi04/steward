@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, browserApi } from "@/lib/api";
 import { canStop, endingNote, frameSrc, isFollowingLive, isLive, preferredSession, sessionSummary, shownFrame, shortUrl, statusLabel, statusTone, stepLog } from "@/lib/browser";
@@ -344,13 +346,13 @@ export function BrowserWorkspace({ companyId, initial, initialSession, quiet = f
               </label>
               <label className="block">
                 <span className="label">Agent</span>
-                <select className="input" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!initial.canControl || providerMissing || !initial.agents.length} data-testid="browser-agent">
+                <QuietSelect className="input" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={!initial.canControl || providerMissing || !initial.agents.length} data-testid="browser-agent">
                   {initial.agents.map((agent) => (
                     <option key={agent.id} value={agent.id}>
                       {agent.name} ({agent.kind})
                     </option>
                   ))}
-                </select>
+                </QuietSelect>
               </label>
               {!initial.agents.length && <p className="hint">This company has no enabled agents, so there is nobody to browse.</p>}
               <button type="submit" className="btn btn-primary w-full" disabled={!canStart} data-testid="browser-start">

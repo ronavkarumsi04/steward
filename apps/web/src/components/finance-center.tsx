@@ -123,8 +123,8 @@ export function FinanceCenter({ companyId, budgets, ledger, aiUsage, locale = "e
             <div className="space-y-2">
               {usage.map((row) => (
                 <div key={`${row.provider}:${row.model}`} className="nb-panel-flat p-3 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><div className="truncate font-medium">{row.model}</div><div className="text-xs text-muted">{row.provider}</div></div>
+                  <div className={`flex items-start justify-between gap-3${quiet ? " q-finance-model-row" : ""}`}>
+                    <div className="min-w-0"><div className={`truncate font-medium${quiet ? " q-finance-model-id" : ""}`}>{row.model}</div><div className="text-xs text-muted">{row.provider}</div></div>
                     <div className="tnum font-medium">{usd(row.costUsd)}</div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">

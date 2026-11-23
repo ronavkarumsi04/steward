@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -84,17 +86,17 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
     <div className="space-y-4">
       <form onSubmit={create} className="card nb-left-blue grid gap-2 md:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
         <input name="title" className="input" placeholder={t("tasks.newTitle")} required aria-label={t("tasks.titleLabel")} />
-        <select name="agentId" className="input" aria-label={t("tasks.assignee")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id ?? ""}>
+        <QuietSelect name="agentId" className="input" aria-label={t("tasks.assignee")} defaultValue={agents.find((a) => a.kind === "orchestrator")?.id ?? ""}>
           <option value="">{t("tasks.unassigned")}</option>
           {agents.filter((a) => a.enabled).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <select name="goalId" className="input" aria-label={t("tasks.goal")} defaultValue="">
+        </QuietSelect>
+        <QuietSelect name="goalId" className="input" aria-label={t("tasks.goal")} defaultValue="">
           <option value="">{t("tasks.noGoal")}</option>
           {goals.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
-        </select>
-        <select name="priority" className="input" aria-label={t("tasks.priority")} defaultValue="medium">
+        </QuietSelect>
+        <QuietSelect name="priority" className="input" aria-label={t("tasks.priority")} defaultValue="medium">
           {["low", "medium", "high", "urgent"].map((p) => <option key={p} value={p}>{t(`priority.${p}` as MessageKey)}</option>)}
-        </select>
+        </QuietSelect>
         <textarea name="description" className="input md:order-last md:col-span-6" placeholder={t("tasks.descriptionPlaceholder")} rows={2} />
         <label className="flex items-center gap-1.5 whitespace-nowrap px-1 text-xs text-muted"><input type="checkbox" name="start" className="accent-accent" defaultChecked /> {t("tasks.startNow")}</label>
         <button className="btn btn-primary"><Icon.Plus size={16} />{t("tasks.add")}</button>
@@ -127,7 +129,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
                           {t("tasks.run")}
                         </button>
                       )}
-                      <select
+                      <QuietSelect
                         aria-label={t("tasks.move")}
                         className="input h-8 w-auto px-2 py-0 text-xs"
                         value={task.status}
@@ -135,7 +137,7 @@ export function TaskBoard({ companyId, tasks, agents, goals }: { companyId: stri
                         onChange={(e) => move(task, e.target.value as TaskStatus)}
                       >
                         {["backlog", "todo", "in_progress", "blocked", "waiting_approval", "review", "done", "cancelled"].map((s) => <option key={s} value={s}>{statusLabel(locale, s)}</option>)}
-                      </select>
+                      </QuietSelect>
                       <Link href={`/app/c/${companyId}/runs?taskId=${task.id}`} className="btn btn-ghost btn-sm">{t("tasks.runs")}</Link>
                     </div>
                   </li>

@@ -1,5 +1,7 @@
 "use client";
 
+import { QuietSelect } from "./quiet-select";
+
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { type AutonomyLevel, type CompanyProfile, type PolicyDimension, type RiskLevel, emptyBrandKit } from "@steward/schema";
@@ -161,7 +163,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           <div><label className="block"><span className="label">{t("settings.tagline")}</span><input name="tagline" className="input" defaultValue={profile?.tagline ?? ""} /></label></div>
           <div className="md:col-span-2"><label className="block"><span className="label">{t("settings.descriptionField")}</span><textarea name="description" className="input min-h-24" defaultValue={profile?.description ?? ""} /></label></div>
           <div><label className="block"><span className="label">{t("settings.website")}</span><input name="website" className="input" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" /></label></div>
-          <div><label className="block"><span className="label">{t("settings.stage")}</span><select name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s} value={s}>{t(`stage.${s}` as MessageKey)}</option>)}</select></label></div>
+          <div><label className="block"><span className="label">{t("settings.stage")}</span><QuietSelect name="stage" className="input" defaultValue={profile?.stage ?? "idea"}>{["idea", "prototype", "launched", "growing", "established"].map((s) => <option key={s} value={s}>{t(`stage.${s}` as MessageKey)}</option>)}</QuietSelect></label></div>
           <div><label className="block"><span className="label">{t("settings.businessModel")}</span><input name="businessModel" className="input" defaultValue={profile?.businessModel ?? ""} /></label></div>
           <div><label className="block"><span className="label">{t("settings.valueProposition")}</span><input name="valueProposition" className="input" defaultValue={profile?.valueProposition ?? ""} /></label></div>
           <div><label className="block"><span className="label">{t("settings.targetCustomers")}</span><textarea name="targetCustomers" className="input" defaultValue={(profile?.targetCustomers ?? []).join("\n")} /></label></div>
@@ -208,8 +210,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
             return (
               <form key={d.id} onSubmit={(e) => savePolicy(d.id, e)} className="nb-panel-flat grid items-center gap-2 p-2 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr_auto]" data-dimension={d.id}>
                 <div><div className="font-medium">{t(`dimension.${d.id}` as MessageKey)}</div><div className="mono text-xs text-muted">{d.id}</div></div>
-                <SettingsField quiet={quiet} label={t("settings.mode")}><select name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</select></SettingsField>
-                <SettingsField quiet={quiet} label={t("settings.maxRisk")}><select name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</select></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.mode")}><QuietSelect name="mode" className="input" defaultValue={p?.mode ?? "approve"} aria-label={t("settings.mode")}>{["deny", "approve", "allow"].map((m) => <option key={m} value={m}>{t(`policy.mode.${m}` as MessageKey)}</option>)}</QuietSelect></SettingsField>
+                <SettingsField quiet={quiet} label={t("settings.maxRisk")}><QuietSelect name="risk" className="input" defaultValue={p?.maxRiskWithoutApproval ?? ""} aria-label={t("settings.maxRisk")}><option value="">{t("settings.riskDefault")}</option>{["LOW", "MEDIUM", "HIGH"].map((r) => <option key={r} value={r}>≤ {t(`risk.${r}` as MessageKey)}</option>)}</QuietSelect></SettingsField>
                 <SettingsField quiet={quiet} label={t("settings.perActionLabel")}><input name="perActionUsd" className="input" placeholder={t("settings.perAction")} defaultValue={p?.limits.perActionUsd ?? ""} aria-label={t("settings.perActionLabel")} /></SettingsField>
                 <SettingsField quiet={quiet} label={t("settings.perDayLabel")}><input name="perDayUsd" className="input" placeholder={t("settings.perDay")} defaultValue={p?.limits.perDayUsd ?? ""} aria-label={t("settings.perDayLabel")} /></SettingsField>
                 <SettingsField quiet={quiet} label={t("settings.perDayCountLabel")}><input name="perDayCount" className="input" placeholder={t("settings.perDayCount")} defaultValue={p?.limits.perDayCount ?? ""} aria-label={t("settings.perDayCountLabel")} /></SettingsField>
@@ -245,8 +247,8 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         </li>)}</ul>}
         <form onSubmit={saveBudget} className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]">
-          <SettingsField quiet={quiet} label={t("settings.category")}><select name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</select></SettingsField>
-          <SettingsField quiet={quiet} label={t("settings.period")}><select name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.category")}><QuietSelect name="category" className="input" aria-label={t("settings.category")}>{BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{t(`budgetCategory.${c}` as MessageKey)}</option>)}</QuietSelect></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.period")}><QuietSelect name="period" className="input" aria-label={t("settings.period")} defaultValue="monthly"><option value="monthly">{t("settings.monthly")}</option><option value="daily">{t("settings.daily")}</option></QuietSelect></SettingsField>
           <SettingsField quiet={quiet} label={t("settings.limitUsd")}><input name="limitUsd" type="number" min={0} step="0.01" className="input" placeholder={t("settings.limitUsd")} required aria-label={t("settings.limitUsd")} /></SettingsField>
           <SettingsField quiet={quiet} label={`${t("settings.softThreshold")} (%)`}><input name="soft" type="number" min={1} max={100} className="input" placeholder={t("settings.warnAt")} defaultValue={80} aria-label={quiet ? `${t("settings.softThreshold")} (%)` : t("settings.softThreshold")} /></SettingsField>
           <label className={`flex items-center gap-1 text-muted ${quiet ? "q-settings-check-label" : "text-xs"}`}><input type="checkbox" name="hardStop" defaultChecked /> {t("settings.hardStopCheck")}</label>
@@ -271,7 +273,7 @@ export function SettingsPanel({ company, profile, policies, budgets, goals, isAd
           <SettingsField quiet={quiet} label={t("settings.metric")}><input name="metric" className="input" placeholder={t("settings.metric")} aria-label={t("settings.metric")} /></SettingsField>
           <SettingsField quiet={quiet} label={t("settings.target")}><input name="target" className="input" placeholder={t("settings.target")} aria-label={t("settings.target")} /></SettingsField>
           <SettingsField quiet={quiet} label={t("settings.horizonLabel")}><input name="horizon" className="input" placeholder={t("settings.horizon")} aria-label={t("settings.horizonLabel")} /></SettingsField>
-          <SettingsField quiet={quiet} label={t("settings.priority")}><select name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</select></SettingsField>
+          <SettingsField quiet={quiet} label={t("settings.priority")}><QuietSelect name="priority" className="input" defaultValue={3} aria-label={t("settings.priority")}>{[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}</QuietSelect></SettingsField>
           <button className="btn btn-primary">{t("settings.add")}</button>
         </form>
       </Card>
