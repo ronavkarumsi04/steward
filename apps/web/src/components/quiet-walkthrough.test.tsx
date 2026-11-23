@@ -55,6 +55,7 @@ describe("Quiet walkthrough regressions", () => {
       const result = html(quiet(node));
       expect(result).toContain(`data-testid="workflow-toggle">${enabled ? "Pause" : "Resume"}</button>`);
       expect(result).toContain("This workflow has been published");
+      expect(result).toContain("Published work cannot be checked against this drawing");
       expect(result).not.toContain("this drawing has not been published");
       expect(result).not.toContain("0 live row(s)");
       expect(html(node)).toContain("Nothing is running yet: this drawing has not been published.");
